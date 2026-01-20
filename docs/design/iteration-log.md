@@ -378,23 +378,50 @@ impl MyService {
 
 ---
 
+## Iteration 11: OpenAPI Improvements
+
+**Goal:** Enhance OpenAPI spec generation with proper parameter schemas and response types.
+
+**Features:**
+- **Query parameter schemas**: Type inference for GET/DELETE params (integer, string, boolean)
+- **Path parameter schemas**: ID params marked as path params with proper types
+- **Request body schemas**: POST/PUT/PATCH get request body with properties and required fields
+- **Error responses**: Result return types generate 200/400/500 responses
+
+**Implementation Details:**
+1. Added `extract_option_inner()` helper to get inner type from `Option<T>` (avoids double-wrapping)
+2. Made handler names unique per struct (`__trellis_http_{struct}_{method}`) to support multiple services
+3. Fixed parameter type handling for optional params (parse as inner type, not `Option<T>`)
+4. Enhanced `generate_openapi_spec` with proper parameter/body/response generation
+
+**Tests Added:**
+- `test_openapi_query_parameters` - verifies page/limit query params
+- `test_openapi_path_parameters` - verifies item_id path param
+- `test_openapi_request_body` - verifies POST body schema
+- `test_openapi_error_responses` - verifies Result generates error codes
+
+**Total:** 4 new OpenAPI tests, 85 total tests.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |
 |-----------|--------|-------|
 | MCP macro | ✅ Solid | 13 (+ E2E) |
-| HTTP macro | ✅ Enhanced | 10 (+ E2E) |
+| HTTP macro | ✅ Enhanced | 14 (+ E2E) |
 | CLI macro | ✅ Solid | 6 (+ E2E) |
 | WS macro | ✅ Solid | 16 (+ E2E) |
 | Error derive | ✅ Working | 10 |
-| Route attr | ✅ NEW | - |
+| Route attr | ✅ Working | - |
+| OpenAPI schemas | ✅ NEW | - |
 | RPC utilities | ✅ Shared | - |
 | Feature gates | ✅ Working | - |
 | SSE streaming | ✅ Working | - |
 | Async support | ✅ Working | - |
 | Error messages | ✅ Improved | - |
 | Documentation | ✅ Updated | - |
-| **Total tests** | | **81** |
+| **Total tests** | | **85** |
 
 ---
 
@@ -402,5 +429,54 @@ impl MyService {
 
 (To be filled as we go)
 
-- Iteration N: OpenAPI improvements (parameter schemas, response schemas)
+### Near-term
 - Iteration N: "Serve" coordination pattern
+
+### Schema-based Protocols (Design Challenge)
+
+Cap'n Proto and Protobuf/gRPC are **schema-first** protocols, which inverts trellis's impl-first approach:
+
+| Approach | Impl-first (current) | Schema-first |
+|----------|---------------------|--------------|
+| Flow | Rust impl → protocol | .proto/.capnp → Rust |
+| Examples | HTTP, MCP, WS, CLI | gRPC, Cap'n Proto |
+
+**Design decision: Bidirectional**
+
+Support both directions - impl-first AND schema-first:
+
+```rust
+// Direction 1: Impl-first (generate schema)
+#[grpc]
+impl MyService {
+    fn get_user(&self, id: String) -> User { }
+}
+// Generates: service.proto, grpc_router(), etc.
+
+// Direction 2: Schema-first (validate against schema)
+#[grpc(schema = "service.proto")]
+impl MyService {
+    // Macro validates methods match schema
+    // Compile error if method signature doesn't match
+}
+
+// Direction 3: Schema-first with trait generation
+#[derive(GrpcService)]
+#[grpc(schema = "service.proto")]
+struct MyService;
+// Generates: trait MyServiceRpc { fn get_user(...) }
+// User implements trait, gets type safety from schema
+```
+
+**Why bidirectional:**
+- Impl-first for rapid prototyping, internal services
+- Schema-first for interop with existing systems, contract-first teams
+- Progressive: start impl-first, export schema, switch to schema-first when stabilized
+
+**Philosophy: We're not here to judge, just to help.**
+Users have their own workflows, constraints, and preferences. Trellis supports them, not the other way around.
+
+**Protocols to explore:**
+- gRPC (protobuf) - streaming, error codes, widely used
+- Cap'n Proto - zero-copy, RPC built-in, mentioned in origin story
+- Thrift - if there's demand

@@ -96,6 +96,18 @@ The macros might be for simple things, but the implementation should be solid:
 - No hidden magic - what you see is what you get
 - Tested extensively
 
+### Not Here to Judge
+
+We're not here to judge, just to help. Users have their own workflows, constraints, and preferences. Trellis supports them, not the other way around.
+
+- Impl-first or schema-first? Support both.
+- Tokio or async-std? Don't force the choice.
+- Want OpenAPI? Great. Don't want it? Also great.
+
+The goal is to meet users where they are, not prescribe how they should work.
+
+**Prior art: Serde.** It's "just" `#[derive(Serialize, Deserialize)]`, but supports rename, skip, default, flatten, custom serializers, dozens of formats... The derive macro is the *interface*, not a straitjacket. Sensible defaults, endless customization behind them. That's the model.
+
 ## Structure
 
 ```

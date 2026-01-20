@@ -245,3 +245,112 @@ fn test_override_service_router_created() {
     let service = OverrideService;
     let _router = service.http_router();
 }
+
+// ============================================================================
+// OpenAPI Schema Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct SchemaService;
+
+#[http(prefix = "/api")]
+impl SchemaService {
+    /// List items with pagination
+    pub fn list_items(&self, page: Option<u32>, limit: Option<u32>) -> Vec<String> {
+        vec![]
+    }
+
+    /// Get item by ID
+    pub fn get_item(&self, item_id: String) -> Option<String> {
+        None
+    }
+
+    /// Create an item
+    pub fn create_item(&self, name: String, description: Option<String>) -> String {
+        name
+    }
+
+    /// Update item
+    pub fn update_item(&self, item_id: String, name: String) -> Result<String, String> {
+        Ok(name)
+    }
+}
+
+#[test]
+fn test_openapi_query_parameters() {
+    let spec = SchemaService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // list_items should have query parameters
+    let list_path = paths.get("/api/items").unwrap();
+    let get_op = list_path.get("get").unwrap();
+    let params = get_op.get("parameters").unwrap().as_array().unwrap();
+
+    // Should have page and limit parameters
+    let param_names: Vec<_> = params.iter()
+        .map(|p| p.get("name").unwrap().as_str().unwrap())
+        .collect();
+    assert!(param_names.contains(&"page"), "Expected 'page' parameter");
+    assert!(param_names.contains(&"limit"), "Expected 'limit' parameter");
+
+    // Check that params are in query
+    for param in params {
+        assert_eq!(param.get("in").unwrap(), "query");
+    }
+}
+
+#[test]
+fn test_openapi_path_parameters() {
+    let spec = SchemaService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // get_item should have path parameter
+    let get_path = paths.get("/api/items/{id}").unwrap();
+    let get_op = get_path.get("get").unwrap();
+    let params = get_op.get("parameters").unwrap().as_array().unwrap();
+
+    // Should have item_id as path parameter
+    let path_params: Vec<_> = params.iter()
+        .filter(|p| p.get("in").unwrap() == "path")
+        .collect();
+    assert!(!path_params.is_empty(), "Expected path parameters");
+}
+
+#[test]
+fn test_openapi_request_body() {
+    let spec = SchemaService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // create_item should have request body
+    let create_path = paths.get("/api/items").unwrap();
+    let post_op = create_path.get("post").unwrap();
+
+    assert!(
+        post_op.get("requestBody").is_some(),
+        "Expected requestBody for POST"
+    );
+
+    let body = post_op.get("requestBody").unwrap();
+    let content = body.get("content").unwrap();
+    let json_schema = content.get("application/json").unwrap();
+    let schema = json_schema.get("schema").unwrap();
+
+    // Should have properties
+    let props = schema.get("properties").unwrap().as_object().unwrap();
+    assert!(props.contains_key("name"), "Expected 'name' property");
+}
+
+#[test]
+fn test_openapi_error_responses() {
+    let spec = SchemaService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // update_item returns Result, should have error responses
+    let update_path = paths.get("/api/items/{id}").unwrap();
+    let put_op = update_path.get("put").unwrap();
+    let responses = put_op.get("responses").unwrap().as_object().unwrap();
+
+    assert!(responses.contains_key("200"), "Expected 200 response");
+    assert!(responses.contains_key("400"), "Expected 400 response for Result");
+    assert!(responses.contains_key("500"), "Expected 500 response for Result");
+}

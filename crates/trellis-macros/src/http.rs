@@ -3,9 +3,26 @@
 use heck::ToKebabCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse::Parse, ItemImpl, Token};
+use syn::{parse::Parse, GenericArgument, ItemImpl, PathArguments, Token, Type};
 
 use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use crate::rpc;
+
+/// Extract the inner type T from Option<T>
+fn extract_option_inner(ty: &Type) -> Option<Type> {
+    if let Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Option" {
+                if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                        return Some(inner.clone());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
 
 /// Per-method HTTP attribute overrides
 #[derive(Default, Clone)]
@@ -120,7 +137,7 @@ pub fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStr
         let handler = generate_handler(&struct_name, method)?;
         handlers.push(handler);
 
-        let route = generate_route(&prefix, method, &overrides)?;
+        let route = generate_route(&prefix, method, &overrides, &struct_name)?;
         routes.push(route);
 
         // Track methods for OpenAPI (unless hidden)
@@ -166,7 +183,8 @@ pub fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStr
 /// Generate a handler function for a method
 fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream> {
     let method_name = &method.name;
-    let handler_name = format_ident!("__trellis_http_{}", method_name);
+    let struct_name_snake = struct_name.to_string().to_lowercase();
+    let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
 
     // Determine parameter extraction
     let (param_extractions, param_calls) = generate_param_handling(method)?;
@@ -232,8 +250,10 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
                 let name_str = param.name.to_string();
                 let ty = &param.ty;
                 if param.is_optional {
+                    // Extract inner type from Option<T> to deserialize as T, result wrapped in Option
+                    let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
                     calls.push(quote! {
-                        body_extractor.0.get(#name_str).and_then(|v| ::trellis::serde_json::from_value::<#ty>(v.clone()).ok())
+                        body_extractor.0.get(#name_str).and_then(|v| ::trellis::serde_json::from_value::<#inner_ty>(v.clone()).ok())
                     });
                 } else {
                     calls.push(quote! {
@@ -251,8 +271,10 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
                 let name_str = param.name.to_string();
                 let ty = &param.ty;
                 if param.is_optional {
+                    // Extract inner type from Option<T> to parse as T, result wrapped in Option
+                    let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
                     calls.push(quote! {
-                        query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok())
+                        query_extractor.0.get(#name_str).and_then(|v| v.parse::<#inner_ty>().ok())
                     });
                 } else {
                     calls.push(quote! {
@@ -334,9 +356,10 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
 }
 
 /// Generate route registration
-fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverride) -> syn::Result<TokenStream> {
+fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverride, struct_name: &syn::Ident) -> syn::Result<TokenStream> {
     let method_name = &method.name;
-    let handler_name = format_ident!("__trellis_http_{}", method_name);
+    let struct_name_snake = struct_name.to_string().to_lowercase();
+    let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
 
     // Use override or infer HTTP method
     let http_method = if let Some(ref m) = overrides.method {
@@ -384,7 +407,7 @@ fn generate_openapi_spec(
     prefix: &str,
     methods_with_overrides: &[(MethodInfo, HttpMethodOverride)],
 ) -> syn::Result<TokenStream> {
-    let mut paths = Vec::new();
+    let mut operation_data = Vec::new();
 
     for (method, overrides) in methods_with_overrides {
         let method_name = method.name.to_string();
@@ -415,8 +438,154 @@ fn generate_openapi_spec(
         let summary = method.docs.clone().unwrap_or_else(|| method_name.clone());
         let operation_id = method_name.clone();
 
-        paths.push(quote! {
-            (#full_path, #http_method_str, #summary, #operation_id)
+        // Generate parameter specs
+        let has_body = matches!(http_method, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch);
+        let id_params: Vec<_> = method.params.iter().filter(|p| p.is_id).collect();
+        let other_params: Vec<_> = method.params.iter().filter(|p| !p.is_id).collect();
+
+        // Path parameters
+        let path_param_specs: Vec<_> = id_params.iter().map(|p| {
+            let name = p.name.to_string();
+            let json_type = rpc::infer_json_type(&p.ty);
+            quote! { (#name, "path", #json_type, true) }
+        }).collect();
+
+        // Query parameters (for GET/DELETE) or body schema (for POST/PUT/PATCH)
+        let query_param_specs: Vec<TokenStream> = if !has_body {
+            other_params.iter().map(|p| {
+                let name = p.name.to_string();
+                let json_type = rpc::infer_json_type(&p.ty);
+                let required = !p.is_optional;
+                quote! { (#name, "query", #json_type, #required) }
+            }).collect()
+        } else {
+            vec![]
+        };
+
+        // Request body properties for POST/PUT/PATCH
+        let body_props: Vec<TokenStream> = if has_body {
+            other_params.iter().map(|p| {
+                let name = p.name.to_string();
+                let json_type = rpc::infer_json_type(&p.ty);
+                let required = !p.is_optional;
+                quote! { (#name, #json_type, #required) }
+            }).collect()
+        } else {
+            vec![]
+        };
+        let has_body_props = !body_props.is_empty();
+
+        // Response type info
+        let ret = &method.return_info;
+        let (success_code, error_responses) = if ret.is_result {
+            ("200", true)
+        } else if ret.is_option {
+            ("200", false) // 404 handled implicitly
+        } else if ret.is_unit {
+            ("204", false)
+        } else {
+            ("200", false)
+        };
+
+        operation_data.push(quote! {
+            {
+                let path = #full_path;
+                let method = #http_method_str;
+                let summary = #summary;
+                let operation_id = #operation_id;
+                let success_code = #success_code;
+                let has_error_responses = #error_responses;
+                let has_body = #has_body_props;
+
+                // Build parameters array
+                let mut parameters: Vec<::trellis::serde_json::Value> = Vec::new();
+                #(
+                    {
+                        let (name, location, schema_type, required): (&str, &str, &str, bool) = #path_param_specs;
+                        parameters.push(::trellis::serde_json::json!({
+                            "name": name,
+                            "in": location,
+                            "required": required,
+                            "schema": { "type": schema_type }
+                        }));
+                    }
+                )*
+                #(
+                    {
+                        let (name, location, schema_type, required): (&str, &str, &str, bool) = #query_param_specs;
+                        parameters.push(::trellis::serde_json::json!({
+                            "name": name,
+                            "in": location,
+                            "required": required,
+                            "schema": { "type": schema_type }
+                        }));
+                    }
+                )*
+
+                // Build request body if needed
+                let request_body: Option<::trellis::serde_json::Value> = if has_body {
+                    let mut properties = ::trellis::serde_json::Map::new();
+                    let mut required_props: Vec<String> = Vec::new();
+                    #(
+                        {
+                            let (name, schema_type, required): (&str, &str, bool) = #body_props;
+                            properties.insert(name.to_string(), ::trellis::serde_json::json!({
+                                "type": schema_type
+                            }));
+                            if required {
+                                required_props.push(name.to_string());
+                            }
+                        }
+                    )*
+                    Some(::trellis::serde_json::json!({
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": properties,
+                                    "required": required_props
+                                }
+                            }
+                        }
+                    }))
+                } else {
+                    None
+                };
+
+                // Build responses
+                let mut responses = ::trellis::serde_json::Map::new();
+                responses.insert(success_code.to_string(), ::trellis::serde_json::json!({
+                    "description": "Successful response"
+                }));
+                if has_error_responses {
+                    responses.insert("400".to_string(), ::trellis::serde_json::json!({
+                        "description": "Bad request"
+                    }));
+                    responses.insert("500".to_string(), ::trellis::serde_json::json!({
+                        "description": "Internal server error"
+                    }));
+                }
+
+                // Build operation object
+                let mut operation = ::trellis::serde_json::json!({
+                    "summary": summary,
+                    "operationId": operation_id,
+                    "responses": responses
+                });
+
+                if !parameters.is_empty() {
+                    operation.as_object_mut().unwrap()
+                        .insert("parameters".to_string(), ::trellis::serde_json::Value::Array(parameters));
+                }
+
+                if let Some(body) = request_body {
+                    operation.as_object_mut().unwrap()
+                        .insert("requestBody".to_string(), body);
+                }
+
+                (path.to_string(), method.to_string(), operation)
+            }
         });
     }
 
@@ -426,19 +595,11 @@ fn generate_openapi_spec(
 
             #(
                 {
-                    let (path, method, summary, operation_id): (&str, &str, &str, &str) = #paths;
-                    let path_item = paths.entry(path.to_string())
+                    let (path, method, operation): (String, String, ::trellis::serde_json::Value) = #operation_data;
+                    let path_item = paths.entry(path)
                         .or_insert_with(|| ::trellis::serde_json::json!({}));
                     if let ::trellis::serde_json::Value::Object(map) = path_item {
-                        map.insert(method.to_string(), ::trellis::serde_json::json!({
-                            "summary": summary,
-                            "operationId": operation_id,
-                            "responses": {
-                                "200": {
-                                    "description": "Successful response"
-                                }
-                            }
-                        }));
+                        map.insert(method, operation);
                     }
                 }
             )*
