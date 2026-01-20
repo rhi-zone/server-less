@@ -7,6 +7,58 @@ use syn::{parse::Parse, ItemImpl, Token};
 
 use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
 
+/// Per-method HTTP attribute overrides
+#[derive(Default, Clone)]
+pub struct HttpMethodOverride {
+    /// Override HTTP method (GET, POST, etc.)
+    pub method: Option<String>,
+    /// Override path
+    pub path: Option<String>,
+    /// Skip this method (don't generate HTTP handler)
+    pub skip: bool,
+    /// Hide from OpenAPI spec
+    pub hidden: bool,
+}
+
+impl HttpMethodOverride {
+    /// Parse #[route(...)] attributes from a method
+    ///
+    /// Note: We use `#[route(...)]` instead of `#[http(...)]` for method-level
+    /// attributes to avoid conflict with the impl-level `#[http]` macro.
+    fn parse_from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
+        let mut result = Self::default();
+
+        for attr in attrs {
+            if !attr.path().is_ident("route") {
+                continue;
+            }
+
+            // Handle #[route(skip)] style
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("skip") {
+                    result.skip = true;
+                    Ok(())
+                } else if meta.path.is_ident("hidden") {
+                    result.hidden = true;
+                    Ok(())
+                } else if meta.path.is_ident("method") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.method = Some(value.value().to_uppercase());
+                    Ok(())
+                } else if meta.path.is_ident("path") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.path = Some(value.value());
+                    Ok(())
+                } else {
+                    Err(meta.error("unknown attribute. Valid: method, path, skip, hidden"))
+                }
+            })?;
+        }
+
+        Ok(result)
+    }
+}
+
 /// Arguments for the #[http] attribute
 #[derive(Default)]
 pub struct HttpArgs {
@@ -54,20 +106,34 @@ pub fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStr
     // Generate handler functions and route registrations
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
+    let mut openapi_methods = Vec::new();
 
     for method in &methods {
+        // Parse per-method overrides
+        let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
+
+        // Skip methods marked with #[http(skip)]
+        if overrides.skip {
+            continue;
+        }
+
         let handler = generate_handler(&struct_name, method)?;
         handlers.push(handler);
 
-        let route = generate_route(&prefix, method)?;
+        let route = generate_route(&prefix, method, &overrides)?;
         routes.push(route);
+
+        // Track methods for OpenAPI (unless hidden)
+        if !overrides.hidden {
+            openapi_methods.push((method.clone(), overrides.clone()));
+        }
     }
 
     // Generate the router function
     let _router_fn = generate_router(&struct_name, &routes);
 
-    // Generate OpenAPI spec function
-    let openapi_fn = generate_openapi_spec(&struct_name, &prefix, &methods)?;
+    // Generate OpenAPI spec function (only non-hidden methods)
+    let openapi_fn = generate_openapi_spec(&struct_name, &prefix, &openapi_methods)?;
 
     Ok(quote! {
         #impl_block
@@ -268,12 +334,30 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
 }
 
 /// Generate route registration
-fn generate_route(prefix: &str, method: &MethodInfo) -> syn::Result<TokenStream> {
+fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverride) -> syn::Result<TokenStream> {
     let method_name = &method.name;
     let handler_name = format_ident!("__trellis_http_{}", method_name);
 
-    let http_method = infer_http_method(&method_name.to_string());
-    let path = infer_path(&method_name.to_string(), &http_method, &method.params);
+    // Use override or infer HTTP method
+    let http_method = if let Some(ref m) = overrides.method {
+        match m.as_str() {
+            "GET" => HttpMethod::Get,
+            "POST" => HttpMethod::Post,
+            "PUT" => HttpMethod::Put,
+            "PATCH" => HttpMethod::Patch,
+            "DELETE" => HttpMethod::Delete,
+            _ => infer_http_method(&method_name.to_string()),
+        }
+    } else {
+        infer_http_method(&method_name.to_string())
+    };
+
+    // Use override or infer path
+    let path = if let Some(ref p) = overrides.path {
+        p.clone()
+    } else {
+        infer_path(&method_name.to_string(), &http_method, &method.params)
+    };
     let full_path = format!("{}{}", prefix, path);
 
     let method_fn = match http_method {
@@ -298,14 +382,33 @@ fn generate_router(_struct_name: &syn::Ident, _routes: &[TokenStream]) -> TokenS
 fn generate_openapi_spec(
     struct_name: &syn::Ident,
     prefix: &str,
-    methods: &[MethodInfo],
+    methods_with_overrides: &[(MethodInfo, HttpMethodOverride)],
 ) -> syn::Result<TokenStream> {
     let mut paths = Vec::new();
 
-    for method in methods {
+    for (method, overrides) in methods_with_overrides {
         let method_name = method.name.to_string();
-        let http_method = infer_http_method(&method_name);
-        let path = infer_path(&method_name, &http_method, &method.params);
+
+        // Use override or infer HTTP method
+        let http_method = if let Some(ref m) = overrides.method {
+            match m.as_str() {
+                "GET" => HttpMethod::Get,
+                "POST" => HttpMethod::Post,
+                "PUT" => HttpMethod::Put,
+                "PATCH" => HttpMethod::Patch,
+                "DELETE" => HttpMethod::Delete,
+                _ => infer_http_method(&method_name),
+            }
+        } else {
+            infer_http_method(&method_name)
+        };
+
+        // Use override or infer path
+        let path = if let Some(ref p) = overrides.path {
+            p.clone()
+        } else {
+            infer_path(&method_name, &http_method, &method.params)
+        };
         let full_path = format!("{}{}", prefix, path);
         let http_method_str = http_method.as_str().to_lowercase();
 

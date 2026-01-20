@@ -158,6 +158,32 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
+/// Helper attribute for method-level HTTP route customization.
+///
+/// This attribute is used within `#[http]` impl blocks to customize
+/// individual method routing. It is a no-op on its own.
+///
+/// # Example
+///
+/// ```ignore
+/// #[http(prefix = "/api")]
+/// impl MyService {
+///     #[route(method = "POST", path = "/custom")]
+///     fn my_method(&self) { }
+///
+///     #[route(skip)]
+///     fn internal_method(&self) { }
+///
+///     #[route(hidden)]  // Hidden from OpenAPI but still routed
+///     fn secret(&self) { }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn route(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Pass through unchanged - the #[http] macro parses these attributes
+    item
+}
+
 /// Derive macro for error types that implement `IntoErrorCode`.
 ///
 /// # Example

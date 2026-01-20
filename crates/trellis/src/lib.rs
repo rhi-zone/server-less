@@ -129,6 +129,9 @@ pub use trellis_macros::mcp;
 #[cfg(feature = "http")]
 pub use trellis_macros::http;
 
+#[cfg(feature = "http")]
+pub use trellis_macros::route;
+
 #[cfg(feature = "cli")]
 pub use trellis_macros::cli;
 
@@ -155,6 +158,8 @@ pub mod prelude {
     pub use super::mcp;
     #[cfg(feature = "http")]
     pub use super::http;
+    #[cfg(feature = "http")]
+    pub use super::route;
     #[cfg(feature = "cli")]
     pub use super::cli;
     #[cfg(feature = "ws")]

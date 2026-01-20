@@ -347,10 +347,60 @@ enum MyError {
 
 ---
 
+## Iteration 10: Attribute Customization
+
+**Goal:** Allow per-method HTTP route customization via `#[route(...)]`.
+
+**Features:**
+- `#[route(method = "POST")]` - override HTTP method
+- `#[route(path = "/custom")]` - override path
+- `#[route(skip)]` - exclude from HTTP router and OpenAPI
+- `#[route(hidden)]` - include in router but hide from OpenAPI
+
+**Example:**
+```rust
+#[http(prefix = "/api")]
+impl MyService {
+    #[route(method = "POST", path = "/custom")]
+    fn my_method(&self) { }
+
+    #[route(skip)]
+    fn internal_only(&self) { }
+}
+```
+
+**Implementation:**
+- Added `#[route]` passthrough macro (inner attributes on methods)
+- `HttpMethodOverride` struct parses method attributes
+- Override logic in `generate_route` and `generate_openapi_spec`
+
+**Tests:** 7 new tests, 81 total.
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Enhanced | 10 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| Error derive | ✅ Working | 10 |
+| Route attr | ✅ NEW | - |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| Error messages | ✅ Improved | - |
+| Documentation | ✅ Updated | - |
+| **Total tests** | | **81** |
+
+---
+
 ## Future Iterations
 
 (To be filled as we go)
 
-- Iteration N: Attribute customization
-- Iteration N: Composable OpenAPI
+- Iteration N: OpenAPI improvements (parameter schemas, response schemas)
 - Iteration N: "Serve" coordination pattern
