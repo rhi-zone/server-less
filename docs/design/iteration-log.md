@@ -300,10 +300,57 @@ All errors use `syn::Error::new_spanned()` to point to the exact problematic cod
 
 ---
 
+## Iteration 9: Error Derive Macro
+
+**Goal:** Add `#[derive(TrellisError)]` for error types with protocol-agnostic codes.
+
+**Features:**
+- Implements `IntoErrorCode`, `Display`, and `std::error::Error`
+- `#[error(code = NotFound)]` - explicit ErrorCode variant
+- `#[error(code = 404)]` - HTTP status (mapped to ErrorCode)
+- `#[error(message = "...")]` - custom message
+- Code inference from variant name (e.g., `Unauthorized` → `Unauthenticated`)
+- Supports unit, tuple, and struct variants
+
+**Example:**
+```rust
+#[derive(TrellisError)]
+enum MyError {
+    #[error(code = NotFound, message = "User not found")]
+    UserNotFound,
+    #[error(code = 400)]
+    ValidationFailed(String),
+    Unauthorized,  // inferred from name
+}
+```
+
+**Tests:** 10 new tests, 74 total.
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Solid | 3 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| Error derive | ✅ NEW | 10 |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| Error messages | ✅ Improved | - |
+| Documentation | ✅ Updated | - |
+| **Total tests** | | **74** |
+
+---
+
 ## Future Iterations
 
 (To be filled as we go)
 
+- Iteration N: Attribute customization
 - Iteration N: Composable OpenAPI
-- Iteration N: Error derive macro
 - Iteration N: "Serve" coordination pattern

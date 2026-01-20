@@ -1,11 +1,13 @@
 //! Proc macros for trellis.
 //!
-//! This crate provides attribute macros that transform impl blocks into protocol handlers.
+//! This crate provides attribute macros that transform impl blocks into protocol handlers,
+//! and derive macros for common patterns.
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, ItemImpl};
+use syn::{parse_macro_input, DeriveInput, ItemImpl};
 
 mod cli;
+mod error;
 mod http;
 mod mcp;
 mod parse;
@@ -151,6 +153,45 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match ws::expand_ws(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Derive macro for error types that implement `IntoErrorCode`.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::TrellisError;
+///
+/// #[derive(TrellisError)]
+/// enum MyError {
+///     #[error(code = NotFound, message = "User not found")]
+///     UserNotFound,
+///     #[error(code = 400)]  // HTTP status also works
+///     InvalidInput(String),
+///     // Code inferred from variant name
+///     Unauthorized,
+/// }
+/// ```
+///
+/// This generates:
+/// - `impl IntoErrorCode for MyError`
+/// - `impl Display for MyError`
+/// - `impl Error for MyError`
+///
+/// # Attributes
+///
+/// - `#[error(code = X)]` - Set error code (ErrorCode variant or HTTP status)
+/// - `#[error(message = "...")]` - Set custom message
+///
+/// Without attributes, the error code is inferred from the variant name.
+#[proc_macro_derive(TrellisError, attributes(error))]
+pub fn trellis_error(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    match error::expand_trellis_error(input) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

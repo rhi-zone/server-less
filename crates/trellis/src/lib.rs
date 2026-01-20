@@ -135,6 +135,9 @@ pub use trellis_macros::cli;
 #[cfg(feature = "ws")]
 pub use trellis_macros::ws;
 
+// Error derive macro (always available)
+pub use trellis_macros::TrellisError;
+
 // Re-export futures for generated WebSocket code
 #[cfg(feature = "ws")]
 pub use futures;
@@ -157,6 +160,6 @@ pub mod prelude {
     #[cfg(feature = "ws")]
     pub use super::ws;
 
-    pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode};
+    pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, TrellisError};
     pub use serde::{Deserialize, Serialize};
 }
