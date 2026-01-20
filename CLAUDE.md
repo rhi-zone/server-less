@@ -142,6 +142,34 @@ Trellis is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem. Rela
 - **Spore** - Lua runtime with LLM integration
 - **Hypha** - Async runtime primitives
 
+## Feature Gating
+
+**Every macro is behind a feature flag.** This is about explicit opt-in, not dependency management.
+
+```toml
+# Explicit about what you're using
+trellis = { version = "0.1", features = ["http", "grpc", "markdown"] }
+
+# Or get everything
+trellis = { version = "0.1", features = ["full"] }
+```
+
+**Why gate everything, even "free" macros?**
+- Consistency: all macros work the same way
+- Explicitness: "I want X, Y, Z" not "I get everything by default"
+- Discoverability: features list shows what's available
+- Future-proofing: a macro might gain deps later
+
+**Categories:**
+| Category | Features | Runtime Deps |
+|----------|----------|--------------|
+| Runtime protocols | `http`, `ws`, `jsonrpc`, `graphql`, `cli`, `mcp` | Yes (axum, clap, etc.) |
+| Schema generators | `grpc`, `capnp`, `thrift` | No |
+| Spec generators | `openrpc`, `asyncapi` | No |
+| Doc generators | `markdown` | No |
+
+**Always available:** `TrellisError` derive (commonly needed, zero deps).
+
 ## Core Rules
 
 - Macros are opt-in, not opt-out

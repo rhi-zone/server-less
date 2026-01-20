@@ -37,12 +37,34 @@ optional = true
 
 [features]
 default = ["full"]
-mcp = []  # No extra deps, just serde_json which is always required
+
+# Runtime protocols (require external deps)
+mcp = []
 http = ["axum"]
 cli = ["clap"]
 ws = ["axum", "futures"]
 graphql = ["async-graphql", "async-graphql-axum", "axum"]
-full = ["mcp", "http", "cli", "ws", "graphql"]
+jsonrpc = ["axum"]
+
+# Schema generators (no runtime deps, just string generation)
+grpc = []
+capnp = []
+thrift = []
+
+# Specification generators (no runtime deps)
+openrpc = []
+asyncapi = []
+
+# Documentation generators (no runtime deps)
+markdown = []
+
+# All features
+full = [
+    "mcp", "http", "cli", "ws", "graphql", "jsonrpc",
+    "grpc", "capnp", "thrift",
+    "openrpc", "asyncapi",
+    "markdown"
+]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
