@@ -153,6 +153,9 @@ pub use trellis_macros::grpc;
 // Cap'n Proto schema generation (always available, no runtime deps)
 pub use trellis_macros::capnp;
 
+// Thrift schema generation (always available, no runtime deps)
+pub use trellis_macros::thrift;
+
 // Error derive macro (always available)
 pub use trellis_macros::TrellisError;
 
@@ -194,6 +197,7 @@ pub mod prelude {
 
     pub use super::capnp;
     pub use super::grpc;
+    pub use super::thrift;
     pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, TrellisError};
     pub use serde::{Deserialize, Serialize};
 }

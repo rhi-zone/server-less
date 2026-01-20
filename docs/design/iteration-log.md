@@ -735,6 +735,58 @@ impl Calculator {
 
 ---
 
+## Iteration 19: Extended Serve Coordination
+
+**Goal:** Support more protocols in the `#[serve]` macro.
+
+**Added Protocols:**
+- `jsonrpc` - JSON-RPC over HTTP router
+- `graphql` - GraphQL router
+
+**Example:**
+```rust
+#[http]
+#[jsonrpc]
+#[graphql]
+#[serve(http, jsonrpc, graphql)]
+impl MyService { ... }
+
+// Combines all three routers + health check
+let router = service.router();
+```
+
+**Tests:** 2 new tests, 134 total.
+
+---
+
+## Iteration 20: Thrift Schema Generation
+
+**Goal:** Generate Apache Thrift `.thrift` schemas from impl blocks.
+
+**Features:**
+- `#[thrift]` - generate schema from impl
+- `#[thrift(namespace = "users")]` - set namespace
+- `thrift_schema() -> &'static str` - get schema string
+- `write_thrift(path)` - write to file
+- Schema validation like gRPC/Cap'n Proto
+
+**Type Mappings:**
+| Rust | Thrift |
+|------|--------|
+| String, &str | string |
+| i8 | byte |
+| i16/i32/i64 | i16/i32/i64 |
+| f64 | double |
+| bool | bool |
+| Vec<u8> | binary |
+| Vec<T> | list<string> |
+| HashMap | map<string, string> |
+| () | void |
+
+**Tests:** 9 new tests, 143 total.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |
@@ -748,6 +800,7 @@ impl Calculator {
 | GraphQL macro | ✅ Working | 9 |
 | gRPC (impl + schema) | ✅ Working | 11 |
 | Cap'n Proto (impl + schema) | ✅ Working | 10 |
+| Thrift (impl + schema) | ✅ Working | 9 |
 | Error derive | ✅ Working | 10 |
 | Route attr | ✅ Working | - |
 | OpenAPI schemas | ✅ Working | - |

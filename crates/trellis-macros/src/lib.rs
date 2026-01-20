@@ -17,6 +17,7 @@ mod mcp;
 mod parse;
 mod rpc;
 mod serve;
+mod thrift;
 mod ws;
 
 /// Generate HTTP handlers from an impl block.
@@ -280,6 +281,44 @@ pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match capnp::expand_capnp(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate Apache Thrift schema from an impl block.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::thrift;
+///
+/// struct UserService;
+///
+/// #[thrift(namespace = "users")]
+/// impl UserService {
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> String { ... }
+///
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> String { ... }
+/// }
+///
+/// // Get the Thrift schema
+/// let schema = UserService::thrift_schema();
+///
+/// // Write to file for use with thrift compiler
+/// UserService::write_thrift("idl/users.thrift")?;
+/// ```
+///
+/// The generated schema can be used with the Thrift compiler to generate
+/// client/server code in various languages.
+#[proc_macro_attribute]
+pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as thrift::ThriftArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match thrift::expand_thrift(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }
