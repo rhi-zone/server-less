@@ -12,6 +12,7 @@ mod error;
 mod graphql;
 mod grpc;
 mod http;
+mod jsonrpc;
 mod mcp;
 mod parse;
 mod rpc;
@@ -162,6 +163,52 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
+/// Generate JSON-RPC 2.0 handlers over HTTP.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::jsonrpc;
+///
+/// struct Calculator;
+///
+/// #[jsonrpc]
+/// impl Calculator {
+///     /// Add two numbers
+///     fn add(&self, a: i32, b: i32) -> i32 {
+///         a + b
+///     }
+///
+///     /// Multiply two numbers
+///     fn multiply(&self, a: i32, b: i32) -> i32 {
+///         a * b
+///     }
+/// }
+///
+/// // POST /rpc with {"jsonrpc": "2.0", "method": "add", "params": {"a": 1, "b": 2}, "id": 1}
+/// // Returns: {"jsonrpc": "2.0", "result": 3, "id": 1}
+/// ```
+///
+/// This generates:
+/// - `Calculator::jsonrpc_router()` returning an axum Router
+/// - `Calculator::jsonrpc_handle(request)` to handle JSON-RPC requests
+/// - `Calculator::jsonrpc_methods()` listing available methods
+///
+/// Supports JSON-RPC 2.0 features:
+/// - Named and positional parameters
+/// - Batch requests (array of requests)
+/// - Notifications (requests without id)
+#[proc_macro_attribute]
+pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as jsonrpc::JsonRpcArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match jsonrpc::expand_jsonrpc(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
 /// Generate Protocol Buffers schema from an impl block.
 ///
 /// # Example
@@ -282,13 +329,14 @@ pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::{http, ws, serve};
+/// use trellis::{http, ws, jsonrpc, serve};
 ///
 /// struct MyService;
 ///
 /// #[http]
 /// #[ws]
-/// #[serve(http, ws)]
+/// #[jsonrpc]
+/// #[serve(http, ws, jsonrpc)]
 /// impl MyService {
 ///     fn list_items(&self) -> Vec<String> { vec![] }
 /// }
@@ -300,8 +348,10 @@ pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// # Arguments
 ///
-/// - `http` - Include the HTTP router
-/// - `ws` - Include the WebSocket router
+/// - `http` - Include the HTTP router (REST API)
+/// - `ws` - Include the WebSocket router (WS JSON-RPC)
+/// - `jsonrpc` - Include the JSON-RPC HTTP router
+/// - `graphql` - Include the GraphQL router
 /// - `health = "/path"` - Custom health check path (default: `/health`)
 #[proc_macro_attribute]
 pub fn serve(attr: TokenStream, item: TokenStream) -> TokenStream {

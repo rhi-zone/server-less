@@ -26,7 +26,7 @@ impl Parse for ServeArgs {
             let ident_str = ident.to_string();
 
             match ident_str.as_str() {
-                "http" | "ws" => {
+                "http" | "ws" | "jsonrpc" | "graphql" => {
                     args.protocols.push(ident_str);
                 }
                 "health" => {
@@ -37,7 +37,7 @@ impl Parse for ServeArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown protocol `{other}`. Valid: http, ws, health"),
+                        format!("unknown protocol `{other}`. Valid: http, ws, jsonrpc, graphql, health"),
                     ));
                 }
             }
@@ -111,21 +111,39 @@ pub fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result<TokenS
 fn generate_router_setup(protocols: &[String]) -> TokenStream {
     let has_http = protocols.contains(&"http".to_string());
     let has_ws = protocols.contains(&"ws".to_string());
+    let has_jsonrpc = protocols.contains(&"jsonrpc".to_string());
+    let has_graphql = protocols.contains(&"graphql".to_string());
 
-    match (has_http, has_ws) {
-        (true, true) => quote! {
-            let http_router = self.clone().http_router();
-            let ws_router = self.ws_router();
-            let router = http_router.merge(ws_router);
-        },
-        (true, false) => quote! {
-            let router = self.http_router();
-        },
-        (false, true) => quote! {
-            let router = self.ws_router();
-        },
-        (false, false) => quote! {
+    // Build list of merge operations
+    let mut parts = Vec::new();
+
+    if has_http {
+        parts.push(quote! { self.clone().http_router() });
+    }
+    if has_ws {
+        parts.push(quote! { self.clone().ws_router() });
+    }
+    if has_jsonrpc {
+        parts.push(quote! { self.clone().jsonrpc_router() });
+    }
+    if has_graphql {
+        parts.push(quote! { self.clone().graphql_router() });
+    }
+
+    if parts.is_empty() {
+        quote! {
             let router = ::axum::Router::new();
-        },
+        }
+    } else if parts.len() == 1 {
+        let first = &parts[0];
+        quote! {
+            let router = #first;
+        }
+    } else {
+        let first = &parts[0];
+        let rest = &parts[1..];
+        quote! {
+            let router = #first #(.merge(#rest))*;
+        }
     }
 }

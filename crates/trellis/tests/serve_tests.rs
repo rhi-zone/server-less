@@ -1,6 +1,6 @@
 //! Integration tests for the serve coordination macro.
 
-use trellis::{http, serve, ws};
+use trellis::{http, jsonrpc, serve, ws};
 
 #[derive(Clone)]
 struct MultiService {
@@ -113,5 +113,48 @@ impl MinimalService {
 #[test]
 fn test_serve_minimal() {
     let service = MinimalService;
+    let _router = service.router();
+}
+
+// Combined HTTP + JSON-RPC
+#[derive(Clone)]
+struct CombinedRpcService;
+
+#[http]
+#[jsonrpc(path = "/rpc")]
+#[serve(http, jsonrpc)]
+impl CombinedRpcService {
+    /// Add two numbers
+    pub fn add(&self, a: i32, b: i32) -> i32 {
+        a + b
+    }
+
+    /// Get status
+    pub fn get_status(&self) -> String {
+        "ok".to_string()
+    }
+}
+
+#[test]
+fn test_serve_http_jsonrpc() {
+    let service = CombinedRpcService;
+    let _router = service.router();
+}
+
+// JSON-RPC only
+#[derive(Clone)]
+struct JsonRpcOnlyService;
+
+#[jsonrpc]
+#[serve(jsonrpc)]
+impl JsonRpcOnlyService {
+    pub fn ping(&self) -> String {
+        "pong".to_string()
+    }
+}
+
+#[test]
+fn test_serve_jsonrpc_only() {
+    let service = JsonRpcOnlyService;
     let _router = service.router();
 }

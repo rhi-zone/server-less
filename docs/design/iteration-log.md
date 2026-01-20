@@ -698,6 +698,43 @@ struct GetUserResult {
 
 ---
 
+## Iteration 18: JSON-RPC over HTTP
+
+**Goal:** JSON-RPC 2.0 over HTTP (same protocol as WS, different transport).
+
+**Features:**
+- `#[jsonrpc]` - generate JSON-RPC HTTP handler
+- `#[jsonrpc(path = "/rpc")]` - custom endpoint path
+- `jsonrpc_router()` - axum Router with POST endpoint
+- `jsonrpc_handle(request)` - handle JSON-RPC requests
+- `jsonrpc_methods()` - list available methods
+
+**JSON-RPC 2.0 Compliance:**
+- Version validation (`"jsonrpc": "2.0"`)
+- Proper error codes (-32600, -32603, etc.)
+- Batch requests (array of requests)
+- Notifications (no `id` field = no response)
+
+**Example:**
+```rust
+#[jsonrpc]
+impl Calculator {
+    fn add(&self, a: i32, b: i32) -> i32 { a + b }
+}
+
+// POST /rpc
+// {"jsonrpc": "2.0", "method": "add", "params": {"a": 1, "b": 2}, "id": 1}
+// => {"jsonrpc": "2.0", "result": 3, "id": 1}
+
+// Batch:
+// [{"jsonrpc": "2.0", "method": "add", ...}, {"jsonrpc": "2.0", "method": "multiply", ...}]
+// => [{"result": 3, ...}, {"result": 12, ...}]
+```
+
+**Tests:** 11 new tests, 132 total.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |
@@ -706,6 +743,7 @@ struct GetUserResult {
 | HTTP macro | ✅ Enhanced | 14 (+ E2E) |
 | CLI macro | ✅ Solid | 6 (+ E2E) |
 | WS macro | ✅ Solid | 16 (+ E2E) |
+| JSON-RPC macro | ✅ Working | 11 |
 | Serve macro | ✅ Working | 6 |
 | GraphQL macro | ✅ Working | 9 |
 | gRPC (impl + schema) | ✅ Working | 11 |

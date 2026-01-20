@@ -139,6 +139,9 @@ pub use trellis_macros::cli;
 pub use trellis_macros::ws;
 
 #[cfg(feature = "http")]
+pub use trellis_macros::jsonrpc;
+
+#[cfg(feature = "http")]
 pub use trellis_macros::serve;
 
 #[cfg(feature = "graphql")]
@@ -180,6 +183,8 @@ pub mod prelude {
     pub use super::route;
     #[cfg(feature = "http")]
     pub use super::serve;
+    #[cfg(feature = "http")]
+    pub use super::jsonrpc;
     #[cfg(feature = "cli")]
     pub use super::cli;
     #[cfg(feature = "ws")]
