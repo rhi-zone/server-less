@@ -1,0 +1,21 @@
+[package]
+name = "trellis-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Proc macros for trellis"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Proc macro essentials
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"
+
+# For parsing attributes
+darling = "0.20"
+
+# For case conversion (create_user -> CreateUser, create-user, etc.)
+heck = "0.5"
