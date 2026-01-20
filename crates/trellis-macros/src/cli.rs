@@ -174,7 +174,7 @@ fn generate_arg(param: &ParamInfo) -> TokenStream {
 }
 
 /// Generate a match arm for dispatching a subcommand
-fn generate_match_arm(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream> {
+fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
 
@@ -207,13 +207,24 @@ fn generate_match_arm(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Res
 
     let arg_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
 
-    // Generate the call
-    let call = if method.is_async {
+    // Generate the call - handle unit return types differently
+    let call = if method.return_info.is_unit {
+        if method.is_async {
+            quote! {
+                ::tokio::runtime::Runtime::new()
+                    .expect("Failed to create Tokio runtime")
+                    .block_on(self.#method_name(#(#arg_names),*));
+            }
+        } else {
+            quote! {
+                self.#method_name(#(#arg_names),*);
+            }
+        }
+    } else if method.is_async {
         quote! {
-            // Note: For async CLI, user needs to wrap in a runtime
-            // This is a simplified sync version
-            eprintln!("Warning: async CLI methods require manual runtime setup");
-            todo!("Async CLI support")
+            let result = ::tokio::runtime::Runtime::new()
+                .expect("Failed to create Tokio runtime")
+                .block_on(self.#method_name(#(#arg_names),*));
         }
     } else {
         quote! {
@@ -223,7 +234,7 @@ fn generate_match_arm(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Res
 
     // Generate output handling
     let output = if method.return_info.is_unit {
-        quote! { /* no output */ }
+        quote! { println!("Done"); }
     } else if method.return_info.is_result {
         quote! {
             match result {

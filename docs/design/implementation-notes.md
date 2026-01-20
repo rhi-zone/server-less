@@ -29,22 +29,69 @@ Generates:
 - **Name inference**: HTTP methods from `create_*`, `get_*`, etc.
 - **Error mapping**: `ErrorCode` with HTTP status, gRPC code, CLI exit code
 
-## Partial / Needs Work
-
 ### HTTP Macro (`#[http]`)
 
-Basic structure is there but has issues:
-- Parameter extraction generates working but ugly code
-- Need to handle the body struct generation better
-- Rust 2024 edition has stricter binding mode rules that break some patterns
-- SSE streaming not tested
+The HTTP macro is working:
+
+```rust
+#[http(prefix = "/api")]
+impl UserService {
+    /// List all users
+    pub fn list_users(&self) -> Vec<User> { ... }
+}
+```
+
+Generates:
+- `http_router()` - Returns axum Router with all routes
+- `openapi_spec()` - Returns OpenAPI 3.0 spec as JSON
+- Automatic HTTP method inference from method names
+- Path parameter extraction for ID-like parameters
+- JSON body extraction for POST/PUT/PATCH
+- Query parameter extraction for GET/DELETE
 
 ### CLI Macro (`#[cli]`)
 
-Structure is there but:
-- Async methods not handled properly
-- Type parsing for arguments needs work
-- Need to test with clap's actual behavior
+The CLI macro is working:
+
+```rust
+#[cli(name = "my-cli", version = "1.0.0", about = "My CLI app")]
+impl UserService {
+    /// List all users
+    pub fn list_users(&self) -> Vec<User> { ... }
+}
+```
+
+Generates:
+- `cli_command()` - Returns clap Command with subcommands
+- `cli_run()` - Runs the CLI application
+- `cli_run_with(args)` - Runs with custom arguments (for testing)
+- Async methods handled via tokio runtime
+- ID parameters become positional arguments
+- JSON output for return values
+
+## Fixed Issues
+
+### Rust 2024 Binding Modes (FIXED)
+
+The 2024 edition has stricter binding mode rules. The issue was in the OpenAPI generation code which used `ref mut` explicitly when matching on `&mut T`:
+
+```rust
+// Broke in Rust 2024
+if let Value::Object(ref mut map) = path_item { ... }
+
+// Fixed: let Rust infer the binding mode
+if let Value::Object(map) = path_item { ... }
+```
+
+### CLI Async Support (FIXED)
+
+Async methods now work in CLI via tokio runtime:
+
+```rust
+let result = ::tokio::runtime::Runtime::new()
+    .expect("Failed to create Tokio runtime")
+    .block_on(self.async_method());
+```
 
 ## Edge Cases Discovered
 
@@ -122,10 +169,15 @@ May want to add stricter validation modes later.
 
 ## TODO
 
-1. **HTTP macro**: Fix parameter extraction, test with real axum handlers
-2. **CLI macro**: Handle async, test with clap
-3. **OpenAPI**: Currently inline in HTTP macro, should be separate and more complete
-4. **Streaming**: SSE for HTTP, streaming for MCP
-5. **Async**: Better async method support across all macros
-6. **Tests**: trybuild tests for compile-fail cases
-7. **Error derive**: `#[derive(TrellisError)]` for error code mapping
+### Completed
+- [x] HTTP macro: Fixed parameter extraction, works with axum
+- [x] CLI macro: Handle async via tokio runtime
+- [x] CLI macro: Test with clap's actual behavior
+- [x] Tests: Unit and integration tests for all macros
+
+### Remaining
+1. **OpenAPI**: Currently inline in HTTP macro, should be separate and more complete
+2. **Streaming**: SSE for HTTP, streaming for MCP
+3. **Tests**: trybuild tests for compile-fail cases
+4. **Error derive**: `#[derive(TrellisError)]` for error code mapping
+5. **Attribute customization**: Allow overriding inferred HTTP methods, paths, etc.

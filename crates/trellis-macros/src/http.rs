@@ -61,7 +61,7 @@ pub fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStr
     }
 
     // Generate the router function
-    let router_fn = generate_router(&struct_name, &routes);
+    let _router_fn = generate_router(&struct_name, &routes);
 
     // Generate OpenAPI spec function
     let openapi_fn = generate_openapi_spec(&struct_name, &prefix, &methods)?;
@@ -114,9 +114,10 @@ fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Resul
 
     let handler = quote! {
         async fn #handler_name(
-            ::axum::extract::State(state): ::axum::extract::State<::std::sync::Arc<#struct_name>>,
+            state_extractor: ::axum::extract::State<::std::sync::Arc<#struct_name>>,
             #(#param_extractions),*
         ) -> impl ::axum::response::IntoResponse {
+            let state = state_extractor.0;
             #response
         }
     };
@@ -140,52 +141,41 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
     if !id_params.is_empty() {
         // For now, assume a single ID param named "id" in the path
         for param in &id_params {
-            let name = &param.name;
+            let _name = &param.name;
             let ty = &param.ty;
             extractions.push(quote! {
-                ::axum::extract::Path(path_param): ::axum::extract::Path<#ty>
+                path_extractor: ::axum::extract::Path<#ty>
             });
-            calls.push(quote! { path_param });
+            calls.push(quote! { path_extractor.0 });
         }
     }
 
     // Query vs Body params
     if !other_params.is_empty() {
         if has_body {
-            // POST/PUT/PATCH: use JSON body with a wrapper struct
-            // Generate field names and types
-            let field_defs: Vec<_> = other_params
-                .iter()
-                .map(|p| {
-                    let name = &p.name;
-                    let ty = &p.ty;
-                    quote! { #name: #ty }
-                })
-                .collect();
-
-            // We need to define a body struct inline
+            // POST/PUT/PATCH: use JSON body
             extractions.push(quote! {
-                ::axum::extract::Json(body): ::axum::extract::Json<::trellis::serde_json::Value>
+                body_extractor: ::axum::extract::Json<::trellis::serde_json::Value>
             });
 
             for param in &other_params {
-                let name = &param.name;
+                let _name = &param.name;
                 let name_str = param.name.to_string();
                 let ty = &param.ty;
                 if param.is_optional {
                     calls.push(quote! {
-                        body.get(#name_str).and_then(|v| ::trellis::serde_json::from_value::<#ty>(v.clone()).ok())
+                        body_extractor.0.get(#name_str).and_then(|v| ::trellis::serde_json::from_value::<#ty>(v.clone()).ok())
                     });
                 } else {
                     calls.push(quote! {
-                        ::trellis::serde_json::from_value::<#ty>(body.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
+                        ::trellis::serde_json::from_value::<#ty>(body_extractor.0.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
                     });
                 }
             }
         } else {
             // GET/DELETE: use query parameters
             extractions.push(quote! {
-                ::axum::extract::Query(query_params): ::axum::extract::Query<::std::collections::HashMap<String, String>>
+                query_extractor: ::axum::extract::Query<::std::collections::HashMap<String, String>>
             });
 
             for param in &other_params {
@@ -193,11 +183,11 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
                 let ty = &param.ty;
                 if param.is_optional {
                     calls.push(quote! {
-                        query_params.get(#name_str).and_then(|v| v.parse::<#ty>().ok())
+                        query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok())
                     });
                 } else {
                     calls.push(quote! {
-                        query_params.get(#name_str).and_then(|v| v.parse::<#ty>().ok()).unwrap_or_default()
+                        query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok()).unwrap_or_default()
                     });
                 }
             }
@@ -220,6 +210,7 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
     } else if ret.is_result {
         // Returns Result<T, E> -> 200 or error
         Ok(quote! {
+            use ::axum::response::IntoResponse;
             match #call {
                 Ok(value) => ::axum::Json(value).into_response(),
                 Err(err) => {
@@ -237,6 +228,7 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
     } else if ret.is_option {
         // Returns Option<T> -> 200 or 404
         Ok(quote! {
+            use ::axum::response::IntoResponse;
             match #call {
                 Some(value) => ::axum::Json(value).into_response(),
                 None => ::axum::http::StatusCode::NOT_FOUND.into_response(),
@@ -288,7 +280,7 @@ fn generate_route(prefix: &str, method: &MethodInfo) -> syn::Result<TokenStream>
 }
 
 /// Generate router function (placeholder - routes added in expand_http)
-fn generate_router(struct_name: &syn::Ident, _routes: &[TokenStream]) -> TokenStream {
+fn generate_router(_struct_name: &syn::Ident, _routes: &[TokenStream]) -> TokenStream {
     quote! {}
 }
 
@@ -324,7 +316,7 @@ fn generate_openapi_spec(
                     let (path, method, summary, operation_id): (&str, &str, &str, &str) = #paths;
                     let path_item = paths.entry(path.to_string())
                         .or_insert_with(|| ::trellis::serde_json::json!({}));
-                    if let ::trellis::serde_json::Value::Object(ref mut map) = path_item {
+                    if let ::trellis::serde_json::Value::Object(map) = path_item {
                         map.insert(method.to_string(), ::trellis::serde_json::json!({
                             "summary": summary,
                             "operationId": operation_id,

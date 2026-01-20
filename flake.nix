@@ -21,6 +21,7 @@
             rust-analyzer
             clippy
             rustfmt
+            cargo-expand
             # Fast linker for incremental builds
             mold
             clang

@@ -7,8 +7,9 @@ use syn::{
 
 /// Parsed information about a method
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct MethodInfo {
-    /// The original method
+    /// The original method (kept for potential future use)
     pub method: ImplItemFn,
     /// Method name
     pub name: Ident,
@@ -37,6 +38,7 @@ pub struct ParamInfo {
 
 /// Parsed return type information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ReturnInfo {
     /// The full return type
     pub ty: Option<Type>,
