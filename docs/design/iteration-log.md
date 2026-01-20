@@ -653,6 +653,51 @@ fn api_contract_stable() {
 
 ---
 
+## Iteration 17: Cap'n Proto Support
+
+**Goal:** Generate Cap'n Proto `.capnp` schemas from impl blocks.
+
+**Features:**
+- `#[capnp]` - generate schema from impl
+- `#[capnp(id = "0x...")]` - set schema ID (required for production)
+- `capnp_schema() -> &'static str` - get schema string
+- `write_capnp(path)` - write to file
+- Schema validation like gRPC: `schema = "path.capnp"`, `validate_schema()`, `assert_schema_matches()`
+
+**Type Mappings:**
+| Rust | Cap'n Proto |
+|------|-------------|
+| String, &str | Text |
+| i8/i16/i32/i64 | Int8/Int16/Int32/Int64 |
+| u8/u16/u32/u64 | UInt8/UInt16/UInt32/UInt64 |
+| f32/f64 | Float32/Float64 |
+| bool | Bool |
+| Vec<u8> | Data |
+| Vec<T> | List(Text) |
+| () | Void |
+
+**Schema Structure:**
+```
+@0x85150b117366d14b;
+
+interface MyService {
+  # Doc comment becomes Cap'n Proto comment
+  getUser @0 (GetUserParams) -> (GetUserResult);
+}
+
+struct GetUserParams {
+  id @0 :Text;
+}
+
+struct GetUserResult {
+  value @0 :Text;
+}
+```
+
+**Tests:** 10 new tests, 121 total.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |
@@ -662,9 +707,9 @@ fn api_contract_stable() {
 | CLI macro | ✅ Solid | 6 (+ E2E) |
 | WS macro | ✅ Solid | 16 (+ E2E) |
 | Serve macro | ✅ Working | 6 |
-| GraphQL macro | ✅ Basic | 4 |
-| gRPC (impl + schema) | ✅ Working | 11 |
 | GraphQL macro | ✅ Working | 9 |
+| gRPC (impl + schema) | ✅ Working | 11 |
+| Cap'n Proto (impl + schema) | ✅ Working | 10 |
 | Error derive | ✅ Working | 10 |
 | Route attr | ✅ Working | - |
 | OpenAPI schemas | ✅ Working | - |

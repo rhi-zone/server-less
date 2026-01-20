@@ -6,6 +6,7 @@
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, ItemImpl};
 
+mod capnp;
 mod cli;
 mod error;
 mod graphql;
@@ -194,6 +195,44 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match grpc::expand_grpc(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate Cap'n Proto schema from an impl block.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::capnp;
+///
+/// struct UserService;
+///
+/// #[capnp(id = "0x85150b117366d14b")]
+/// impl UserService {
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> String { ... }
+///
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> String { ... }
+/// }
+///
+/// // Get the Cap'n Proto schema
+/// let schema = UserService::capnp_schema();
+///
+/// // Write to file for use with capnpc
+/// UserService::write_capnp("schema/users.capnp")?;
+/// ```
+///
+/// The generated schema can be used with capnpc to generate
+/// the full Cap'n Proto serialization code.
+#[proc_macro_attribute]
+pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as capnp::CapnpArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match capnp::expand_capnp(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }
