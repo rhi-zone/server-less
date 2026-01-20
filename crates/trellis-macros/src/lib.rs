@@ -9,6 +9,7 @@ use syn::{parse_macro_input, DeriveInput, ItemImpl};
 mod cli;
 mod error;
 mod graphql;
+mod grpc;
 mod http;
 mod mcp;
 mod parse;
@@ -155,6 +156,44 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match ws::expand_ws(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate Protocol Buffers schema from an impl block.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::grpc;
+///
+/// struct UserService;
+///
+/// #[grpc(package = "users")]
+/// impl UserService {
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> User { ... }
+///
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> User { ... }
+/// }
+///
+/// // Get the proto schema
+/// let proto = UserService::proto_schema();
+///
+/// // Write to file for use with tonic-build
+/// UserService::write_proto("proto/users.proto")?;
+/// ```
+///
+/// The generated schema can be used with tonic-build in your build.rs
+/// to generate the full gRPC client/server implementation.
+#[proc_macro_attribute]
+pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as grpc::GrpcArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match grpc::expand_grpc(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

@@ -538,6 +538,83 @@ let router = service.graphql_router(); // serves /graphql with playground
 
 ---
 
+## Iteration 14: gRPC Proto Generation
+
+**Goal:** Impl-first protobuf schema generation for gRPC.
+
+**Approach:**
+Since tonic is compile-time focused (unlike async-graphql's dynamic API), we generate
+.proto schema files that users can then use with standard tonic-build tooling.
+
+**Features:**
+- `#[grpc]` or `#[grpc(package = "my.package")]`
+- Generates `proto_schema() -> &'static str`
+- Generates `write_proto(path)` helper
+- Maps Rust types to protobuf (string, int32, bool, etc.)
+- Optional parameters become `optional` fields
+- Doc comments preserved in schema
+
+**Example:**
+```rust
+#[grpc(package = "users.v1")]
+impl UserService {
+    /// Get user by ID
+    fn get_user(&self, id: String) -> User { }
+}
+
+// Get proto schema
+let proto = UserService::proto_schema();
+
+// Write to file
+UserService::write_proto("proto/users.proto")?;
+```
+
+**Generated proto:**
+```protobuf
+syntax = "proto3";
+package users.v1;
+
+service UserService {
+  // Get user by ID
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+message GetUserResponse {
+  string result = 1;
+}
+```
+
+**Tests:** 8 new tests, 103 total.
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Enhanced | 14 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| Serve macro | ✅ Working | 6 |
+| GraphQL macro | ✅ Basic | 4 |
+| gRPC proto gen | ✅ Working | 8 |
+| Error derive | ✅ Working | 10 |
+| Route attr | ✅ Working | - |
+| OpenAPI schemas | ✅ Working | - |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| Error messages | ✅ Improved | - |
+| Documentation | ✅ Updated | - |
+| **Total tests** | | **103** |
+
+---
+
 ## Future Iterations
 
 (To be filled as we go)

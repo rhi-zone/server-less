@@ -144,6 +144,9 @@ pub use trellis_macros::serve;
 #[cfg(feature = "graphql")]
 pub use trellis_macros::graphql;
 
+// gRPC proto generation (always available, no runtime deps)
+pub use trellis_macros::grpc;
+
 // Error derive macro (always available)
 pub use trellis_macros::TrellisError;
 
@@ -181,6 +184,7 @@ pub mod prelude {
     #[cfg(feature = "graphql")]
     pub use super::graphql;
 
+    pub use super::grpc;
     pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, TrellisError};
     pub use serde::{Deserialize, Serialize};
 }
