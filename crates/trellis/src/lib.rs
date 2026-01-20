@@ -1,7 +1,7 @@
 //! Trellis - Composable derive macros for Rust
 //!
 //! Trellis takes an **impl-first** approach: write your Rust methods,
-//! and derive macros project them into various protocols (HTTP, CLI, MCP, etc.).
+//! and derive macros project them into various protocols (HTTP, CLI, MCP, WebSocket).
 //!
 //! # Quick Start
 //!
@@ -15,6 +15,7 @@
 //! #[http]
 //! #[cli(name = "users")]
 //! #[mcp]
+//! #[ws(path = "/ws")]
 //! impl UserService {
 //!     /// Create a new user
 //!     async fn create_user(&self, name: String, email: String) -> Result<User, UserError> {
@@ -34,13 +35,23 @@
 //! ```
 //!
 //! This generates:
-//! - HTTP routes: `POST /users`, `GET /users/{id}`, `GET /users`
-//! - CLI commands: `users create-user --name X --email Y`, `users get-user <id>`
-//! - MCP tools: `create_user`, `get_user`, `list_users`
+//! - **HTTP**: `POST /users`, `GET /users/{id}`, `GET /users` (axum router)
+//! - **CLI**: `users create-user --name X`, `users get-user <id>` (clap)
+//! - **MCP**: Tools `create_user`, `get_user`, `list_users` (Model Context Protocol)
+//! - **WebSocket**: JSON-RPC methods over WebSocket (axum)
+//!
+//! # Available Macros
+//!
+//! | Macro | Protocol | Generated Methods |
+//! |-------|----------|-------------------|
+//! | `#[http]` | HTTP/REST | `http_router()`, `openapi_spec()` |
+//! | `#[cli]` | Command Line | `cli_command()`, `cli_run()` |
+//! | `#[mcp]` | MCP | `mcp_tools()`, `mcp_call()`, `mcp_call_async()` |
+//! | `#[ws]` | WebSocket | `ws_router()`, `ws_handle_message()`, `ws_handle_message_async()` |
 //!
 //! # Naming Conventions
 //!
-//! Method names are used to infer behavior:
+//! Method names infer HTTP methods and CLI subcommand structure:
 //!
 //! | Prefix | HTTP | CLI |
 //! |--------|------|-----|
@@ -52,12 +63,64 @@
 //!
 //! # Return Types
 //!
-//! | Type | HTTP | CLI |
-//! |------|------|-----|
-//! | `T` | 200 + JSON | stdout JSON |
-//! | `Option<T>` | 200 or 404 | stdout or exit 1 |
-//! | `Result<T, E>` | 200 or error | stdout or stderr |
-//! | `()` | 204 | silent |
+//! | Type | HTTP | CLI | MCP/WS |
+//! |------|------|-----|--------|
+//! | `T` | 200 + JSON | stdout JSON | JSON result |
+//! | `Option<T>` | 200 or 404 | stdout or exit 1 | result or null |
+//! | `Result<T, E>` | 200 or error | stdout or stderr | result or error |
+//! | `()` | 204 | silent | `{"success": true}` |
+//! | `impl Stream<Item=T>` | SSE | N/A | N/A |
+//!
+//! # Async Methods
+//!
+//! All macros support async methods:
+//!
+//! ```ignore
+//! #[mcp]
+//! impl MyService {
+//!     // Sync method - works with mcp_call() and mcp_call_async()
+//!     pub fn sync_method(&self) -> String { ... }
+//!
+//!     // Async method - use mcp_call_async() for proper await
+//!     pub async fn async_method(&self) -> String { ... }
+//! }
+//!
+//! // Sync call (errors on async methods)
+//! service.mcp_call("sync_method", json!({}));
+//!
+//! // Async call (awaits async methods properly)
+//! service.mcp_call_async("async_method", json!({})).await;
+//! ```
+//!
+//! # SSE Streaming (HTTP)
+//!
+//! Return `impl Stream<Item=T>` for Server-Sent Events:
+//!
+//! ```ignore
+//! #[http]
+//! impl StreamService {
+//!     // Note: Rust 2024 requires `+ use<>` to avoid lifetime capture
+//!     pub fn stream_events(&self) -> impl Stream<Item = Event> + use<> {
+//!         futures::stream::iter(vec![Event { ... }])
+//!     }
+//! }
+//! ```
+//!
+//! # Feature Flags
+//!
+//! Enable only what you need:
+//!
+//! ```toml
+//! [dependencies]
+//! trellis = { version = "0.1", default-features = false, features = ["http", "cli"] }
+//! ```
+//!
+//! Available features:
+//! - `mcp` - MCP macro (no extra deps)
+//! - `http` - HTTP macro (requires axum)
+//! - `cli` - CLI macro (requires clap)
+//! - `ws` - WebSocket macro (requires axum, futures)
+//! - `full` - All features (default)
 
 // Re-export macros (feature-gated)
 #[cfg(feature = "mcp")]

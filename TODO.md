@@ -26,9 +26,12 @@ Improved all macro error messages:
 - Associated functions without `&self` (constructors) are silently skipped
 - Unsupported parameter patterns report errors instead of being silently skipped
 
-## High Priority
+### ✅ Documentation
+- Updated lib.rs crate docs with all features
+- Updated README.md with real examples
+- Documented async support, SSE streaming, feature flags
 
-### Documentation
+## High Priority
 - Improve inline docs
 - Add more examples
 - Document Rust 2024 `+ use<>` requirement for streaming

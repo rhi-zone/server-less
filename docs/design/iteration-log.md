@@ -262,11 +262,48 @@ All errors use `syn::Error::new_spanned()` to point to the exact problematic cod
 
 ---
 
+## Iteration 8: Documentation Improvements
+
+**Goal:** Update documentation to reflect all implemented features.
+
+**Changes:**
+1. **lib.rs crate docs** - Comprehensive overview including:
+   - All 4 macros (HTTP, CLI, MCP, WebSocket)
+   - Generated methods table
+   - Async method support with examples
+   - SSE streaming with Rust 2024 `+ use<>` note
+   - Feature flags documentation
+
+2. **README.md** - Updated from placeholder to real examples:
+   - Quick start with all 4 macros
+   - Generated code table showing what each macro produces
+   - Feature highlights
+   - Installation with feature flags
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Solid | 3 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| Error messages | ✅ Improved | - |
+| Documentation | ✅ Updated | - |
+| **Total tests** | | **64** |
+
+---
+
 ## Future Iterations
 
 (To be filled as we go)
 
-- Iteration N: Documentation improvements
 - Iteration N: Composable OpenAPI
 - Iteration N: Error derive macro
 - Iteration N: "Serve" coordination pattern
