@@ -236,10 +236,17 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
         })
     } else if ret.is_stream {
         // Returns impl Stream<Item=T> -> SSE
+        // Box::pin converts the stream to Pin<Box<dyn Stream>> which:
+        // 1. Erases the concrete type, allowing different stream impls
+        // 2. Makes the stream 'static by owning the data
+        // Note: In Rust 2024, users may need `+ use<>` on their method
+        // return types to avoid implicit lifetime capture issues.
         Ok(quote! {
+            use ::trellis::futures::StreamExt;
             let stream = #call;
+            let boxed_stream = Box::pin(stream);
             ::axum::response::sse::Sse::new(
-                stream.map(|item| {
+                boxed_stream.map(|item| {
                     Ok::<_, std::convert::Infallible>(
                         ::axum::response::sse::Event::default()
                             .json_data(item)

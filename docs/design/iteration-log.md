@@ -135,13 +135,32 @@ Added feature gates:
 
 ---
 
+## Iteration 4: SSE Streaming Support
+
+**Goal:** Verify and fix HTTP macro's SSE streaming support.
+
+**Findings:**
+1. SSE streaming code was already in `http.rs` but untested
+2. Rust 2024's `impl Trait` lifetime capture rules cause issues:
+   - `impl Stream + 'static` still captures `&self` by default
+   - Users need `+ use<>` on their method return types
+   - Example: `fn stream_data(&self) -> impl Stream + use<>`
+3. Added `Box::pin(stream)` to erase concrete type and ensure ownership
+
+**Result:**
+- Created `streaming_service.rs` example demonstrating SSE
+- SSE works with proper lifetime annotations
+- Documented Rust 2024 `+ use<>` requirement
+
+---
+
 ## Next Steps
 
 Options for next iteration:
-1. **Add gRPC** - would test streaming, protobufs, different error model
-2. **Refactor HTTP** - could potentially share some response handling with RPC
-3. **E2E tests** - validate generated code against reference implementations
-4. **Async support** - properly handle async methods in MCP/WS
+1. **E2E tests** - validate generated code against reference implementations
+2. **Async support** - properly handle async methods in MCP/WS
+3. **GraphQL** - would test nested types, different query model
+4. **Solidify** - documentation, error messages, edge cases
 
 ---
 
