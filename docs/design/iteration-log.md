@@ -591,6 +591,34 @@ message GetUserResponse {
 
 ---
 
+## Iteration 15: GraphQL Type Improvements
+
+**Goal:** Fix GraphQL type mapping and make resolvers actually call methods.
+
+**Before:**
+- All return types mapped to String
+- Resolvers returned "todo" placeholder
+
+**After:**
+- Proper scalar type mapping (String, Int, Float, Boolean)
+- List types supported (Vec<T> -> [T])
+- Resolvers extract arguments from context
+- Resolvers call actual service methods
+- Results converted to GraphQL values
+
+**Example resolver now generates:**
+```rust
+FieldFuture::new(async move {
+    let name: String = ctx.args.try_get("name")?.deserialize()?;
+    let result = service.create_item(name);
+    Ok(Some(value_to_graphql(result)))
+})
+```
+
+**Tests:** 5 new execution tests, 108 total.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |
@@ -602,6 +630,7 @@ message GetUserResponse {
 | Serve macro | ✅ Working | 6 |
 | GraphQL macro | ✅ Basic | 4 |
 | gRPC proto gen | ✅ Working | 8 |
+| GraphQL macro | ✅ Working | 9 |
 | Error derive | ✅ Working | 10 |
 | Route attr | ✅ Working | - |
 | OpenAPI schemas | ✅ Working | - |
@@ -611,7 +640,7 @@ message GetUserResponse {
 | Async support | ✅ Working | - |
 | Error messages | ✅ Improved | - |
 | Documentation | ✅ Updated | - |
-| **Total tests** | | **103** |
+| **Total tests** | | **108** |
 
 ---
 
