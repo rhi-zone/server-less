@@ -65,7 +65,7 @@ pub fn expand_openrpc(args: OpenRpcArgs, impl_block: ItemImpl) -> syn::Result<To
     // Generate method specs
     let method_specs: Vec<String> = methods
         .iter()
-        .map(|m| generate_method_spec(m))
+        .map(generate_method_spec)
         .collect();
 
     let methods_json = method_specs.join(",\n");
@@ -114,7 +114,7 @@ fn generate_method_spec(method: &MethodInfo) -> String {
     let params: Vec<String> = method
         .params
         .iter()
-        .map(|p| generate_param_spec(p))
+        .map(generate_param_spec)
         .collect();
 
     let result_schema = get_json_schema(&method.return_info.ty);

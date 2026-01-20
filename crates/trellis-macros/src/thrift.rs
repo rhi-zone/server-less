@@ -71,7 +71,7 @@ pub fn expand_thrift(args: ThriftArgs, impl_block: ItemImpl) -> syn::Result<Toke
 
     let structs: Vec<String> = methods
         .iter()
-        .flat_map(|m| generate_thrift_structs(m))
+        .flat_map(generate_thrift_structs)
         .collect();
 
     let thrift_schema = format!(

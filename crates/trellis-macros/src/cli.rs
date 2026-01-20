@@ -68,7 +68,7 @@ pub fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
     let about = args.about.unwrap_or_default();
 
     // Generate subcommand definitions
-    let subcommands: Vec<_> = methods.iter().map(|m| generate_subcommand(m)).collect();
+    let subcommands: Vec<_> = methods.iter().map(generate_subcommand).collect();
 
     // Generate match arms for dispatching
     let match_arms: Vec<_> = methods
@@ -130,7 +130,7 @@ fn generate_subcommand(method: &MethodInfo) -> TokenStream {
     let args: Vec<_> = method
         .params
         .iter()
-        .map(|p| generate_arg(p))
+        .map(generate_arg)
         .collect();
 
     quote! {

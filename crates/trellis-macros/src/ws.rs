@@ -57,12 +57,12 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
     // Generate dispatch match arms (sync and async versions)
     let dispatch_arms_sync: Vec<_> = methods
         .iter()
-        .map(|m| generate_dispatch_arm_sync(m))
+        .map(generate_dispatch_arm_sync)
         .collect::<syn::Result<Vec<_>>>()?;
 
     let dispatch_arms_async: Vec<_> = methods
         .iter()
-        .map(|m| generate_dispatch_arm_async(m))
+        .map(generate_dispatch_arm_async)
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Method names for documentation

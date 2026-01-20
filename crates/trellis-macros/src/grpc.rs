@@ -67,12 +67,12 @@ pub fn expand_grpc(args: GrpcArgs, impl_block: ItemImpl) -> syn::Result<TokenStr
     // Generate proto schema string
     let proto_methods: Vec<String> = methods
         .iter()
-        .map(|m| generate_proto_method(m))
+        .map(generate_proto_method)
         .collect();
 
     let proto_messages: Vec<String> = methods
         .iter()
-        .flat_map(|m| generate_proto_messages(m))
+        .flat_map(generate_proto_messages)
         .collect();
 
     let proto_schema = format!(

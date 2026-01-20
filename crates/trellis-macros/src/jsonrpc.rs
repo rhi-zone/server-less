@@ -57,7 +57,7 @@ pub fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Result<To
     // Generate dispatch match arms
     let dispatch_arms_async: Vec<_> = methods
         .iter()
-        .map(|m| generate_dispatch_arm(m))
+        .map(generate_dispatch_arm)
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Method names for documentation

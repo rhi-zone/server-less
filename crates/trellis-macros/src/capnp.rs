@@ -70,7 +70,7 @@ pub fn expand_capnp(args: CapnpArgs, impl_block: ItemImpl) -> syn::Result<TokenS
 
     let structs: Vec<String> = methods
         .iter()
-        .flat_map(|m| generate_capnp_structs(m))
+        .flat_map(generate_capnp_structs)
         .collect();
 
     let capnp_schema = format!(

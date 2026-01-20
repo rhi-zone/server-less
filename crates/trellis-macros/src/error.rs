@@ -125,7 +125,8 @@ pub fn expand_trellis_error(input: DeriveInput) -> syn::Result<TokenStream> {
             }
             Some(ErrorCodeSpec::Numeric(status)) => {
                 // Map HTTP status to ErrorCode
-                let code = match status {
+                
+                match status {
                     400 => quote! { ::trellis::ErrorCode::InvalidInput },
                     401 => quote! { ::trellis::ErrorCode::Unauthenticated },
                     403 => quote! { ::trellis::ErrorCode::Forbidden },
@@ -137,8 +138,7 @@ pub fn expand_trellis_error(input: DeriveInput) -> syn::Result<TokenStream> {
                     501 => quote! { ::trellis::ErrorCode::NotImplemented },
                     503 => quote! { ::trellis::ErrorCode::Unavailable },
                     _ => quote! { ::trellis::ErrorCode::Internal },
-                };
-                code
+                }
             }
             None => {
                 // Infer from variant name
