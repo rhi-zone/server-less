@@ -108,157 +108,19 @@ trellis/
 └── docs/                     # VitePress documentation
 ```
 
-## Planned Macros
+## Design Documents
 
-### Server Setup (`trellis-server`)
-
-```rust
-// Blessed preset - batteries included
-#[derive(Server)]
-struct MyServer;
-
-// À la carte with config
-#[derive(ServerCore, OpenApi, Serve)]
-#[server(
-    transport = "websocket" | "tcp" | "unix",
-    protocol = "json-rpc" | "capnproto" | "msgpack" | "custom",
-)]
-struct MyServer;
-```
-
-### Configuration Loading
-
-```rust
-#[derive(Config)]
-#[config(
-    sources = ["env", "file:config.toml", "args"],
-    prefix = "MY_APP",
-)]
-struct AppConfig {
-    #[config(env = "PORT", default = 8080)]
-    port: u16,
-}
-```
-
-### Builder Pattern
-
-```rust
-#[derive(Builder)]
-#[builder(style = "owned" | "borrowed" | "async")]
-struct Request {
-    #[builder(required)]
-    url: String,
-    #[builder(default = "GET")]
-    method: String,
-}
-```
-
-### Future Ideas
-
-- `#[derive(Cli)]` - clap-style CLI generation
-- `#[derive(Api)]` - OpenAPI/REST endpoint generation
-- `#[derive(Event)]` - Event sourcing patterns
-- `#[derive(Query)]` - Type-safe query builders
-
-## Implementation Notes
-
-### Proc Macro Crate Structure
-
-Each macro category gets its own crate for:
-- Faster incremental compilation
-- Independent versioning
-- Clear dependency boundaries
-
-The main `trellis` crate re-exports everything:
-```rust
-pub use trellis_server::Server;
-pub use trellis_config::Config;
-// etc.
-```
-
-### Extension Coordination (The Serve Pattern)
-
-Proc macros run independently and can't see each other's output. Coordination works via the `Serve` derive:
-
-```rust
-#[derive(ServerCore, OpenApi, Metrics, Serve)]
-struct MyServer;
-```
-
-`Serve` parses the derive list from syntax, then generates wiring code:
-```rust
-// Serve generates:
-impl MyServer {
-    pub async fn serve(self) {
-        self.into_service()           // from ServerCore
-            .layer(Self::openapi())   // from OpenApi
-            .layer(Self::metrics())   // from Metrics
-            .run()
-            .await
-    }
-}
-```
-
-**Type safety**: If you list `OpenApi` in derives but don't actually derive it → compile error ("method `openapi` not found").
-
-**Extension convention**: Extensions generate a method with a known signature:
-- `#[derive(OpenApi)]` → `fn openapi() -> impl Layer`
-- `#[derive(Metrics)]` → `fn metrics() -> impl Layer`
-- `#[derive(FooExt)]` → `fn foo_ext() -> impl Layer` (convention: snake_case of derive name)
-
-Third-party crates just follow the convention. `Serve` knows to look for `{snake_case}_layer()` methods for any derive it sees.
-
-### Tower Compatibility
-
-Server macros should generate Tower-compatible services where possible:
-```rust
-impl<S> Layer<S> for GeneratedMiddleware {
-    type Service = GeneratedService<S>;
-    // ...
-}
-```
-
-### Error Handling
-
-Use `syn::Error` with proper spans:
-```rust
-return Err(syn::Error::new_spanned(
-    attr,
-    "transport must be one of: websocket, tcp, unix"
-));
-```
+Detailed design docs live in `docs/design/`:
+- [Impl-First Design](docs/design/impl-first.md) - Protocol projections and conventions
+- [Extension Coordination](docs/design/extension-coordination.md) - How derives compose
 
 ## Development
 
 ```bash
-nix develop              # Enter dev shell
-cargo build              # Build all crates
-cargo test               # Run tests
-cargo expand             # Inspect macro expansion (install cargo-expand first)
-```
-
-### Testing Macros
-
-```rust
-#[test]
-fn test_server_expansion() {
-    let input: DeriveInput = parse_quote! {
-        #[server(transport = "websocket")]
-        struct MyServer;
-    };
-
-    let output = expand_server(input);
-    // Assert on generated tokens
-}
-```
-
-Use `trybuild` for compile-fail tests:
-```rust
-#[test]
-fn ui() {
-    let t = trybuild::TestCases::new();
-    t.compile_fail("tests/ui/*.rs");
-}
+nix develop        # Enter dev shell
+cargo build        # Build all crates
+cargo test         # Run tests
+cargo expand       # Inspect macro expansion
 ```
 
 ## Part of Rhizome
