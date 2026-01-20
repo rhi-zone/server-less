@@ -10,30 +10,83 @@ Trellis is a collection of composable derive macros for common Rust patterns. Th
 
 ## Philosophy
 
-### Composability First
+### Minimize Barrier to Entry
 
-The core insight: macros should compose like Tower's Service/Layer pattern. Each macro adds a capability, and they stack cleanly:
+The primary goal is making the simple case trivially simple. "I just want a server" should be:
 
 ```rust
-#[derive(Server, Logging, Auth, RateLimit)]
-#[server(transport = "websocket", protocol = "json-rpc")]
-#[logging(level = "info")]
-#[auth(method = "jwt")]
-#[rate_limit(requests = 100, per = "minute")]
-struct MyServer {
-    // ...
-}
+#[derive(Server)]
+struct MyServer;
 ```
 
-This should "just work" - no conflicts, predictable ordering, each macro does its job.
+Yes, this restricts possibilities compared to hand-written code. That's the trade-off. The question is: how do we minimize that impact while maximizing accessibility?
 
-### Configuration via Attributes
+### Progressive Disclosure
 
-Prefer attribute-based configuration over separate config files or builder patterns:
-- Attributes are colocated with the type
-- IDE support for autocomplete
-- Compile-time validation
-- Self-documenting
+Complexity should only appear when you need it. The zero-config case doesn't even hint at the options:
+
+```rust
+// Level 1: Just works
+#[derive(Server)]
+struct MyServer;
+
+// Level 2: Toggle features
+#[derive(Server)]
+#[server(openapi = false)]
+struct MyServer;
+
+// Level 3: Fine-tune
+#[derive(Server)]
+#[server(openapi(path = "/docs", hidden = [internal_method]))]
+struct MyServer;
+
+// Level 4: Escape hatch - drop to manual code
+```
+
+You discover options when you need them, not before.
+
+### Gradual Refinement
+
+Like gradual typing: start with the simple version, incrementally add control as requirements evolve. You shouldn't have to rewrite everything when you need one custom behavior.
+
+Don't like how trellis does auth? Don't use `#[derive(Auth)]`, write your own Tower layer - it still composes with `#[derive(Server)]`. The escape hatch is granular, not all-or-nothing.
+
+### Two-Tier Design: Blessed Presets vs À La Carte
+
+**Blessed preset** - just works, batteries included:
+```rust
+#[derive(Server)]  // includes: ServerCore + OpenApi + Metrics + HealthCheck + Serve
+struct MyServer;
+```
+
+**À la carte** - full control over composition:
+```rust
+#[derive(ServerCore, OpenApi, Metrics, Serve)]  // explicit, no HealthCheck
+struct MyServer;
+```
+
+**Toggle within blessed**:
+```rust
+#[derive(Server)]
+#[server(openapi = false)]  // blessed preset minus OpenApi
+struct MyServer;
+```
+
+This gives progressive disclosure:
+1. `#[derive(Server)]` - blessed, zero config
+2. `#[derive(Server)] #[server(x = false)]` - blessed minus some
+3. `#[derive(ServerCore, X, Y, Serve)]` - explicit composition
+4. Manual Tower code - full escape hatch
+
+### Third-Party Extensions
+
+Extensions are separate derives that compose with core:
+```rust
+#[derive(ServerCore, OpenApi, Anubis, Serve)]  // Anubis from trellis-anubis crate
+struct MyServer;
+```
+
+The ecosystem has great solutions (rate limiting, auth, observability, bot protection). Trellis should make them accessible via derives, not reinvent them. Popular extensions can graduate to "blessed" status over time.
 
 ### "Silly but Proper"
 
@@ -60,12 +113,17 @@ trellis/
 ### Server Setup (`trellis-server`)
 
 ```rust
+// Blessed preset - batteries included
 #[derive(Server)]
+struct MyServer;
+
+// À la carte with config
+#[derive(ServerCore, OpenApi, Serve)]
 #[server(
     transport = "websocket" | "tcp" | "unix",
     protocol = "json-rpc" | "capnproto" | "msgpack" | "custom",
-    middleware = [logging, auth, rate_limit],
 )]
+struct MyServer;
 ```
 
 ### Configuration Loading
@@ -117,6 +175,38 @@ pub use trellis_server::Server;
 pub use trellis_config::Config;
 // etc.
 ```
+
+### Extension Coordination (The Serve Pattern)
+
+Proc macros run independently and can't see each other's output. Coordination works via the `Serve` derive:
+
+```rust
+#[derive(ServerCore, OpenApi, Metrics, Serve)]
+struct MyServer;
+```
+
+`Serve` parses the derive list from syntax, then generates wiring code:
+```rust
+// Serve generates:
+impl MyServer {
+    pub async fn serve(self) {
+        self.into_service()           // from ServerCore
+            .layer(Self::openapi())   // from OpenApi
+            .layer(Self::metrics())   // from Metrics
+            .run()
+            .await
+    }
+}
+```
+
+**Type safety**: If you list `OpenApi` in derives but don't actually derive it → compile error ("method `openapi` not found").
+
+**Extension convention**: Extensions generate a method with a known signature:
+- `#[derive(OpenApi)]` → `fn openapi() -> impl Layer`
+- `#[derive(Metrics)]` → `fn metrics() -> impl Layer`
+- `#[derive(FooExt)]` → `fn foo_ext() -> impl Layer` (convention: snake_case of derive name)
+
+Third-party crates just follow the convention. `Serve` knows to look for `{snake_case}_layer()` methods for any derive it sees.
 
 ### Tower Compatibility
 
