@@ -218,11 +218,47 @@ Added feature gates:
 | **Total tests** | | **64** |
 
 **Remaining work:**
-1. Better error messages with spans
-2. Documentation improvements
-3. GraphQL if more protocol coverage needed
-4. Error derive macro
-5. "Serve" coordination pattern
+1. Documentation improvements
+2. GraphQL if more protocol coverage needed
+3. Error derive macro
+4. "Serve" coordination pattern
+
+---
+
+## Iteration 7: Better Error Messages
+
+**Goal:** Improve macro error messages with proper spans and helpful suggestions.
+
+**Changes:**
+1. **Unknown attribute arguments** now list valid options:
+   - `unknown argument 'badarg'. Valid arguments: namespace` (MCP)
+   - `unknown argument 'badarg'. Valid arguments: prefix` (HTTP)
+   - `unknown argument 'badarg'. Valid arguments: name, version, about` (CLI)
+   - `unknown argument 'badarg'. Valid arguments: path` (WS)
+
+2. **Associated functions without `&self`** (constructors, etc.) are silently skipped, not errored.
+
+3. **Unsupported parameter patterns** now report errors instead of silently skipping:
+   - `unsupported parameter pattern. Use a simple identifier like 'name: String'`
+
+All errors use `syn::Error::new_spanned()` to point to the exact problematic code.
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Solid | 3 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| Error messages | ✅ Improved | - |
+| **Total tests** | | **64** |
 
 ---
 
@@ -230,7 +266,7 @@ Added feature gates:
 
 (To be filled as we go)
 
-- Iteration N: Better error messages with spans
+- Iteration N: Documentation improvements
 - Iteration N: Composable OpenAPI
 - Iteration N: Error derive macro
 - Iteration N: "Serve" coordination pattern

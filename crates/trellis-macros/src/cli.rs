@@ -42,7 +42,7 @@ impl Parse for CliArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument: {other}"),
+                        format!("unknown argument `{other}`. Valid arguments: name, version, about"),
                     ));
                 }
             }

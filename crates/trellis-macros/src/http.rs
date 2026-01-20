@@ -28,7 +28,10 @@ impl Parse for HttpArgs {
                     args.prefix = Some(lit.value());
                 }
                 other => {
-                    return Err(syn::Error::new(ident.span(), format!("unknown argument: {other}")));
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        format!("unknown argument `{other}`. Valid arguments: prefix"),
+                    ));
                 }
             }
 

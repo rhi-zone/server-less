@@ -62,9 +62,17 @@ pub struct ReturnInfo {
 
 impl MethodInfo {
     /// Parse a method from an ImplItemFn
-    pub fn parse(method: &ImplItemFn) -> syn::Result<Self> {
+    ///
+    /// Returns None for associated functions without `&self` (constructors, etc.)
+    pub fn parse(method: &ImplItemFn) -> syn::Result<Option<Self>> {
         let name = method.sig.ident.clone();
         let is_async = method.sig.asyncness.is_some();
+
+        // Skip associated functions without self receiver (constructors, etc.)
+        let has_receiver = method.sig.inputs.iter().any(|arg| matches!(arg, FnArg::Receiver(_)));
+        if !has_receiver {
+            return Ok(None);
+        }
 
         // Extract doc comments
         let docs = extract_docs(&method.attrs);
@@ -75,14 +83,14 @@ impl MethodInfo {
         // Parse return type
         let return_info = parse_return_type(&method.sig.output);
 
-        Ok(Self {
+        Ok(Some(Self {
             method: method.clone(),
             name,
             docs,
             params,
             return_info,
             is_async,
-        })
+        }))
     }
 }
 
@@ -122,7 +130,12 @@ fn parse_params(inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>) -> 
             FnArg::Typed(pat_type) => {
                 let name = match pat_type.pat.as_ref() {
                     Pat::Ident(pat_ident) => pat_ident.ident.clone(),
-                    _ => continue, // skip patterns we can't handle
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            other,
+                            "unsupported parameter pattern. Use a simple identifier like `name: String`",
+                        ));
+                    }
                 };
 
                 let ty = (*pat_type.ty).clone();
@@ -314,6 +327,10 @@ fn is_id_param(name: &Ident) -> bool {
 }
 
 /// Extract all methods from an impl block
+///
+/// Skips:
+/// - Private methods (starting with `_`)
+/// - Associated functions without `&self` receiver (constructors, etc.)
 pub fn extract_methods(impl_block: &ItemImpl) -> syn::Result<Vec<MethodInfo>> {
     let mut methods = Vec::new();
 
@@ -323,7 +340,10 @@ pub fn extract_methods(impl_block: &ItemImpl) -> syn::Result<Vec<MethodInfo>> {
             if method.sig.ident.to_string().starts_with('_') {
                 continue;
             }
-            methods.push(MethodInfo::parse(method)?);
+            // Parse method - returns None for associated functions without self
+            if let Some(info) = MethodInfo::parse(method)? {
+                methods.push(info);
+            }
         }
     }
 

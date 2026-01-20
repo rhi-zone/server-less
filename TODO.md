@@ -20,10 +20,13 @@ MCP and WS now support async methods:
 - `mcp_call_async` / `ws_handle_message_async`: async callers, await async methods
 - WebSocket connections use async dispatch (real connections work with async)
 
-## High Priority
+### ✅ Better Error Messages with Spans
+Improved all macro error messages:
+- Unknown attributes now list valid options
+- Associated functions without `&self` (constructors) are silently skipped
+- Unsupported parameter patterns report errors instead of being silently skipped
 
-### Better Error Messages with Spans
-Use `syn::Error` with proper spans for better compiler error messages.
+## High Priority
 
 ### Documentation
 - Improve inline docs
