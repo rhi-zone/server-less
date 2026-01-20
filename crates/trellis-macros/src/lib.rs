@@ -6,6 +6,7 @@
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, ItemImpl};
 
+mod asyncapi;
 mod capnp;
 mod cli;
 mod error;
@@ -280,6 +281,44 @@ pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match markdown::expand_markdown(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate AsyncAPI specification for event-driven services.
+///
+/// AsyncAPI is to WebSockets/messaging what OpenAPI is to REST.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::asyncapi;
+///
+/// struct ChatService;
+///
+/// #[asyncapi(title = "Chat API", server = "ws://localhost:8080")]
+/// impl ChatService {
+///     /// Send a message to a room
+///     fn send_message(&self, room: String, content: String) -> bool { true }
+///
+///     /// Get message history
+///     fn get_history(&self, room: String, limit: Option<u32>) -> Vec<String> { vec![] }
+/// }
+///
+/// // Get AsyncAPI spec
+/// let spec = ChatService::asyncapi_spec();
+/// let json = ChatService::asyncapi_json();
+///
+/// // Write to file
+/// ChatService::write_asyncapi("asyncapi.json")?;
+/// ```
+#[proc_macro_attribute]
+pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as asyncapi::AsyncApiArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match asyncapi::expand_asyncapi(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

@@ -162,6 +162,9 @@ pub use trellis_macros::thrift;
 // Markdown documentation (always available, no runtime deps)
 pub use trellis_macros::markdown;
 
+// AsyncAPI specification (always available, no runtime deps)
+pub use trellis_macros::asyncapi;
+
 // Error derive macro (always available)
 pub use trellis_macros::TrellisError;
 
@@ -203,6 +206,7 @@ pub mod prelude {
     #[cfg(feature = "graphql")]
     pub use super::graphql;
 
+    pub use super::asyncapi;
     pub use super::capnp;
     pub use super::grpc;
     pub use super::markdown;
