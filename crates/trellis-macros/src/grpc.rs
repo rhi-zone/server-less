@@ -15,6 +15,8 @@ use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
 pub struct GrpcArgs {
     /// Package name for the proto file
     pub package: Option<String>,
+    /// Path to expected schema for validation (schema-first mode)
+    pub schema: Option<String>,
 }
 
 impl Parse for GrpcArgs {
@@ -30,10 +32,14 @@ impl Parse for GrpcArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.package = Some(lit.value());
                 }
+                "schema" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.schema = Some(lit.value());
+                }
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: package"),
+                        format!("unknown argument `{other}`. Valid arguments: package, schema"),
                     ));
                 }
             }
@@ -86,6 +92,60 @@ service {service_name} {{
         messages = proto_messages.join("\n")
     );
 
+    // Generate validation method if schema path is provided
+    let validation_method = if let Some(schema_path) = &args.schema {
+        quote! {
+            /// Validate that the generated schema matches the expected schema.
+            ///
+            /// Returns Ok(()) if schemas match, Err with diff if they don't.
+            pub fn validate_schema() -> Result<(), String> {
+                let expected = include_str!(#schema_path);
+                let generated = Self::proto_schema();
+
+                // Normalize whitespace for comparison
+                fn normalize(s: &str) -> Vec<String> {
+                    s.lines()
+                        .map(|l| l.trim().to_string())
+                        .filter(|l| !l.is_empty())
+                        .collect()
+                }
+
+                let expected_lines = normalize(expected);
+                let generated_lines = normalize(generated);
+
+                if expected_lines == generated_lines {
+                    Ok(())
+                } else {
+                    let mut diff = String::from("Schema mismatch:\n\n");
+                    diff.push_str("Expected methods/messages not found in generated:\n");
+                    for line in &expected_lines {
+                        if !generated_lines.contains(line) {
+                            diff.push_str(&format!("  - {}\n", line));
+                        }
+                    }
+                    diff.push_str("\nGenerated methods/messages not in expected:\n");
+                    for line in &generated_lines {
+                        if !expected_lines.contains(line) {
+                            diff.push_str(&format!("  + {}\n", line));
+                        }
+                    }
+                    Err(diff)
+                }
+            }
+
+            /// Assert that the schema matches at runtime.
+            ///
+            /// Panics if the schemas don't match.
+            pub fn assert_schema_matches() {
+                if let Err(diff) = Self::validate_schema() {
+                    panic!("Proto schema validation failed:\n{}", diff);
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         #impl_block
 
@@ -107,6 +167,8 @@ service {service_name} {{
             pub fn write_proto(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
                 std::fs::write(path, Self::proto_schema())
             }
+
+            #validation_method
         }
     })
 }

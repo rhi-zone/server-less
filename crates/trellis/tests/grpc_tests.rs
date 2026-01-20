@@ -171,3 +171,59 @@ fn test_proto_return_types() {
     assert!(proto.contains("double result"), "Should map f64 to double");
     assert!(proto.contains("bool result"), "Should map bool to bool");
 }
+
+// ============================================================================
+// Schema Validation Tests (schema-first mode)
+// ============================================================================
+
+#[derive(Clone)]
+struct ValidatedService;
+
+#[grpc(package = "validated.v1", schema = "../fixtures/validated_service.proto")]
+impl ValidatedService {
+    /// Get greeting
+    pub fn get_greeting(&self) -> String {
+        "hello".to_string()
+    }
+
+    /// Create item
+    pub fn create_item(&self, name: String) -> String {
+        name
+    }
+}
+
+#[test]
+fn test_schema_validation_passes() {
+    // Should not panic - schema matches
+    ValidatedService::assert_schema_matches();
+}
+
+#[test]
+fn test_schema_validation_result() {
+    // Should return Ok - schema matches
+    let result = ValidatedService::validate_schema();
+    assert!(result.is_ok(), "Validation should pass: {:?}", result);
+}
+
+// Test that validation detects mismatches
+#[derive(Clone)]
+struct MismatchedService;
+
+// This service doesn't match the validated_service.proto
+#[grpc(package = "validated.v1", schema = "../fixtures/validated_service.proto")]
+impl MismatchedService {
+    /// Different method
+    pub fn different_method(&self) -> String {
+        "different".to_string()
+    }
+}
+
+#[test]
+fn test_schema_validation_fails_on_mismatch() {
+    // Should return Err - schema doesn't match
+    let result = MismatchedService::validate_schema();
+    assert!(result.is_err(), "Validation should fail for mismatched service");
+
+    let err = result.unwrap_err();
+    assert!(err.contains("mismatch"), "Error should mention mismatch");
+}

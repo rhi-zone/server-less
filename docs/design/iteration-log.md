@@ -619,6 +619,40 @@ FieldFuture::new(async move {
 
 ---
 
+## Iteration 16: gRPC Schema Validation
+
+**Goal:** Schema-first mode - validate impl against expected .proto file.
+
+**Features:**
+- `#[grpc(schema = "path/to/expected.proto")]` - validate against expected schema
+- `validate_schema() -> Result<(), String>` - returns diff if mismatch
+- `assert_schema_matches()` - panics on mismatch
+
+**Example:**
+```rust
+// Lock down your API contract
+#[grpc(package = "users.v1", schema = "proto/users.proto")]
+impl UserService {
+    fn get_user(&self, id: String) -> User { }
+}
+
+// In tests
+#[test]
+fn api_contract_stable() {
+    UserService::assert_schema_matches();
+}
+```
+
+**Workflow:**
+1. Start impl-first: `#[grpc]` generates .proto
+2. Write proto to file: `Service::write_proto("proto/service.proto")?`
+3. Lock it down: add `schema = "proto/service.proto"`
+4. Now changes to impl that break the schema will fail validation
+
+**Tests:** 3 new validation tests, 111 total.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |
@@ -629,7 +663,7 @@ FieldFuture::new(async move {
 | WS macro | ✅ Solid | 16 (+ E2E) |
 | Serve macro | ✅ Working | 6 |
 | GraphQL macro | ✅ Basic | 4 |
-| gRPC proto gen | ✅ Working | 8 |
+| gRPC (impl + schema) | ✅ Working | 11 |
 | GraphQL macro | ✅ Working | 9 |
 | Error derive | ✅ Working | 10 |
 | Route attr | ✅ Working | - |
@@ -640,7 +674,7 @@ FieldFuture::new(async move {
 | Async support | ✅ Working | - |
 | Error messages | ✅ Improved | - |
 | Documentation | ✅ Updated | - |
-| **Total tests** | | **108** |
+| **Total tests** | | **111** |
 
 ---
 

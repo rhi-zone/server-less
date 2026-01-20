@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package validated.v1;
+
+service ValidatedService {
+  // Get greeting
+  rpc GetGreeting(GetGreetingRequest) returns (GetGreetingResponse);
+  // Create item
+  rpc CreateItem(CreateItemRequest) returns (CreateItemResponse);
+}
+
+message GetGreetingRequest {
+}
+message GetGreetingResponse {
+  string result = 1;
+}
+message CreateItemRequest {
+  string name = 1;
+}
+message CreateItemResponse {
+  string result = 1;
+}
