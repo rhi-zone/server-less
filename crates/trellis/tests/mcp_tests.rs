@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use trellis::mcp;
+use tokio;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -176,4 +177,81 @@ fn test_mcp_tool_schema() {
 
     let required = schema.get("required").unwrap().as_array().unwrap();
     assert!(required.contains(&serde_json::json!("name")));
+}
+
+// ============================================================================
+// Async Method Tests
+// ============================================================================
+
+/// Service with async methods
+#[derive(Clone)]
+struct AsyncService;
+
+#[mcp(namespace = "async")]
+impl AsyncService {
+    /// Sync method - works with both sync and async call
+    pub fn sync_add(&self, a: i64, b: i64) -> i64 {
+        a + b
+    }
+
+    /// Async method - only works with async call
+    pub async fn async_fetch(&self, id: String) -> String {
+        // Simulate async operation
+        format!("Fetched: {}", id)
+    }
+
+    /// Another async method
+    pub async fn async_compute(&self, n: i64) -> i64 {
+        // Simulate async computation
+        n * 2
+    }
+}
+
+#[test]
+fn test_mcp_sync_method_with_sync_call() {
+    let service = AsyncService;
+
+    // Sync method should work with sync call
+    let result = service.mcp_call("async_sync_add", serde_json::json!({"a": 5, "b": 3}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!(8));
+}
+
+#[test]
+fn test_mcp_async_method_with_sync_call_returns_error() {
+    let service = AsyncService;
+
+    // Async method should return error with sync call
+    let result = service.mcp_call("async_async_fetch", serde_json::json!({"id": "123"}));
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Async methods not supported"));
+}
+
+#[tokio::test]
+async fn test_mcp_sync_method_with_async_call() {
+    let service = AsyncService;
+
+    // Sync method should work with async call
+    let result = service.mcp_call_async("async_sync_add", serde_json::json!({"a": 10, "b": 7})).await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!(17));
+}
+
+#[tokio::test]
+async fn test_mcp_async_method_with_async_call() {
+    let service = AsyncService;
+
+    // Async method should work with async call
+    let result = service.mcp_call_async("async_async_fetch", serde_json::json!({"id": "abc"})).await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!("Fetched: abc"));
+}
+
+#[tokio::test]
+async fn test_mcp_async_compute() {
+    let service = AsyncService;
+
+    let result = service.mcp_call_async("async_async_compute", serde_json::json!({"n": 21})).await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!(42));
 }

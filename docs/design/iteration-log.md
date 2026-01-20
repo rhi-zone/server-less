@@ -154,13 +154,75 @@ Added feature gates:
 
 ---
 
-## Next Steps
+## Iteration 5: E2E Tests
 
-Options for next iteration:
-1. **E2E tests** - validate generated code against reference implementations
-2. **Async support** - properly handle async methods in MCP/WS
-3. **GraphQL** - would test nested types, different query model
-4. **Solidify** - documentation, error messages, edge cases
+**Goal:** Validate generated code produces correct results.
+
+**Approach:**
+1. Define `Calculator` with reference implementations (`ref_add`, `ref_divide`, etc.)
+2. Wrap in `McpCalculator`, `WsCalculator`, `HttpCalculator`, `CliCalculator`
+3. Call through generated handlers, verify results match reference
+4. Test error cases (Result::Err), missing cases (Option::None), optional params
+
+**Result:**
+- 20 E2E tests added
+- Cross-protocol consistency verified (MCP and WS produce identical results)
+- Total test count: 53
+
+---
+
+## Iteration 6: Async Method Support
+
+**Goal:** Add proper async method support to MCP and WebSocket macros.
+
+**Problem:**
+- Both MCP and WS previously used `AsyncHandling::Error` which rejected async methods
+- MCP had a stub `mcp_call_async` that just called the sync version
+- Real-world services often need async database calls, HTTP fetches, etc.
+
+**Solution:**
+1. Generate both sync and async dispatch arms
+2. For sync callers (`mcp_call`, `ws_handle_message`): async methods return error
+3. For async callers (`mcp_call_async`, `ws_handle_message_async`): async methods awaited
+4. WebSocket connection handler uses async dispatch (supports async methods over real connections)
+
+**Changes:**
+- `rpc.rs`: Fixed `generate_dispatch_arm` to handle async error case without generating unreachable code
+- `mcp.rs`: Generate both `dispatch_arms_sync` and `dispatch_arms_async`, use in respective methods
+- `ws.rs`: Added `ws_handle_message_async` and `ws_dispatch_async`, connection handler uses async
+- `ws.rs`: Made `__trellis_ws_connection` unique per struct to avoid conflicts
+
+**Tests Added:**
+- MCP: 5 async tests (sync/async methods with sync/async callers)
+- WS: 6 async tests (sync/async methods with sync/async handlers)
+
+**Result:**
+- Async methods fully supported in MCP and WS
+- Backwards compatible: sync callers still work for sync methods
+- Real WebSocket connections can call async methods
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Solid | 3 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| **Total tests** | | **64** |
+
+**Remaining work:**
+1. Better error messages with spans
+2. Documentation improvements
+3. GraphQL if more protocol coverage needed
+4. Error derive macro
+5. "Serve" coordination pattern
 
 ---
 
@@ -168,7 +230,7 @@ Options for next iteration:
 
 (To be filled as we go)
 
-- Iteration 2: Add gRPC or WebSocket
-- Iteration 3: Composable OpenAPI
+- Iteration N: Better error messages with spans
+- Iteration N: Composable OpenAPI
 - Iteration N: Error derive macro
 - Iteration N: "Serve" coordination pattern

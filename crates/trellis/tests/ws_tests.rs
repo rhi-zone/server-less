@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use trellis::ws;
+use tokio;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -161,4 +162,102 @@ fn test_ws_invalid_json() {
     // Invalid JSON returns Err early (before forming a JSON-RPC response)
     assert!(response.is_err());
     assert!(response.unwrap_err().contains("Invalid JSON"));
+}
+
+// ============================================================================
+// Async Method Tests
+// ============================================================================
+
+/// Service with async methods
+#[derive(Clone)]
+struct AsyncWsService;
+
+#[ws(path = "/async-ws")]
+impl AsyncWsService {
+    /// Sync method - works with both sync and async handlers
+    pub fn sync_echo(&self, message: String) -> String {
+        format!("Sync: {}", message)
+    }
+
+    /// Async method - only works with async handler
+    pub async fn async_fetch(&self, url: String) -> String {
+        // Simulate async fetch
+        format!("Fetched: {}", url)
+    }
+
+    /// Async method returning computed value
+    pub async fn async_compute(&self, n: i64) -> i64 {
+        n * n
+    }
+}
+
+#[test]
+fn test_ws_sync_method_with_sync_handler() {
+    let service = AsyncWsService;
+
+    // Sync method should work with sync handler
+    let response = service.ws_handle_message(r#"{"method": "sync_echo", "params": {"message": "test"}}"#);
+    assert!(response.is_ok());
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], "Sync: test");
+}
+
+#[test]
+fn test_ws_async_method_with_sync_handler_returns_error() {
+    let service = AsyncWsService;
+
+    // Async method should return error with sync handler
+    let response = service.ws_handle_message(r#"{"method": "async_fetch", "params": {"url": "http://example.com"}}"#);
+    assert!(response.is_ok()); // Response is OK, but contains error in body
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert!(json["error"]["message"].as_str().unwrap().contains("Async methods not supported"));
+}
+
+#[tokio::test]
+async fn test_ws_sync_method_with_async_handler() {
+    let service = AsyncWsService;
+
+    // Sync method should work with async handler
+    let response = service.ws_handle_message_async(r#"{"method": "sync_echo", "params": {"message": "async test"}}"#).await;
+    assert!(response.is_ok());
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], "Sync: async test");
+}
+
+#[tokio::test]
+async fn test_ws_async_method_with_async_handler() {
+    let service = AsyncWsService;
+
+    // Async method should work with async handler
+    let response = service.ws_handle_message_async(r#"{"method": "async_fetch", "params": {"url": "http://example.com"}}"#).await;
+    assert!(response.is_ok());
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], "Fetched: http://example.com");
+}
+
+#[tokio::test]
+async fn test_ws_async_compute() {
+    let service = AsyncWsService;
+
+    let response = service.ws_handle_message_async(r#"{"method": "async_compute", "params": {"n": 7}}"#).await;
+    assert!(response.is_ok());
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], 49);
+}
+
+#[tokio::test]
+async fn test_ws_async_with_request_id() {
+    let service = AsyncWsService;
+
+    let response = service.ws_handle_message_async(r#"{"method": "async_compute", "params": {"n": 5}, "id": "req-123"}"#).await;
+    assert!(response.is_ok());
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], 25);
+    assert_eq!(json["id"], "req-123");
 }

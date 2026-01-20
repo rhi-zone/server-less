@@ -54,10 +54,15 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
 
     let path = args.path.unwrap_or_else(|| "/ws".to_string());
 
-    // Generate dispatch match arms (similar to MCP)
-    let dispatch_arms: Vec<_> = methods
+    // Generate dispatch match arms (sync and async versions)
+    let dispatch_arms_sync: Vec<_> = methods
         .iter()
-        .map(|m| generate_dispatch_arm(m))
+        .map(|m| generate_dispatch_arm_sync(m))
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    let dispatch_arms_async: Vec<_> = methods
+        .iter()
+        .map(|m| generate_dispatch_arm_async(m))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Method names for documentation
@@ -65,6 +70,7 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
 
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_ws_handler_{}", struct_name_snake);
+    let connection_fn_name = format_ident!("__trellis_ws_connection_{}", struct_name_snake);
 
     Ok(quote! {
         #impl_block
@@ -75,7 +81,9 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
                 vec![#(#method_names),*]
             }
 
-            /// Handle an incoming WebSocket JSON-RPC message
+            /// Handle an incoming WebSocket JSON-RPC message (sync version)
+            ///
+            /// Note: Async methods will return an error. Use `ws_handle_message_async` for async methods.
             pub fn ws_handle_message(
                 &self,
                 message: &str,
@@ -98,6 +106,42 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
                 let result = self.ws_dispatch(method, params);
 
                 // Format response
+                Self::__format_ws_response(result, id)
+            }
+
+            /// Handle an incoming WebSocket JSON-RPC message (async version)
+            ///
+            /// Supports both sync and async methods. Async methods are awaited properly.
+            pub async fn ws_handle_message_async(
+                &self,
+                message: &str,
+            ) -> ::std::result::Result<String, String> {
+                // Parse the incoming message as JSON-RPC
+                let parsed: ::trellis::serde_json::Value = ::trellis::serde_json::from_str(message)
+                    .map_err(|e| format!("Invalid JSON: {}", e))?;
+
+                let method = parsed.get("method")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| "Missing 'method' field".to_string())?;
+
+                let params = parsed.get("params")
+                    .cloned()
+                    .unwrap_or(::trellis::serde_json::json!({}));
+
+                let id = parsed.get("id").cloned();
+
+                // Dispatch to the appropriate method (async)
+                let result = self.ws_dispatch_async(method, params).await;
+
+                // Format response
+                Self::__format_ws_response(result, id)
+            }
+
+            /// Format a WebSocket JSON-RPC response
+            fn __format_ws_response(
+                result: ::std::result::Result<::trellis::serde_json::Value, String>,
+                id: Option<::trellis::serde_json::Value>,
+            ) -> ::std::result::Result<String, String> {
                 let response = match result {
                     Ok(value) => {
                         let mut resp = ::trellis::serde_json::json!({
@@ -125,14 +169,26 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
                     .map_err(|e| format!("Serialization error: {}", e))
             }
 
-            /// Dispatch a method call
+            /// Dispatch a method call (sync version)
             fn ws_dispatch(
                 &self,
                 method: &str,
                 args: ::trellis::serde_json::Value,
             ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
                 match method {
-                    #(#dispatch_arms)*
+                    #(#dispatch_arms_sync)*
+                    _ => Err(format!("Unknown method: {}", method)),
+                }
+            }
+
+            /// Dispatch a method call (async version)
+            async fn ws_dispatch_async(
+                &self,
+                method: &str,
+                args: ::trellis::serde_json::Value,
+            ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
+                match method {
+                    #(#dispatch_arms_async)*
                     _ => Err(format!("Unknown method: {}", method)),
                 }
             }
@@ -156,12 +212,12 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
         ) -> impl ::axum::response::IntoResponse {
             let state = state_extractor.0;
             ws.on_upgrade(move |socket| async move {
-                __trellis_ws_connection(socket, state).await
+                #connection_fn_name(socket, state).await
             })
         }
 
         // Handle individual WebSocket connection
-        async fn __trellis_ws_connection(
+        async fn #connection_fn_name(
             socket: ::axum::extract::ws::WebSocket,
             state: ::std::sync::Arc<#struct_name>,
         ) {
@@ -173,7 +229,8 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
             while let Some(msg) = receiver.next().await {
                 match msg {
                     Ok(::axum::extract::ws::Message::Text(text)) => {
-                        let response = state.ws_handle_message(&text);
+                        // Use async handler to support async methods
+                        let response = state.ws_handle_message_async(&text).await;
                         let reply = match response {
                             Ok(json) => json,
                             Err(err) => ::trellis::serde_json::json!({
@@ -193,8 +250,14 @@ pub fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream>
     })
 }
 
-/// Generate a dispatch match arm for a method
-fn generate_dispatch_arm(method: &MethodInfo) -> syn::Result<TokenStream> {
+/// Generate a dispatch match arm for a method (sync version)
+fn generate_dispatch_arm_sync(method: &MethodInfo) -> syn::Result<TokenStream> {
     // Use shared RPC dispatch generation
     Ok(rpc::generate_dispatch_arm(method, None, AsyncHandling::Error))
+}
+
+/// Generate a dispatch match arm for a method (async version)
+fn generate_dispatch_arm_async(method: &MethodInfo) -> syn::Result<TokenStream> {
+    // Use shared RPC dispatch generation with await support
+    Ok(rpc::generate_dispatch_arm(method, None, AsyncHandling::Await))
 }

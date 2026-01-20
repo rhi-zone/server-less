@@ -139,6 +139,15 @@ pub fn generate_dispatch_arm(
         .map(String::from)
         .unwrap_or_else(|| method.name.to_string());
 
+    // For async methods with Error handling, return early without generating unreachable code
+    if method.is_async && matches!(async_handling, AsyncHandling::Error) {
+        return quote! {
+            #method_name_str => {
+                return Err("Async methods not supported in sync context".to_string());
+            }
+        };
+    }
+
     let param_extractions = generate_all_param_extractions(method);
     let call = generate_method_call(method, async_handling);
     let response = generate_json_response(method);

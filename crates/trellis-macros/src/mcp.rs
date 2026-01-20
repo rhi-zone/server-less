@@ -62,10 +62,15 @@ pub fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
         .map(|m| generate_tool_definition(&namespace_prefix, m))
         .collect();
 
-    // Generate dispatch match arms
-    let dispatch_arms: Vec<_> = methods
+    // Generate dispatch match arms (sync and async versions)
+    let dispatch_arms_sync: Vec<_> = methods
         .iter()
-        .map(|m| generate_dispatch_arm(&struct_name, &namespace_prefix, m))
+        .map(|m| generate_dispatch_arm_sync(&namespace_prefix, m))
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    let dispatch_arms_async: Vec<_> = methods
+        .iter()
+        .map(|m| generate_dispatch_arm_async(&namespace_prefix, m))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Tool names for the list
@@ -90,27 +95,32 @@ pub fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
                 vec![#(#tool_names),*]
             }
 
-            /// Call an MCP tool by name with JSON arguments
+            /// Call an MCP tool by name with JSON arguments (sync version)
+            ///
+            /// Note: Async methods will return an error. Use `mcp_call_async` for async methods.
             pub fn mcp_call(
                 &self,
                 name: &str,
                 args: ::trellis::serde_json::Value
             ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
                 match name {
-                    #(#dispatch_arms)*
+                    #(#dispatch_arms_sync)*
                     _ => Err(format!("Unknown tool: {}", name)),
                 }
             }
 
             /// Call an MCP tool (async version)
+            ///
+            /// Supports both sync and async methods. Async methods are awaited properly.
             pub async fn mcp_call_async(
                 &self,
                 name: &str,
                 args: ::trellis::serde_json::Value
             ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
-                // For now, just use the sync version
-                // TODO: Support async methods properly
-                self.mcp_call(name, args)
+                match name {
+                    #(#dispatch_arms_async)*
+                    _ => Err(format!("Unknown tool: {}", name)),
+                }
             }
         }
     })
@@ -153,13 +163,21 @@ fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> Toke
     }
 }
 
-/// Generate a dispatch match arm for calling a method
-fn generate_dispatch_arm(
-    _struct_name: &syn::Ident,
+/// Generate a dispatch match arm for calling a method (sync version)
+fn generate_dispatch_arm_sync(
     namespace_prefix: &str,
     method: &MethodInfo,
 ) -> syn::Result<TokenStream> {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
     Ok(rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Error))
+}
+
+/// Generate a dispatch match arm for calling a method (async version)
+fn generate_dispatch_arm_async(
+    namespace_prefix: &str,
+    method: &MethodInfo,
+) -> syn::Result<TokenStream> {
+    let tool_name = format!("{}{}", namespace_prefix, method.name);
+    Ok(rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Await))
 }
 

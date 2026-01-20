@@ -2,49 +2,33 @@
 
 Prioritized backlog of features, improvements, and ideas.
 
+## Completed
+
+### ✅ Feature Gates in lib.rs
+Added `#[cfg(feature = "...")]` guards around macro re-exports.
+Features: `mcp`, `http`, `cli`, `ws`, `full` (default = all).
+
+### ✅ E2E Testing Strategy
+Implemented in `tests/e2e_tests.rs`:
+- Reference implementations in `Calculator` struct
+- Protocol wrappers (`McpCalculator`, `WsCalculator`, etc.)
+- Cross-protocol consistency tests
+
+### ✅ Async Method Support
+MCP and WS now support async methods:
+- `mcp_call` / `ws_handle_message`: sync callers, error on async methods
+- `mcp_call_async` / `ws_handle_message_async`: async callers, await async methods
+- WebSocket connections use async dispatch (real connections work with async)
+
 ## High Priority
 
-### Feature Gates in lib.rs
-Add `#[cfg(feature = "...")]` guards around macro re-exports so users only pay for what they use.
+### Better Error Messages with Spans
+Use `syn::Error` with proper spans for better compiler error messages.
 
-```rust
-#[cfg(feature = "mcp")]
-pub use trellis_macros::mcp;
-```
-
-### E2E Testing Strategy
-Create end-to-end tests that:
-1. Define a service with known behavior (the "reference implementation")
-2. Apply macros to generate protocol handlers
-3. Actually call the handlers and verify results match reference
-
-Example structure:
-```rust
-// Reference implementation
-struct Calculator {
-    fn add(&self, a: i32, b: i32) -> i32 { a + b }
-}
-
-// Test MCP
-let calc = Calculator;
-let result = calc.mcp_call("add", json!({"a": 2, "b": 3}));
-assert_eq!(result, Ok(json!(5)));
-
-// Test HTTP (with test client)
-let app = calc.http_router();
-let response = app.oneshot(Request::get("/add?a=2&b=3")).await;
-assert_eq!(response.json::<i32>(), 5);
-
-// Test CLI
-let output = calc.cli_run_with(["calc", "add", "--a", "2", "--b", "3"]);
-assert!(output.contains("5"));
-```
-
-### Async Method Support
-Currently MCP and WS return errors for async methods. Need to:
-- Detect when we're in async context
-- Use `block_on` or require async dispatch methods
-- Consider feature-gating tokio dependency
+### Documentation
+- Improve inline docs
+- Add more examples
+- Document Rust 2024 `+ use<>` requirement for streaming
 
 ## Medium Priority
 
