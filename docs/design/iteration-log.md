@@ -818,6 +818,32 @@ let spec = Calculator::openrpc_json();
 
 ---
 
+## Iteration 22: Markdown Documentation
+
+**Goal:** Generate human-readable API docs from impl blocks.
+
+**Features:**
+- `#[markdown]` - generate Markdown documentation
+- `#[markdown(title = "...", types = false)]` - customize output
+- `markdown_docs() -> &'static str` - get docs as string
+- `write_markdown(path)` - write to file
+
+**Output includes:**
+- Title and overview
+- Method documentation with signatures
+- Parameter lists with types (optional)
+- Return type descriptions
+- Async method badges
+- Doc comments preserved
+
+**Works with any static site generator:** VitePress, Docusaurus, MkDocs, etc.
+
+**Backlog:** Support for other doc formats (AsciiDoc, RST, Mintlify, ReadMe.io)
+
+**Tests:** 10 new tests, 162 total.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |

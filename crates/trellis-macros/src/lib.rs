@@ -13,6 +13,7 @@ mod graphql;
 mod grpc;
 mod http;
 mod jsonrpc;
+mod markdown;
 mod mcp;
 mod openrpc;
 mod parse;
@@ -241,6 +242,44 @@ pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match openrpc::expand_openrpc(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate Markdown API documentation from an impl block.
+///
+/// Creates human-readable documentation that can be used with
+/// any static site generator (VitePress, Docusaurus, MkDocs, etc.).
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::markdown;
+///
+/// struct UserService;
+///
+/// #[markdown(title = "User API")]
+/// impl UserService {
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> User { ... }
+///
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> Option<User> { ... }
+/// }
+///
+/// // Get markdown string
+/// let docs = UserService::markdown_docs();
+///
+/// // Write to file
+/// UserService::write_markdown("docs/api.md")?;
+/// ```
+#[proc_macro_attribute]
+pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as markdown::MarkdownArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match markdown::expand_markdown(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }
