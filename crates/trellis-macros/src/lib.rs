@@ -5,10 +5,12 @@
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, ItemImpl};
 
-mod http;
 mod cli;
+mod http;
 mod mcp;
 mod parse;
+mod rpc;
+mod ws;
 
 /// Generate HTTP handlers from an impl block.
 ///
@@ -111,6 +113,44 @@ pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match mcp::expand_mcp(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate WebSocket JSON-RPC handlers from an impl block.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::ws;
+///
+/// struct ChatService;
+///
+/// #[ws(path = "/ws")]
+/// impl ChatService {
+///     /// Send a message to a room
+///     fn send_message(&self, room: String, content: String) -> Message {
+///         // ...
+///     }
+///
+///     /// Get recent messages
+///     fn get_history(&self, room: String, limit: Option<u32>) -> Vec<Message> {
+///         // ...
+///     }
+/// }
+/// ```
+///
+/// This generates:
+/// - `ChatService::ws_router()` returning an axum Router with WS endpoint
+/// - `ChatService::ws_handle_message(msg)` to handle incoming messages
+/// - `ChatService::ws_methods()` listing available methods
+#[proc_macro_attribute]
+pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as ws::WsArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match ws::expand_ws(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

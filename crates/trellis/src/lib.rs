@@ -59,8 +59,22 @@
 //! | `Result<T, E>` | 200 or error | stdout or stderr |
 //! | `()` | 204 | silent |
 
-// Re-export macros
-pub use trellis_macros::{cli, http, mcp};
+// Re-export macros (feature-gated)
+#[cfg(feature = "mcp")]
+pub use trellis_macros::mcp;
+
+#[cfg(feature = "http")]
+pub use trellis_macros::http;
+
+#[cfg(feature = "cli")]
+pub use trellis_macros::cli;
+
+#[cfg(feature = "ws")]
+pub use trellis_macros::ws;
+
+// Re-export futures for generated WebSocket code
+#[cfg(feature = "ws")]
+pub use futures;
 
 // Re-export core types
 pub use trellis_core::*;
@@ -71,7 +85,15 @@ pub use serde_json;
 
 /// Prelude for convenient imports
 pub mod prelude {
-    pub use super::{cli, http, mcp};
+    #[cfg(feature = "mcp")]
+    pub use super::mcp;
+    #[cfg(feature = "http")]
+    pub use super::http;
+    #[cfg(feature = "cli")]
+    pub use super::cli;
+    #[cfg(feature = "ws")]
+    pub use super::ws;
+
     pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode};
     pub use serde::{Deserialize, Serialize};
 }

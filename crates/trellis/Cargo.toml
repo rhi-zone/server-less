@@ -16,20 +16,28 @@ serde_json = "1"
 # Optional dependencies for generated code
 [dependencies.axum]
 version = "0.8"
+features = ["ws"]
 optional = true
 
 [dependencies.clap]
 version = "4"
 optional = true
 
+[dependencies.futures]
+version = "0.3"
+optional = true
+
 [features]
-default = []
+default = ["full"]
+mcp = []  # No extra deps, just serde_json which is always required
 http = ["axum"]
 cli = ["clap"]
-full = ["http", "cli"]
+ws = ["axum", "futures"]
+full = ["mcp", "http", "cli", "ws"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 trybuild = "1"
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 clap = "4"
+futures = "0.3"
