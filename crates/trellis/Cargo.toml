@@ -27,13 +27,22 @@ optional = true
 version = "0.3"
 optional = true
 
+[dependencies.async-graphql]
+version = "7"
+optional = true
+
+[dependencies.async-graphql-axum]
+version = "7"
+optional = true
+
 [features]
 default = ["full"]
 mcp = []  # No extra deps, just serde_json which is always required
 http = ["axum"]
 cli = ["clap"]
 ws = ["axum", "futures"]
-full = ["mcp", "http", "cli", "ws"]
+graphql = ["async-graphql", "async-graphql-axum", "axum"]
+full = ["mcp", "http", "cli", "ws", "graphql"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -41,3 +50,5 @@ trybuild = "1"
 axum = { version = "0.8", features = ["ws"] }
 clap = "4"
 futures = "0.3"
+async-graphql = "7"
+async-graphql-axum = "7"

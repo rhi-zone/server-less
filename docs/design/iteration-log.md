@@ -425,12 +425,122 @@ impl MyService {
 
 ---
 
+## Iteration 12: Serve Coordination Pattern
+
+**Goal:** Combine multiple protocol handlers into a single server.
+
+**Features:**
+- `#[serve(http, ws)]` - combine HTTP and WebSocket routers
+- `#[serve(http)]` or `#[serve(ws)]` - single protocol
+- `#[serve(http, health = "/healthz")]` - custom health check path
+- Generates `serve(addr)` async method and `router()` builder
+
+**Example:**
+```rust
+#[http]
+#[ws]
+#[serve(http, ws)]
+impl MyService {
+    fn list_items(&self) -> Vec<String> { vec![] }
+}
+
+// Start server
+service.serve("0.0.0.0:3000").await?;
+
+// Or get router for custom setup
+let router = service.router();
+```
+
+**Implementation:**
+- New `serve.rs` module with `ServeArgs` parser
+- Handles Clone requirement by cloning before passing to routers
+- Auto-adds `/health` endpoint (configurable)
+- Both `serve()` and `router()` methods for flexibility
+
+**Tests:** 6 new tests, 91 total.
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Enhanced | 14 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| Serve macro | ✅ NEW | 6 |
+| Error derive | ✅ Working | 10 |
+| Route attr | ✅ Working | - |
+| OpenAPI schemas | ✅ Working | - |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| Error messages | ✅ Improved | - |
+| Documentation | ✅ Updated | - |
+| **Total tests** | | **91** |
+
+---
+
+## Iteration 13: GraphQL Macro
+
+**Goal:** Add GraphQL support using async-graphql's dynamic schema API.
+
+**Features:**
+- `#[graphql]` attribute on impl blocks
+- Query/Mutation inference from method names (same as HTTP)
+- Dynamic schema generation (no nested proc macros)
+- Generates `graphql_schema()`, `graphql_router()`, `graphql_sdl()`
+
+**Example:**
+```rust
+#[graphql]
+impl MyService {
+    fn get_user(&self, id: String) -> User { }      // Query
+    fn create_user(&self, name: String) -> User { } // Mutation
+}
+
+let schema = service.graphql_schema();
+let sdl = service.graphql_sdl();
+let router = service.graphql_router(); // serves /graphql with playground
+```
+
+**Implementation Notes:**
+- Uses async-graphql's dynamic schema API (not derive macros) to avoid proc macro nesting issues
+- Type mapping simplified for now (returns String) - proper type registration TBD
+- Handles query-only services (no empty mutation type)
+
+**Tests:** 4 new tests, 95 total.
+
+---
+
+## Current Status Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| MCP macro | ✅ Solid | 13 (+ E2E) |
+| HTTP macro | ✅ Enhanced | 14 (+ E2E) |
+| CLI macro | ✅ Solid | 6 (+ E2E) |
+| WS macro | ✅ Solid | 16 (+ E2E) |
+| Serve macro | ✅ Working | 6 |
+| GraphQL macro | ✅ Basic | 4 |
+| Error derive | ✅ Working | 10 |
+| Route attr | ✅ Working | - |
+| OpenAPI schemas | ✅ Working | - |
+| RPC utilities | ✅ Shared | - |
+| Feature gates | ✅ Working | - |
+| SSE streaming | ✅ Working | - |
+| Async support | ✅ Working | - |
+| Error messages | ✅ Improved | - |
+| Documentation | ✅ Updated | - |
+| **Total tests** | | **95** |
+
+---
+
 ## Future Iterations
 
 (To be filled as we go)
-
-### Near-term
-- Iteration N: "Serve" coordination pattern
 
 ### Schema-based Protocols (Design Challenge)
 

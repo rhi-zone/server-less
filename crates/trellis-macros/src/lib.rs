@@ -8,10 +8,12 @@ use syn::{parse_macro_input, DeriveInput, ItemImpl};
 
 mod cli;
 mod error;
+mod graphql;
 mod http;
 mod mcp;
 mod parse;
 mod rpc;
+mod serve;
 mod ws;
 
 /// Generate HTTP handlers from an impl block.
@@ -153,6 +155,82 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match ws::expand_ws(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate GraphQL schema from an impl block using async-graphql.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::graphql;
+///
+/// struct UserService;
+///
+/// #[graphql]
+/// impl UserService {
+///     /// Get user by ID
+///     async fn get_user(&self, id: String) -> Option<User> { None }
+///
+///     /// Create a new user
+///     async fn create_user(&self, name: String) -> User { ... }
+/// }
+///
+/// // Generated:
+/// // - UserServiceQuery with get_user resolver
+/// // - UserServiceMutation with create_user resolver
+/// // - service.graphql_schema() -> Schema
+/// // - service.graphql_router() -> axum Router at /graphql
+/// // - service.graphql_sdl() -> SDL string
+/// ```
+///
+/// Methods starting with `get_`, `list_`, `find_`, etc. become Queries.
+/// Other methods become Mutations.
+#[proc_macro_attribute]
+pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as graphql::GraphqlArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match graphql::expand_graphql(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Coordinate multiple protocol handlers into a single server.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::{http, ws, serve};
+///
+/// struct MyService;
+///
+/// #[http]
+/// #[ws]
+/// #[serve(http, ws)]
+/// impl MyService {
+///     fn list_items(&self) -> Vec<String> { vec![] }
+/// }
+///
+/// // Now you can:
+/// // - service.serve("0.0.0.0:3000").await  // start server
+/// // - service.router()                     // get combined router
+/// ```
+///
+/// # Arguments
+///
+/// - `http` - Include the HTTP router
+/// - `ws` - Include the WebSocket router
+/// - `health = "/path"` - Custom health check path (default: `/health`)
+#[proc_macro_attribute]
+pub fn serve(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as serve::ServeArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match serve::expand_serve(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

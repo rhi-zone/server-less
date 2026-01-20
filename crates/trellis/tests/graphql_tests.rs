@@ -1,0 +1,93 @@
+//! Integration tests for the GraphQL macro.
+
+use trellis::graphql;
+
+#[derive(Clone)]
+struct SimpleService;
+
+#[graphql]
+impl SimpleService {
+    /// Get greeting
+    pub fn get_greeting(&self) -> String {
+        "hello".to_string()
+    }
+
+    /// List items
+    pub fn list_items(&self) -> Vec<String> {
+        vec!["a".to_string(), "b".to_string()]
+    }
+
+    /// Create item
+    pub fn create_item(&self, name: String) -> String {
+        name
+    }
+}
+
+#[test]
+fn test_graphql_schema_created() {
+    let service = SimpleService;
+    let schema = service.graphql_schema();
+    // Schema is created successfully
+    let _ = schema;
+}
+
+#[test]
+fn test_graphql_sdl_generated() {
+    let service = SimpleService;
+    let sdl = service.graphql_sdl();
+
+    // Check SDL contains expected types
+    assert!(
+        sdl.contains("SimpleServiceQuery"),
+        "SDL should have Query type, got:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("SimpleServiceMutation"),
+        "SDL should have Mutation type"
+    );
+
+    // Check query methods (camelCase)
+    assert!(sdl.contains("getGreeting"), "SDL should have getGreeting query");
+    assert!(sdl.contains("listItems"), "SDL should have listItems query");
+
+    // Check mutation methods
+    assert!(
+        sdl.contains("createItem"),
+        "SDL should have createItem mutation"
+    );
+}
+
+#[test]
+fn test_graphql_router_created() {
+    let service = SimpleService;
+    let router = service.graphql_router();
+    // Router is created successfully
+    let _ = router;
+}
+
+// Test query-only service (no mutations)
+#[derive(Clone)]
+struct ReadOnlyService;
+
+#[graphql]
+impl ReadOnlyService {
+    /// Get info
+    pub fn get_info(&self) -> String {
+        "read only".to_string()
+    }
+
+    /// List things
+    pub fn list_things(&self) -> Vec<String> {
+        vec![]
+    }
+}
+
+#[test]
+fn test_graphql_query_only_service() {
+    let service = ReadOnlyService;
+    let sdl = service.graphql_sdl();
+
+    // Should have query type
+    assert!(sdl.contains("ReadOnlyServiceQuery"));
+}

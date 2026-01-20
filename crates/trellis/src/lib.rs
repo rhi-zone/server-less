@@ -138,12 +138,24 @@ pub use trellis_macros::cli;
 #[cfg(feature = "ws")]
 pub use trellis_macros::ws;
 
+#[cfg(feature = "http")]
+pub use trellis_macros::serve;
+
+#[cfg(feature = "graphql")]
+pub use trellis_macros::graphql;
+
 // Error derive macro (always available)
 pub use trellis_macros::TrellisError;
 
 // Re-export futures for generated WebSocket code
 #[cfg(feature = "ws")]
 pub use futures;
+
+// Re-export async-graphql for generated GraphQL code
+#[cfg(feature = "graphql")]
+pub use async_graphql;
+#[cfg(feature = "graphql")]
+pub use async_graphql_axum;
 
 // Re-export core types
 pub use trellis_core::*;
@@ -160,10 +172,14 @@ pub mod prelude {
     pub use super::http;
     #[cfg(feature = "http")]
     pub use super::route;
+    #[cfg(feature = "http")]
+    pub use super::serve;
     #[cfg(feature = "cli")]
     pub use super::cli;
     #[cfg(feature = "ws")]
     pub use super::ws;
+    #[cfg(feature = "graphql")]
+    pub use super::graphql;
 
     pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, TrellisError};
     pub use serde::{Deserialize, Serialize};
