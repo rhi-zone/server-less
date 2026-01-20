@@ -14,6 +14,7 @@ mod grpc;
 mod http;
 mod jsonrpc;
 mod mcp;
+mod openrpc;
 mod parse;
 mod rpc;
 mod serve;
@@ -205,6 +206,41 @@ pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match jsonrpc::expand_jsonrpc(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate OpenRPC specification for JSON-RPC services.
+///
+/// OpenRPC is to JSON-RPC what OpenAPI is to REST APIs.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::openrpc;
+///
+/// struct Calculator;
+///
+/// #[openrpc(title = "Calculator API", version = "1.0.0")]
+/// impl Calculator {
+///     /// Add two numbers
+///     fn add(&self, a: i32, b: i32) -> i32 { a + b }
+/// }
+///
+/// // Get OpenRPC spec as JSON
+/// let spec = Calculator::openrpc_spec();
+/// let json = Calculator::openrpc_json();
+///
+/// // Write to file
+/// Calculator::write_openrpc("openrpc.json")?;
+/// ```
+#[proc_macro_attribute]
+pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as openrpc::OpenRpcArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match openrpc::expand_openrpc(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

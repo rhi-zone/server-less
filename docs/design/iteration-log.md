@@ -787,6 +787,37 @@ let router = service.router();
 
 ---
 
+## Iteration 21: OpenRPC Specification
+
+**Goal:** Generate OpenRPC specs for JSON-RPC services (like OpenAPI for REST).
+
+**Features:**
+- `#[openrpc]` - generate OpenRPC 1.0 specification
+- `#[openrpc(title = "...", version = "...")]` - customize metadata
+- `openrpc_spec() -> serde_json::Value` - get spec as JSON value
+- `openrpc_json() -> String` - get spec as formatted JSON
+- `write_openrpc(path)` - write to file
+
+**Example:**
+```rust
+#[jsonrpc]
+#[openrpc(title = "Calculator API")]
+impl Calculator {
+    /// Add two numbers
+    fn add(&self, a: i32, b: i32) -> i32 { a + b }
+}
+
+// Generates OpenRPC spec with method schemas,
+// parameter types, and result types
+let spec = Calculator::openrpc_json();
+```
+
+**Complements `#[jsonrpc]`:** Use both together for a complete JSON-RPC service with documentation.
+
+**Tests:** 9 new tests, 152 total.
+
+---
+
 ## Current Status Summary
 
 | Component | Status | Tests |
@@ -796,6 +827,7 @@ let router = service.router();
 | CLI macro | ✅ Solid | 6 (+ E2E) |
 | WS macro | ✅ Solid | 16 (+ E2E) |
 | JSON-RPC macro | ✅ Working | 11 |
+| OpenRPC spec | ✅ Working | 9 |
 | Serve macro | ✅ Working | 6 |
 | GraphQL macro | ✅ Working | 9 |
 | gRPC (impl + schema) | ✅ Working | 11 |
