@@ -146,12 +146,14 @@ Trellis is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem. Rela
 
 **Every macro is behind a feature flag.** This is about explicit opt-in, not dependency management.
 
-```toml
-# Explicit about what you're using
-trellis = { version = "0.1", features = ["http", "grpc", "markdown"] }
+The default is `full` (all features enabled) - intentionally batteries-included for new users.
 
-# Or get everything
-trellis = { version = "0.1", features = ["full"] }
+```toml
+# Default: get everything (recommended for getting started)
+trellis = "0.1"
+
+# Explicit about what you're using (opt-out of defaults)
+trellis = { version = "0.1", default-features = false, features = ["http", "grpc", "markdown"] }
 ```
 
 **Why gate everything, even "free" macros?**
@@ -164,11 +166,26 @@ trellis = { version = "0.1", features = ["full"] }
 | Category | Features | Runtime Deps |
 |----------|----------|--------------|
 | Runtime protocols | `http`, `ws`, `jsonrpc`, `graphql`, `cli`, `mcp` | Yes (axum, clap, etc.) |
-| Schema generators | `grpc`, `capnp`, `thrift` | No |
-| Spec generators | `openrpc`, `asyncapi` | No |
+| Schema generators | `grpc`, `capnp`, `thrift`, `connect`, `smithy` | No |
+| Spec generators | `openrpc`, `asyncapi`, `jsonschema` | No |
 | Doc generators | `markdown` | No |
+| Type stubs | `typescript`, `python` | No |
 
 **Always available:** `TrellisError` derive (commonly needed, zero deps).
+
+## Commit Convention
+
+Use conventional commits: `type(scope): message`
+
+Types:
+- `feat` - New feature
+- `fix` - Bug fix
+- `refactor` - Code change that neither fixes a bug nor adds a feature
+- `docs` - Documentation only
+- `chore` - Maintenance (deps, CI, etc.)
+- `test` - Adding or updating tests
+
+Scope is optional but recommended for multi-crate repos.
 
 ## Core Rules
 
