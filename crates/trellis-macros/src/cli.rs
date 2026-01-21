@@ -1,20 +1,19 @@
-//! CLI generation.
+//! CLI generation macro.
+//!
+//! Generates clap-based CLI from impl blocks.
 
 use heck::ToKebabCase;
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parse, ItemImpl, Token};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
 
 /// Arguments for the #[cli] attribute
 #[derive(Default)]
-pub struct CliArgs {
-    /// Application name
+pub(crate) struct CliArgs {
     pub name: Option<String>,
-    /// Application version
     pub version: Option<String>,
-    /// Application description
     pub about: Option<String>,
 }
 
@@ -56,8 +55,8 @@ impl Parse for CliArgs {
     }
 }
 
-/// Expand the #[cli] attribute macro
-pub fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+
+pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
@@ -67,10 +66,8 @@ pub fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
     let version = args.version.unwrap_or_else(|| "0.1.0".to_string());
     let about = args.about.unwrap_or_default();
 
-    // Generate subcommand definitions
     let subcommands: Vec<_> = methods.iter().map(generate_subcommand).collect();
 
-    // Generate match arms for dispatching
     let match_arms: Vec<_> = methods
         .iter()
         .map(|m| generate_match_arm(&struct_name, m))
@@ -101,7 +98,7 @@ pub fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
                 }
             }
 
-            /// Run the CLI with custom arguments (useful for testing)
+            /// Run the CLI with custom arguments
             pub fn cli_run_with<I, T>(&self, args: I) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
             where
                 I: IntoIterator<Item = T>,
@@ -121,17 +118,11 @@ pub fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
     })
 }
 
-/// Generate a clap subcommand for a method
-fn generate_subcommand(method: &MethodInfo) -> TokenStream {
+fn generate_subcommand(method: &MethodInfo) -> TokenStream2 {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
 
-    // Generate arguments
-    let args: Vec<_> = method
-        .params
-        .iter()
-        .map(generate_arg)
-        .collect();
+    let args: Vec<_> = method.params.iter().map(generate_arg).collect();
 
     quote! {
         ::clap::Command::new(#name)
@@ -140,13 +131,11 @@ fn generate_subcommand(method: &MethodInfo) -> TokenStream {
     }
 }
 
-/// Generate a clap argument for a parameter
-fn generate_arg(param: &ParamInfo) -> TokenStream {
+fn generate_arg(param: &ParamInfo) -> TokenStream2 {
     let name = param.name.to_string().to_kebab_case();
     let is_optional = param.is_optional;
 
     if param.is_id {
-        // ID parameters are positional
         let required = !is_optional;
         quote! {
             ::clap::Arg::new(#name)
@@ -155,7 +144,6 @@ fn generate_arg(param: &ParamInfo) -> TokenStream {
                 .help(concat!("The ", #name))
         }
     } else if is_optional {
-        // Optional parameters
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
@@ -163,7 +151,6 @@ fn generate_arg(param: &ParamInfo) -> TokenStream {
                 .help(concat!("Optional: ", #name))
         }
     } else {
-        // Required parameters
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
@@ -173,12 +160,10 @@ fn generate_arg(param: &ParamInfo) -> TokenStream {
     }
 }
 
-/// Generate a match arm for dispatching a subcommand
-fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream> {
+fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
 
-    // Generate argument extraction
     let arg_extractions: Vec<_> = method
         .params
         .iter()
@@ -207,7 +192,6 @@ fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Re
 
     let arg_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
 
-    // Generate the call - handle unit return types differently
     let call = if method.return_info.is_unit {
         if method.is_async {
             quote! {
@@ -232,7 +216,6 @@ fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Re
         }
     };
 
-    // Generate output handling
     let output = if method.return_info.is_unit {
         quote! { println!("Done"); }
     } else if method.return_info.is_result {

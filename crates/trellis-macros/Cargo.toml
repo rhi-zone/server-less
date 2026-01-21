@@ -9,6 +9,10 @@ description = "Proc macros for trellis"
 proc-macro = true
 
 [dependencies]
+# Shared parsing and RPC utilities
+trellis-parse = { path = "../trellis-parse" }
+trellis-rpc = { path = "../trellis-rpc" }
+
 # Proc macro essentials
 syn = { version = "2", features = ["full", "extra-traits"] }
 quote = "1"
@@ -16,3 +20,24 @@ proc-macro2 = "1"
 
 # For case conversion (create_user -> CreateUser, create-user, etc.)
 heck = "0.5"
+
+[features]
+default = ["full"]
+mcp = []
+http = []
+cli = []
+ws = []
+graphql = []
+jsonrpc = []
+grpc = []
+capnp = []
+thrift = []
+connect = []
+smithy = []
+openrpc = []
+asyncapi = []
+jsonschema = []
+markdown = []
+typescript = []
+python = []
+full = ["mcp", "http", "cli", "ws", "graphql", "jsonrpc", "grpc", "capnp", "thrift", "connect", "smithy", "openrpc", "asyncapi", "jsonschema", "markdown", "typescript", "python"]

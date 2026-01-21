@@ -6,21 +6,40 @@
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, ItemImpl};
 
+#[cfg(feature = "asyncapi")]
 mod asyncapi;
+#[cfg(feature = "capnp")]
 mod capnp;
+#[cfg(feature = "cli")]
 mod cli;
+#[cfg(feature = "connect")]
+mod connect;
 mod error;
+#[cfg(feature = "graphql")]
 mod graphql;
+#[cfg(feature = "grpc")]
 mod grpc;
+#[cfg(feature = "http")]
 mod http;
+#[cfg(feature = "jsonrpc")]
 mod jsonrpc;
+#[cfg(feature = "jsonschema")]
+mod jsonschema;
+#[cfg(feature = "markdown")]
 mod markdown;
+#[cfg(feature = "mcp")]
 mod mcp;
+#[cfg(feature = "openrpc")]
 mod openrpc;
-mod parse;
-mod rpc;
-mod serve;
+#[cfg(feature = "python")]
+mod python;
+#[cfg(feature = "smithy")]
+mod smithy;
+#[cfg(feature = "thrift")]
 mod thrift;
+#[cfg(feature = "typescript")]
+mod typescript;
+#[cfg(feature = "ws")]
 mod ws;
 
 /// Generate HTTP handlers from an impl block.
@@ -49,6 +68,7 @@ mod ws;
 /// This generates:
 /// - `UserService::http_router()` returning an axum Router
 /// - Individual handler functions for each method
+#[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as http::HttpArgs);
@@ -86,6 +106,7 @@ pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This generates:
 /// - `MyApp::cli()` returning a clap Command
 /// - `MyApp::run()` to execute the CLI
+#[cfg(feature = "cli")]
 #[proc_macro_attribute]
 pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as cli::CliArgs);
@@ -118,6 +139,7 @@ pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This generates:
 /// - `MyTools::mcp_tools()` returning tool definitions
 /// - `MyTools::mcp_call(name, args)` to dispatch tool calls
+#[cfg(feature = "mcp")]
 #[proc_macro_attribute]
 pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as mcp::McpArgs);
@@ -156,6 +178,7 @@ pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `ChatService::ws_router()` returning an axum Router with WS endpoint
 /// - `ChatService::ws_handle_message(msg)` to handle incoming messages
 /// - `ChatService::ws_methods()` listing available methods
+#[cfg(feature = "ws")]
 #[proc_macro_attribute]
 pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as ws::WsArgs);
@@ -202,6 +225,7 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - Named and positional parameters
 /// - Batch requests (array of requests)
 /// - Notifications (requests without id)
+#[cfg(feature = "jsonrpc")]
 #[proc_macro_attribute]
 pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as jsonrpc::JsonRpcArgs);
@@ -237,6 +261,7 @@ pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// // Write to file
 /// Calculator::write_openrpc("openrpc.json")?;
 /// ```
+#[cfg(feature = "openrpc")]
 #[proc_macro_attribute]
 pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as openrpc::OpenRpcArgs);
@@ -275,6 +300,7 @@ pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// // Write to file
 /// UserService::write_markdown("docs/api.md")?;
 /// ```
+#[cfg(feature = "markdown")]
 #[proc_macro_attribute]
 pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as markdown::MarkdownArgs);
@@ -313,12 +339,46 @@ pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// // Write to file
 /// ChatService::write_asyncapi("asyncapi.json")?;
 /// ```
+#[cfg(feature = "asyncapi")]
 #[proc_macro_attribute]
 pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as asyncapi::AsyncApiArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match asyncapi::expand_asyncapi(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate Connect protocol schema from an impl block.
+///
+/// Connect is a modern RPC protocol from Buf that works over HTTP/1.1, HTTP/2, and HTTP/3.
+/// The generated schema is compatible with connect-go, connect-es, connect-swift, etc.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::connect;
+///
+/// struct UserService;
+///
+/// #[connect(package = "users.v1")]
+/// impl UserService {
+///     fn get_user(&self, id: String) -> User { ... }
+/// }
+///
+/// // Get schema and endpoint paths
+/// let schema = UserService::connect_schema();
+/// let paths = UserService::connect_paths(); // ["/users.v1.UserService/GetUser", ...]
+/// ```
+#[cfg(feature = "connect")]
+#[proc_macro_attribute]
+pub fn connect(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as connect::ConnectArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match connect::expand_connect(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }
@@ -351,6 +411,7 @@ pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// The generated schema can be used with tonic-build in your build.rs
 /// to generate the full gRPC client/server implementation.
+#[cfg(feature = "grpc")]
 #[proc_macro_attribute]
 pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as grpc::GrpcArgs);
@@ -389,6 +450,7 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// The generated schema can be used with capnpc to generate
 /// the full Cap'n Proto serialization code.
+#[cfg(feature = "capnp")]
 #[proc_macro_attribute]
 pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as capnp::CapnpArgs);
@@ -427,12 +489,172 @@ pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// The generated schema can be used with the Thrift compiler to generate
 /// client/server code in various languages.
+#[cfg(feature = "thrift")]
 #[proc_macro_attribute]
 pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as thrift::ThriftArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match thrift::expand_thrift(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate Smithy IDL schema from an impl block.
+///
+/// Smithy is AWS's open-source interface definition language for defining APIs.
+/// The generated schema follows Smithy 2.0 specification.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::smithy;
+///
+/// struct UserService;
+///
+/// #[smithy(namespace = "com.example.users")]
+/// impl UserService {
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> User { ... }
+///
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> User { ... }
+/// }
+///
+/// // Get Smithy schema
+/// let schema = UserService::smithy_schema();
+/// // Write to file
+/// UserService::write_smithy("service.smithy")?;
+/// ```
+///
+/// The generated schema can be used with the Smithy toolchain for code generation.
+#[cfg(feature = "smithy")]
+#[proc_macro_attribute]
+pub fn smithy(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as smithy::SmithyArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match smithy::expand_smithy(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate TypeScript type definitions from an impl block.
+///
+/// Generates TypeScript interfaces for request/response types and a service interface.
+/// Useful for frontend developers consuming Rust APIs.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::typescript;
+///
+/// struct UserService;
+///
+/// #[typescript(namespace = "Api")]
+/// impl UserService {
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> User { ... }
+///
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> User { ... }
+/// }
+///
+/// // Get TypeScript type definitions
+/// let ts = UserService::typescript_types();
+/// // Write to file
+/// UserService::write_typescript("api.d.ts")?;
+/// ```
+///
+/// The generated TypeScript includes:
+/// - Request/Response interfaces for each method
+/// - A service interface with all methods
+/// - Optional namespace wrapping
+#[cfg(feature = "typescript")]
+#[proc_macro_attribute]
+pub fn typescript(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as typescript::TypeScriptArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match typescript::expand_typescript(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate JSON Schema from an impl block.
+///
+/// Generates JSON Schema definitions for request/response types.
+/// Useful for API validation, documentation, and tooling.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::jsonschema;
+///
+/// struct UserService;
+///
+/// #[jsonschema(title = "User API")]
+/// impl UserService {
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> User { ... }
+///
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> User { ... }
+/// }
+///
+/// // Get JSON Schema
+/// let schema = UserService::json_schema();
+/// // Write to file
+/// UserService::write_json_schema("schema.json")?;
+/// ```
+#[cfg(feature = "jsonschema")]
+#[proc_macro_attribute]
+pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as jsonschema::JsonSchemaArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match jsonschema::expand_jsonschema(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate Python type stubs (.pyi) from an impl block.
+///
+/// Generates TypedDict classes and method stubs for Python type checking.
+/// Useful for Python code interacting with Rust APIs (via PyO3, HTTP, etc.).
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::python;
+///
+/// struct UserService;
+///
+/// #[python(module = "user_api")]
+/// impl UserService {
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> User { ... }
+///
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> User { ... }
+/// }
+///
+/// // Get Python stubs
+/// let stubs = UserService::python_stubs();
+/// // Write to file
+/// UserService::write_python_stubs("user_api.pyi")?;
+/// ```
+#[cfg(feature = "python")]
+#[proc_macro_attribute]
+pub fn python(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as python::PythonArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match python::expand_python(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }
@@ -466,6 +688,7 @@ pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// Methods starting with `get_`, `list_`, `find_`, etc. become Queries.
 /// Other methods become Mutations.
+#[cfg(feature = "graphql")]
 #[proc_macro_attribute]
 pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as graphql::GraphqlArgs);
@@ -506,12 +729,13 @@ pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `jsonrpc` - Include the JSON-RPC HTTP router
 /// - `graphql` - Include the GraphQL router
 /// - `health = "/path"` - Custom health check path (default: `/health`)
+#[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn serve(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(attr as serve::ServeArgs);
+    let args = parse_macro_input!(attr as http::ServeArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
 
-    match serve::expand_serve(args, impl_block) {
+    match http::expand_serve(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }
@@ -537,6 +761,7 @@ pub fn serve(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///     fn secret(&self) { }
 /// }
 /// ```
+#[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn route(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Pass through unchanged - the #[http] macro parses these attributes

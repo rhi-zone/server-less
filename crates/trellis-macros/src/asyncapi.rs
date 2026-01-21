@@ -1,24 +1,24 @@
-//! AsyncAPI specification generation.
+//! AsyncAPI specification generation macro.
 //!
 //! Generates AsyncAPI 2.6 specifications for event-driven services.
 //! AsyncAPI is to WebSockets/messaging what OpenAPI is to REST.
 
 use heck::ToLowerCamelCase;
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parse, ItemImpl, Token};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
 
 /// Arguments for the #[asyncapi] attribute
 #[derive(Default)]
-pub struct AsyncApiArgs {
+pub(crate) struct AsyncApiArgs {
     /// Service title
-    pub title: Option<String>,
+    title: Option<String>,
     /// Service version
-    pub version: Option<String>,
+    version: Option<String>,
     /// Server URL
-    pub server: Option<String>,
+    server: Option<String>,
 }
 
 impl Parse for AsyncApiArgs {
@@ -61,8 +61,8 @@ impl Parse for AsyncApiArgs {
     }
 }
 
-/// Expand the #[asyncapi] attribute macro
-pub fn expand_asyncapi(args: AsyncApiArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+
+pub(crate) fn expand_asyncapi(args: AsyncApiArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
@@ -220,7 +220,7 @@ fn get_json_schema(ty: &Option<syn::Type>) -> String {
         return r#"{"type": "null"}"#.to_string();
     };
 
-    let type_str = quote::quote!(#ty).to_string();
+    let type_str = quote!(#ty).to_string();
 
     if type_str.contains("String") || type_str.contains("str") {
         r#"{"type": "string"}"#.to_string()

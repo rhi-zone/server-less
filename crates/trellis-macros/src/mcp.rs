@@ -1,17 +1,20 @@
-//! MCP (Model Context Protocol) tool generation.
+//! MCP (Model Context Protocol) tool generation macro.
+//!
+//! This crate provides the `#[mcp]` attribute macro for generating
+//! MCP tool definitions from Rust impl blocks.
 
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parse, ItemImpl, Token};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo};
-use crate::rpc::{self, AsyncHandling};
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo};
+use trellis_rpc::{self, AsyncHandling};
 
 /// Arguments for the #[mcp] attribute
 #[derive(Default)]
-pub struct McpArgs {
+pub(crate) struct McpArgs {
     /// Tool namespace/prefix
-    pub namespace: Option<String>,
+    namespace: Option<String>,
 }
 
 impl Parse for McpArgs {
@@ -44,8 +47,30 @@ impl Parse for McpArgs {
     }
 }
 
-/// Expand the #[mcp] attribute macro
-pub fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+/// Generate MCP tools from an impl block.
+///
+/// # Example
+///
+/// ```ignore
+/// use trellis::mcp;
+///
+/// struct MyService;
+///
+/// #[mcp]
+/// impl MyService {
+///     /// Say hello
+///     fn hello(&self, name: String) -> String {
+///         format!("Hello, {}!", name)
+///     }
+/// }
+///
+/// // Generated methods:
+/// // - MyService::mcp_tools() -> Vec<serde_json::Value>
+/// // - MyService::mcp_call(&self, name, args) -> Result<Value, String>
+/// // - MyService::mcp_call_async(&self, name, args).await -> Result<Value, String>
+/// ```
+
+pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
@@ -66,12 +91,12 @@ pub fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
     let dispatch_arms_sync: Vec<_> = methods
         .iter()
         .map(|m| generate_dispatch_arm_sync(&namespace_prefix, m))
-        .collect::<syn::Result<Vec<_>>>()?;
+        .collect();
 
     let dispatch_arms_async: Vec<_> = methods
         .iter()
         .map(|m| generate_dispatch_arm_async(&namespace_prefix, m))
-        .collect::<syn::Result<Vec<_>>>()?;
+        .collect();
 
     // Tool names for the list
     let tool_names: Vec<_> = methods
@@ -127,7 +152,7 @@ pub fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStrea
 }
 
 /// Generate an MCP tool definition (JSON schema)
-fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> TokenStream {
+fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
     let name = format!("{}{}", namespace_prefix, method.name);
     let description = method
         .docs
@@ -135,7 +160,7 @@ fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> Toke
         .unwrap_or_else(|| method.name.to_string());
 
     // Generate parameter schema using shared utility
-    let (properties, required_params) = rpc::generate_param_schema(&method.params);
+    let (properties, required_params) = trellis_rpc::generate_param_schema(&method.params);
 
     quote! {
         {
@@ -164,20 +189,13 @@ fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> Toke
 }
 
 /// Generate a dispatch match arm for calling a method (sync version)
-fn generate_dispatch_arm_sync(
-    namespace_prefix: &str,
-    method: &MethodInfo,
-) -> syn::Result<TokenStream> {
+fn generate_dispatch_arm_sync(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    Ok(rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Error))
+    trellis_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Error)
 }
 
 /// Generate a dispatch match arm for calling a method (async version)
-fn generate_dispatch_arm_async(
-    namespace_prefix: &str,
-    method: &MethodInfo,
-) -> syn::Result<TokenStream> {
+fn generate_dispatch_arm_async(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    Ok(rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Await))
+    trellis_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Await)
 }
-

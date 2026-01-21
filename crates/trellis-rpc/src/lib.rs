@@ -1,6 +1,6 @@
-//! Shared utilities for RPC-style macros (MCP, WebSocket).
+//! Shared utilities for RPC-style macros (MCP, WebSocket, JSON-RPC).
 //!
-//! Both MCP and WebSocket use JSON-RPC-like dispatch:
+//! These macros use JSON-RPC-like dispatch:
 //! - Receive `{"method": "name", "params": {...}}`
 //! - Extract params from JSON
 //! - Call the method
@@ -8,8 +8,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-
-use crate::parse::{MethodInfo, ParamInfo};
+use trellis_parse::{MethodInfo, ParamInfo};
 
 /// Generate code to extract a parameter from a `serde_json::Value` args object.
 pub fn generate_param_extraction(param: &ParamInfo) -> TokenStream {
@@ -78,7 +77,6 @@ pub fn generate_method_call(method: &MethodInfo, handle_async: AsyncHandling) ->
 
 /// How to handle async methods.
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // Await and BlockOn reserved for future async support
 pub enum AsyncHandling {
     /// Return an error if method is async
     Error,

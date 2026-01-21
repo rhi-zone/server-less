@@ -132,6 +132,9 @@ pub use trellis_macros::http;
 #[cfg(feature = "http")]
 pub use trellis_macros::route;
 
+#[cfg(feature = "http")]
+pub use trellis_macros::serve;
+
 #[cfg(feature = "cli")]
 pub use trellis_macros::cli;
 
@@ -143,9 +146,6 @@ pub use trellis_macros::jsonrpc;
 
 #[cfg(feature = "openrpc")]
 pub use trellis_macros::openrpc;
-
-#[cfg(feature = "http")]
-pub use trellis_macros::serve;
 
 #[cfg(feature = "graphql")]
 pub use trellis_macros::graphql;
@@ -159,8 +159,23 @@ pub use trellis_macros::capnp;
 #[cfg(feature = "thrift")]
 pub use trellis_macros::thrift;
 
+#[cfg(feature = "connect")]
+pub use trellis_macros::connect;
+
+#[cfg(feature = "smithy")]
+pub use trellis_macros::smithy;
+
 #[cfg(feature = "markdown")]
 pub use trellis_macros::markdown;
+
+#[cfg(feature = "typescript")]
+pub use trellis_macros::typescript;
+
+#[cfg(feature = "jsonschema")]
+pub use trellis_macros::jsonschema;
+
+#[cfg(feature = "python")]
+pub use trellis_macros::python;
 
 #[cfg(feature = "asyncapi")]
 pub use trellis_macros::asyncapi;
@@ -212,16 +227,28 @@ pub mod prelude {
     pub use super::capnp;
     #[cfg(feature = "thrift")]
     pub use super::thrift;
+    #[cfg(feature = "connect")]
+    pub use super::connect;
+    #[cfg(feature = "smithy")]
+    pub use super::smithy;
 
     // Specification generators
     #[cfg(feature = "openrpc")]
     pub use super::openrpc;
     #[cfg(feature = "asyncapi")]
     pub use super::asyncapi;
+    #[cfg(feature = "jsonschema")]
+    pub use super::jsonschema;
 
     // Documentation generators
     #[cfg(feature = "markdown")]
     pub use super::markdown;
+
+    // Type stubs
+    #[cfg(feature = "typescript")]
+    pub use super::typescript;
+    #[cfg(feature = "python")]
+    pub use super::python;
 
     // Always available
     pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, TrellisError};

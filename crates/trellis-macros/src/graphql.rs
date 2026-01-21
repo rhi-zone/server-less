@@ -3,17 +3,16 @@
 //! Uses async-graphql's dynamic schema API to avoid proc macro limitations.
 
 use heck::ToLowerCamelCase;
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parse, ItemImpl, Token};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo};
-use crate::rpc;
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo};
+use trellis_rpc;
 
 /// Arguments for the #[graphql] attribute
 #[derive(Default)]
-pub struct GraphqlArgs {
-    /// Schema name (defaults to struct name + "Schema")
+pub(crate) struct GraphqlArgs {
     pub name: Option<String>,
 }
 
@@ -47,21 +46,18 @@ impl Parse for GraphqlArgs {
     }
 }
 
-/// Expand the #[graphql] attribute macro
-pub fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+
+pub(crate) fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
-    // Separate methods into queries and mutations
     let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = methods
         .iter()
         .partition(|m| is_query_method(&m.name.to_string()));
 
-    // Generate field registrations for query
     let query_fields = generate_field_registrations(&query_methods);
     let mutation_fields = generate_field_registrations(&mutation_methods);
 
-    // Generate resolver dispatch
     let query_resolvers = generate_resolver_dispatch(&struct_name, &query_methods);
     let mutation_resolvers = generate_resolver_dispatch(&struct_name, &mutation_methods);
 
@@ -70,10 +66,8 @@ pub fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<T
 
     let has_mutations = !mutation_methods.is_empty();
 
-    // Build schema construction code based on whether we have mutations
     let schema_build = if has_mutations {
         quote! {
-            // Build Mutation type
             let mutation = {
                 let service = service.clone();
                 let mut obj = Object::new(#mutation_type_name);
@@ -114,7 +108,6 @@ pub fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<T
 
                 let service = ::std::sync::Arc::new(self);
 
-                // Build Query type
                 let query = {
                     let service = service.clone();
                     let mut obj = Object::new(#query_type_name);
@@ -168,7 +161,6 @@ pub fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<T
                 self.graphql_schema().sdl()
             }
 
-            // Internal resolver dispatch for queries
             fn __graphql_resolve_query(
                 service: &::std::sync::Arc<Self>,
                 method: &str,
@@ -183,7 +175,6 @@ pub fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<T
                 }
             }
 
-            // Internal resolver dispatch for mutations
             fn __graphql_resolve_mutation(
                 service: &::std::sync::Arc<Self>,
                 method: &str,
@@ -201,7 +192,6 @@ pub fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<T
     })
 }
 
-/// Check if a method should be a Query (vs Mutation)
 fn is_query_method(name: &str) -> bool {
     name.starts_with("get_")
         || name.starts_with("fetch_")
@@ -215,23 +205,19 @@ fn is_query_method(name: &str) -> bool {
         || name.starts_with("has_")
 }
 
-/// Generate field registrations for dynamic Object
-fn generate_field_registrations(methods: &[&MethodInfo]) -> Vec<TokenStream> {
+fn generate_field_registrations(methods: &[&MethodInfo]) -> Vec<TokenStream2> {
     methods.iter().map(|m| generate_field_registration(m)).collect()
 }
 
-/// Generate a single field registration
-fn generate_field_registration(method: &MethodInfo) -> TokenStream {
+fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
     let method_name = method.name.to_string();
     let method_ident = &method.name;
     let field_name = method_name.to_lower_camel_case();
     let description = method.docs.clone().unwrap_or_default();
 
-    // Determine return type for GraphQL
     let ret = &method.return_info;
     let (type_ref, is_list) = infer_graphql_type_ref(ret);
 
-    // Generate argument registrations
     let arg_registrations: Vec<_> = method.params.iter().map(|p| {
         let arg_name = p.name.to_string();
         let gql_type = rust_type_to_graphql(&p.ty);
@@ -247,13 +233,11 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream {
         }
     }).collect();
 
-    // Generate argument extraction
     let arg_extractions: Vec<_> = method.params.iter().map(|p| {
         let arg_name = p.name.to_string();
         let param_name = &p.name;
         let ty = &p.ty;
         if p.is_optional {
-            // For optional params, try to get and parse, return None if missing
             quote! {
                 let #param_name: #ty = ctx.args.try_get(#arg_name).ok()
                     .and_then(|v| v.deserialize().ok());
@@ -270,14 +254,12 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream {
 
     let param_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
 
-    // Generate method call
     let method_call = if method.is_async {
         quote! { service.#method_ident(#(#param_names),*).await }
     } else {
         quote! { service.#method_ident(#(#param_names),*) }
     };
 
-    // Generate result conversion based on return type
     let result_conversion = if ret.is_unit {
         quote! {
             #method_call;
@@ -327,10 +309,7 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream {
     };
 
     quote! {
-        // Helper to convert Rust values to GraphQL values
         fn value_to_graphql<T: std::fmt::Debug>(v: T) -> ::async_graphql::Value {
-            // For now, convert to string representation
-            // In production, you'd want proper serialization
             ::async_graphql::Value::String(format!("{:?}", v))
         }
 
@@ -347,17 +326,14 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream {
     }
 }
 
-/// Infer GraphQL TypeRef from return info
-fn infer_graphql_type_ref(ret: &crate::parse::ReturnInfo) -> (TokenStream, bool) {
+fn infer_graphql_type_ref(ret: &trellis_parse::ReturnInfo) -> (TokenStream2, bool) {
     if ret.is_unit {
         (quote! { TypeRef::named_nn(TypeRef::BOOLEAN) }, false)
     } else if let Some(ref ty) = ret.ty {
         let type_str = quote!(#ty).to_string();
 
-        // Check for Vec/array types
         let is_list = type_str.contains("Vec");
 
-        // Determine base type
         let base_type = if type_str.contains("String") || type_str.contains("str") {
             quote! { TypeRef::STRING }
         } else if type_str.contains("i32") || type_str.contains("i64") || type_str.contains("u32") || type_str.contains("u64") || type_str.contains("usize") {
@@ -367,7 +343,7 @@ fn infer_graphql_type_ref(ret: &crate::parse::ReturnInfo) -> (TokenStream, bool)
         } else if type_str.contains("bool") {
             quote! { TypeRef::BOOLEAN }
         } else {
-            quote! { TypeRef::STRING } // fallback
+            quote! { TypeRef::STRING }
         };
 
         if ret.is_option {
@@ -392,13 +368,11 @@ fn infer_graphql_type_ref(ret: &crate::parse::ReturnInfo) -> (TokenStream, bool)
     }
 }
 
-/// Generate resolver dispatch match arms
-fn generate_resolver_dispatch(struct_name: &syn::Ident, methods: &[&MethodInfo]) -> Vec<TokenStream> {
+fn generate_resolver_dispatch(struct_name: &syn::Ident, methods: &[&MethodInfo]) -> Vec<TokenStream2> {
     methods.iter().map(|m| generate_resolver_arm(struct_name, m)).collect()
 }
 
-/// Generate a single resolver match arm
-fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> TokenStream {
+fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> TokenStream2 {
     let method_name_str = method.name.to_string();
 
     quote! {
@@ -408,16 +382,15 @@ fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> Toke
     }
 }
 
-/// Convert Rust type to GraphQL type name
 fn rust_type_to_graphql(ty: &syn::Type) -> &'static str {
-    let type_str = rpc::infer_json_type(ty);
+    let type_str = trellis_rpc::infer_json_type(ty);
     match type_str {
         "integer" => "Int",
         "number" => "Float",
         "boolean" => "Boolean",
         "string" => "String",
-        "array" => "String", // simplified
-        "object" => "String", // simplified
+        "array" => "String",
+        "object" => "String",
         _ => "String",
     }
 }

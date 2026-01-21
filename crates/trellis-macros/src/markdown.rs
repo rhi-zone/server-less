@@ -1,27 +1,25 @@
-//! Markdown documentation generation.
+//! Markdown documentation generation macro.
 //!
 //! Generates API documentation in Markdown format from impl blocks.
 
 use heck::ToTitleCase;
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parse, ItemImpl, Token};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
 
 /// Arguments for the #[markdown] attribute
 #[derive(Default)]
-pub struct MarkdownArgs {
-    /// Document title
+pub(crate) struct MarkdownArgs {
     pub title: Option<String>,
-    /// Include parameter types
     pub types: bool,
 }
 
 impl Parse for MarkdownArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut args = MarkdownArgs::default();
-        args.types = true; // default to showing types
+        args.types = true;
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
@@ -54,8 +52,8 @@ impl Parse for MarkdownArgs {
     }
 }
 
-/// Expand the #[markdown] attribute macro
-pub fn expand_markdown(args: MarkdownArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+
+pub(crate) fn expand_markdown(args: MarkdownArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
@@ -65,7 +63,6 @@ pub fn expand_markdown(args: MarkdownArgs, impl_block: ItemImpl) -> syn::Result<
         .unwrap_or_else(|| format!("{} API", struct_name_str));
     let show_types = args.types;
 
-    // Generate method documentation
     let method_docs: Vec<String> = methods
         .iter()
         .map(|m| generate_method_doc(m, show_types))
@@ -102,7 +99,6 @@ pub fn expand_markdown(args: MarkdownArgs, impl_block: ItemImpl) -> syn::Result<
     })
 }
 
-/// Generate overview section
 fn generate_overview(name: &str, methods: &[MethodInfo]) -> String {
     let method_count = methods.len();
     let has_async = methods.iter().any(|m| m.is_async);
@@ -121,25 +117,21 @@ fn generate_overview(name: &str, methods: &[MethodInfo]) -> String {
     overview
 }
 
-/// Generate documentation for a single method
 fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
     let name = method.name.to_string();
     let title = name.replace('_', " ").to_title_case();
 
     let mut doc = format!("### {}\n\n", title);
 
-    // Description from doc comment
     if let Some(desc) = &method.docs {
         doc.push_str(desc);
         doc.push_str("\n\n");
     }
 
-    // Async badge
     if method.is_async {
         doc.push_str("*async*\n\n");
     }
 
-    // Method signature
     doc.push_str("```\n");
     doc.push_str(&name);
     doc.push('(');
@@ -153,7 +145,6 @@ fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
 
     doc.push(')');
 
-    // Return type
     if let Some(ty) = &method.return_info.ty {
         if show_types && !method.return_info.is_unit {
             let type_str = quote::quote!(#ty).to_string();
@@ -163,7 +154,6 @@ fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
 
     doc.push_str("\n```\n\n");
 
-    // Parameters section
     if !method.params.is_empty() {
         doc.push_str("**Parameters:**\n\n");
         for param in &method.params {
@@ -183,7 +173,6 @@ fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
         doc.push('\n');
     }
 
-    // Returns section
     if !method.return_info.is_unit {
         doc.push_str("**Returns:** ");
         if let Some(ty) = &method.return_info.ty {
@@ -196,7 +185,6 @@ fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
     doc
 }
 
-/// Format a parameter for display
 fn format_param(param: &ParamInfo, show_types: bool) -> String {
     let name = param.name.to_string();
     if show_types {
@@ -208,7 +196,6 @@ fn format_param(param: &ParamInfo, show_types: bool) -> String {
     }
 }
 
-/// Simplify a type string for display
 fn simplify_type(ty: &str) -> String {
     ty.replace(" < ", "<")
         .replace(" > ", ">")
@@ -217,8 +204,7 @@ fn simplify_type(ty: &str) -> String {
         .replace(":: ", "::")
 }
 
-/// Describe a return type in prose
-fn describe_return_type(ty: &str, info: &crate::parse::ReturnInfo) -> String {
+fn describe_return_type(ty: &str, info: &trellis_parse::ReturnInfo) -> String {
     if info.is_result {
         "Result (success or error)".to_string()
     } else if info.is_option {

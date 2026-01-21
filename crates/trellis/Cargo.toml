@@ -7,7 +7,7 @@ description = "Composable derive macros for common Rust patterns"
 
 [dependencies]
 trellis-core = { path = "../trellis-core" }
-trellis-macros = { path = "../trellis-macros" }
+trellis-macros = { path = "../trellis-macros", default-features = false }
 
 # Re-export common dependencies users will need
 serde = { version = "1", features = ["derive"] }
@@ -39,31 +39,39 @@ optional = true
 default = ["full"]
 
 # Runtime protocols (require external deps)
-mcp = []
-http = ["axum"]
-cli = ["clap"]
-ws = ["axum", "futures"]
-graphql = ["async-graphql", "async-graphql-axum", "axum"]
-jsonrpc = ["axum"]
+mcp = ["trellis-macros/mcp"]
+http = ["trellis-macros/http", "axum"]
+cli = ["trellis-macros/cli", "clap"]
+ws = ["trellis-macros/ws", "axum", "futures"]
+graphql = ["trellis-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
+jsonrpc = ["trellis-macros/jsonrpc", "axum"]
 
 # Schema generators (no runtime deps, just string generation)
-grpc = []
-capnp = []
-thrift = []
+grpc = ["trellis-macros/grpc"]
+capnp = ["trellis-macros/capnp"]
+thrift = ["trellis-macros/thrift"]
+connect = ["trellis-macros/connect"]
+smithy = ["trellis-macros/smithy"]
 
 # Specification generators (no runtime deps)
-openrpc = []
-asyncapi = []
+openrpc = ["trellis-macros/openrpc"]
+asyncapi = ["trellis-macros/asyncapi"]
+jsonschema = ["trellis-macros/jsonschema"]
 
 # Documentation generators (no runtime deps)
-markdown = []
+markdown = ["trellis-macros/markdown"]
+
+# Type stubs (no runtime deps)
+typescript = ["trellis-macros/typescript"]
+python = ["trellis-macros/python"]
 
 # All features
 full = [
     "mcp", "http", "cli", "ws", "graphql", "jsonrpc",
-    "grpc", "capnp", "thrift",
-    "openrpc", "asyncapi",
-    "markdown"
+    "grpc", "capnp", "thrift", "connect", "smithy",
+    "openrpc", "asyncapi", "jsonschema",
+    "markdown",
+    "typescript", "python"
 ]
 
 [dev-dependencies]

@@ -73,6 +73,7 @@ Add `#[graphql]` macro. Would test:
 - Query vs Mutation distinction
 - Nested type resolution
 - N+1 problem considerations
+- **Type mapping**: Currently `rust_type_to_graphql` returns "String" for array/object types (hack in `trellis-graphql/src/lib.rs:394`). Need proper GraphQL list types and custom scalar/object support.
 
 ### "Serve" Coordination Pattern
 Type-safe coordination between derives:

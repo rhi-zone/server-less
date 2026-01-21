@@ -1,43 +1,41 @@
-//! HTTP handler generation.
+//! HTTP handler generation macro.
+//!
+//! Generates axum HTTP handlers from impl blocks.
 
 use heck::ToKebabCase;
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{parse::Parse, GenericArgument, ItemImpl, PathArguments, Token, Type};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
-use crate::rpc;
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use trellis_rpc;
 
 /// Extract the inner type T from Option<T>
 fn extract_option_inner(ty: &Type) -> Option<Type> {
-    if let Type::Path(type_path) = ty
-        && let Some(segment) = type_path.path.segments.last()
-            && segment.ident == "Option"
-                && let PathArguments::AngleBracketed(args) = &segment.arguments
-                    && let Some(GenericArgument::Type(inner)) = args.args.first() {
+    if let Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Option" {
+                if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
                         return Some(inner.clone());
                     }
+                }
+            }
+        }
+    }
     None
 }
 
 /// Per-method HTTP attribute overrides
 #[derive(Default, Clone)]
-pub struct HttpMethodOverride {
-    /// Override HTTP method (GET, POST, etc.)
+pub(crate) struct HttpMethodOverride {
     pub method: Option<String>,
-    /// Override path
     pub path: Option<String>,
-    /// Skip this method (don't generate HTTP handler)
     pub skip: bool,
-    /// Hide from OpenAPI spec
     pub hidden: bool,
 }
 
 impl HttpMethodOverride {
-    /// Parse #[route(...)] attributes from a method
-    ///
-    /// Note: We use `#[route(...)]` instead of `#[http(...)]` for method-level
-    /// attributes to avoid conflict with the impl-level `#[http]` macro.
     fn parse_from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         let mut result = Self::default();
 
@@ -46,7 +44,6 @@ impl HttpMethodOverride {
                 continue;
             }
 
-            // Handle #[route(skip)] style
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("skip") {
                     result.skip = true;
@@ -74,8 +71,7 @@ impl HttpMethodOverride {
 
 /// Arguments for the #[http] attribute
 #[derive(Default)]
-pub struct HttpArgs {
-    /// Base path prefix (e.g., "/api/v1")
+pub(crate) struct HttpArgs {
     pub prefix: Option<String>,
 }
 
@@ -109,23 +105,20 @@ impl Parse for HttpArgs {
     }
 }
 
-/// Expand the #[http] attribute macro
-pub fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+
+pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
     let prefix = args.prefix.unwrap_or_default();
 
-    // Generate handler functions and route registrations
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
     let mut openapi_methods = Vec::new();
 
     for method in &methods {
-        // Parse per-method overrides
         let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
 
-        // Skip methods marked with #[http(skip)]
         if overrides.skip {
             continue;
         }
@@ -136,22 +129,16 @@ pub fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStr
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
         routes.push(route);
 
-        // Track methods for OpenAPI (unless hidden)
         if !overrides.hidden {
             openapi_methods.push((method.clone(), overrides.clone()));
         }
     }
 
-    // Generate the router function
-    let _router_fn = generate_router(&struct_name, &routes);
-
-    // Generate OpenAPI spec function (only non-hidden methods)
     let openapi_fn = generate_openapi_spec(&struct_name, &prefix, &openapi_methods)?;
 
     Ok(quote! {
         #impl_block
 
-        // Generated HTTP handlers
         impl #struct_name {
             /// Create an axum Router for this service
             pub fn http_router(self) -> ::axum::Router
@@ -176,23 +163,19 @@ pub fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStr
     })
 }
 
-/// Generate a handler function for a method
-fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream> {
+fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
 
-    // Determine parameter extraction
     let (param_extractions, param_calls) = generate_param_handling(method)?;
 
-    // Determine how to call the method and handle the response
     let call = if method.is_async {
         quote! { state.#method_name(#(#param_calls),*).await }
     } else {
         quote! { state.#method_name(#(#param_calls),*) }
     };
 
-    // Generate response handling based on return type
     let response = generate_response_handling(method, &call)?;
 
     let handler = quote! {
@@ -208,23 +191,18 @@ fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Resul
     Ok(handler)
 }
 
-/// Generate parameter extraction and call arguments
-fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>, Vec<TokenStream>)> {
+fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>)> {
     let mut extractions = Vec::new();
     let mut calls = Vec::new();
 
     let http_method = infer_http_method(&method.name.to_string());
     let has_body = matches!(http_method, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch);
 
-    // Collect ID params (path params) and other params
     let id_params: Vec<_> = method.params.iter().filter(|p| p.is_id).collect();
     let other_params: Vec<_> = method.params.iter().filter(|p| !p.is_id).collect();
 
-    // Path parameters
     if !id_params.is_empty() {
-        // For now, assume a single ID param named "id" in the path
         for param in &id_params {
-            let _name = &param.name;
             let ty = &param.ty;
             extractions.push(quote! {
                 path_extractor: ::axum::extract::Path<#ty>
@@ -233,20 +211,16 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
         }
     }
 
-    // Query vs Body params
     if !other_params.is_empty() {
         if has_body {
-            // POST/PUT/PATCH: use JSON body
             extractions.push(quote! {
                 body_extractor: ::axum::extract::Json<::trellis::serde_json::Value>
             });
 
             for param in &other_params {
-                let _name = &param.name;
                 let name_str = param.name.to_string();
                 let ty = &param.ty;
                 if param.is_optional {
-                    // Extract inner type from Option<T> to deserialize as T, result wrapped in Option
                     let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
                     calls.push(quote! {
                         body_extractor.0.get(#name_str).and_then(|v| ::trellis::serde_json::from_value::<#inner_ty>(v.clone()).ok())
@@ -258,7 +232,6 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
                 }
             }
         } else {
-            // GET/DELETE: use query parameters
             extractions.push(quote! {
                 query_extractor: ::axum::extract::Query<::std::collections::HashMap<String, String>>
             });
@@ -267,7 +240,6 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
                 let name_str = param.name.to_string();
                 let ty = &param.ty;
                 if param.is_optional {
-                    // Extract inner type from Option<T> to parse as T, result wrapped in Option
                     let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
                     calls.push(quote! {
                         query_extractor.0.get(#name_str).and_then(|v| v.parse::<#inner_ty>().ok())
@@ -284,18 +256,15 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream>
     Ok((extractions, calls))
 }
 
-/// Generate response handling based on return type
-fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::Result<TokenStream> {
+fn generate_response_handling(method: &MethodInfo, call: &TokenStream2) -> syn::Result<TokenStream2> {
     let ret = &method.return_info;
 
     if ret.is_unit {
-        // Returns () -> 204 No Content
         Ok(quote! {
             #call;
             ::axum::http::StatusCode::NO_CONTENT
         })
     } else if ret.is_result {
-        // Returns Result<T, E> -> 200 or error
         Ok(quote! {
             use ::axum::response::IntoResponse;
             match #call {
@@ -313,7 +282,6 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
             }
         })
     } else if ret.is_option {
-        // Returns Option<T> -> 200 or 404
         Ok(quote! {
             use ::axum::response::IntoResponse;
             match #call {
@@ -322,12 +290,6 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
             }
         })
     } else if ret.is_stream {
-        // Returns impl Stream<Item=T> -> SSE
-        // Box::pin converts the stream to Pin<Box<dyn Stream>> which:
-        // 1. Erases the concrete type, allowing different stream impls
-        // 2. Makes the stream 'static by owning the data
-        // Note: In Rust 2024, users may need `+ use<>` on their method
-        // return types to avoid implicit lifetime capture issues.
         Ok(quote! {
             use ::trellis::futures::StreamExt;
             let stream = #call;
@@ -343,7 +305,6 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
             )
         })
     } else {
-        // Returns T -> 200 with JSON
         Ok(quote! {
             let result = #call;
             ::axum::Json(result)
@@ -351,13 +312,11 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream) -> syn::R
     }
 }
 
-/// Generate route registration
-fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverride, struct_name: &syn::Ident) -> syn::Result<TokenStream> {
+fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverride, struct_name: &syn::Ident) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
 
-    // Use override or infer HTTP method
     let http_method = if let Some(ref m) = overrides.method {
         match m.as_str() {
             "GET" => HttpMethod::Get,
@@ -371,7 +330,6 @@ fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverr
         infer_http_method(&method_name.to_string())
     };
 
-    // Use override or infer path
     let path = if let Some(ref p) = overrides.path {
         p.clone()
     } else {
@@ -392,23 +350,16 @@ fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverr
     })
 }
 
-/// Generate router function (placeholder - routes added in expand_http)
-fn generate_router(_struct_name: &syn::Ident, _routes: &[TokenStream]) -> TokenStream {
-    quote! {}
-}
-
-/// Generate OpenAPI spec
 fn generate_openapi_spec(
     struct_name: &syn::Ident,
     prefix: &str,
     methods_with_overrides: &[(MethodInfo, HttpMethodOverride)],
-) -> syn::Result<TokenStream> {
+) -> syn::Result<TokenStream2> {
     let mut operation_data = Vec::new();
 
     for (method, overrides) in methods_with_overrides {
         let method_name = method.name.to_string();
 
-        // Use override or infer HTTP method
         let http_method = if let Some(ref m) = overrides.method {
             match m.as_str() {
                 "GET" => HttpMethod::Get,
@@ -422,7 +373,6 @@ fn generate_openapi_spec(
             infer_http_method(&method_name)
         };
 
-        // Use override or infer path
         let path = if let Some(ref p) = overrides.path {
             p.clone()
         } else {
@@ -434,23 +384,20 @@ fn generate_openapi_spec(
         let summary = method.docs.clone().unwrap_or_else(|| method_name.clone());
         let operation_id = method_name.clone();
 
-        // Generate parameter specs
         let has_body = matches!(http_method, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch);
         let id_params: Vec<_> = method.params.iter().filter(|p| p.is_id).collect();
         let other_params: Vec<_> = method.params.iter().filter(|p| !p.is_id).collect();
 
-        // Path parameters
         let path_param_specs: Vec<_> = id_params.iter().map(|p| {
             let name = p.name.to_string();
-            let json_type = rpc::infer_json_type(&p.ty);
+            let json_type = trellis_rpc::infer_json_type(&p.ty);
             quote! { (#name, "path", #json_type, true) }
         }).collect();
 
-        // Query parameters (for GET/DELETE) or body schema (for POST/PUT/PATCH)
-        let query_param_specs: Vec<TokenStream> = if !has_body {
+        let query_param_specs: Vec<TokenStream2> = if !has_body {
             other_params.iter().map(|p| {
                 let name = p.name.to_string();
-                let json_type = rpc::infer_json_type(&p.ty);
+                let json_type = trellis_rpc::infer_json_type(&p.ty);
                 let required = !p.is_optional;
                 quote! { (#name, "query", #json_type, #required) }
             }).collect()
@@ -458,11 +405,10 @@ fn generate_openapi_spec(
             vec![]
         };
 
-        // Request body properties for POST/PUT/PATCH
-        let body_props: Vec<TokenStream> = if has_body {
+        let body_props: Vec<TokenStream2> = if has_body {
             other_params.iter().map(|p| {
                 let name = p.name.to_string();
-                let json_type = rpc::infer_json_type(&p.ty);
+                let json_type = trellis_rpc::infer_json_type(&p.ty);
                 let required = !p.is_optional;
                 quote! { (#name, #json_type, #required) }
             }).collect()
@@ -471,12 +417,11 @@ fn generate_openapi_spec(
         };
         let has_body_props = !body_props.is_empty();
 
-        // Response type info
         let ret = &method.return_info;
         let (success_code, error_responses) = if ret.is_result {
             ("200", true)
         } else if ret.is_option {
-            ("200", false) // 404 handled implicitly
+            ("200", false)
         } else if ret.is_unit {
             ("204", false)
         } else {
@@ -493,7 +438,6 @@ fn generate_openapi_spec(
                 let has_error_responses = #error_responses;
                 let has_body = #has_body_props;
 
-                // Build parameters array
                 let mut parameters: Vec<::trellis::serde_json::Value> = Vec::new();
                 #(
                     {
@@ -518,7 +462,6 @@ fn generate_openapi_spec(
                     }
                 )*
 
-                // Build request body if needed
                 let request_body: Option<::trellis::serde_json::Value> = if has_body {
                     let mut properties = ::trellis::serde_json::Map::new();
                     let mut required_props: Vec<String> = Vec::new();
@@ -549,7 +492,6 @@ fn generate_openapi_spec(
                     None
                 };
 
-                // Build responses
                 let mut responses = ::trellis::serde_json::Map::new();
                 responses.insert(success_code.to_string(), ::trellis::serde_json::json!({
                     "description": "Successful response"
@@ -563,7 +505,6 @@ fn generate_openapi_spec(
                     }));
                 }
 
-                // Build operation object
                 let mut operation = ::trellis::serde_json::json!({
                     "summary": summary,
                     "operationId": operation_id,
@@ -612,8 +553,6 @@ fn generate_openapi_spec(
     })
 }
 
-// Helper types and functions
-
 #[derive(Debug, Clone, Copy)]
 enum HttpMethod {
     Get,
@@ -653,12 +592,11 @@ fn infer_http_method(name: &str) -> HttpMethod {
     } else if name.starts_with("delete_") || name.starts_with("remove_") {
         HttpMethod::Delete
     } else {
-        HttpMethod::Post // RPC fallback
+        HttpMethod::Post
     }
 }
 
 fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo]) -> String {
-    // Extract resource name from method name
     let resource = method_name
         .strip_prefix("get_")
         .or_else(|| method_name.strip_prefix("fetch_"))
@@ -677,7 +615,6 @@ fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo])
         .or_else(|| method_name.strip_prefix("remove_"))
         .unwrap_or(method_name);
 
-    // Convert to kebab-case and pluralize
     let resource_kebab = resource.to_kebab_case();
     let path_resource = if resource_kebab.ends_with('s') {
         resource_kebab
@@ -685,7 +622,6 @@ fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo])
         format!("{}s", resource_kebab)
     };
 
-    // Check if we have ID parameters
     let has_id = params.iter().any(|p| p.is_id);
 
     match http_method {
@@ -701,5 +637,146 @@ fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo])
             format!("/{}/{{id}}", path_resource)
         }
         _ => format!("/{}", path_resource),
+    }
+}
+
+/// Helper attribute for method-level HTTP route customization.
+///
+/// This attribute is used within `#[http]` impl blocks to customize
+/// individual method routing. It is a no-op on its own.
+
+/// Arguments for the #[serve] attribute
+#[derive(Default)]
+pub(crate) struct ServeArgs {
+    /// Protocols to serve (http, ws)
+    pub protocols: Vec<String>,
+    /// Health check path (default: /health)
+    pub health_path: Option<String>,
+}
+
+impl Parse for ServeArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut args = ServeArgs::default();
+
+        while !input.is_empty() {
+            let ident: syn::Ident = input.parse()?;
+            let ident_str = ident.to_string();
+
+            match ident_str.as_str() {
+                "http" | "ws" | "jsonrpc" | "graphql" => {
+                    args.protocols.push(ident_str);
+                }
+                "health" => {
+                    input.parse::<Token![=]>()?;
+                    let lit: syn::LitStr = input.parse()?;
+                    args.health_path = Some(lit.value());
+                }
+                other => {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        format!("unknown protocol `{other}`. Valid: http, ws, jsonrpc, graphql, health"),
+                    ));
+                }
+            }
+
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        Ok(args)
+    }
+}
+
+/// Coordinate multiple protocol handlers into a single server.
+
+pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let struct_name = get_impl_name(&impl_block)?;
+
+    let health_path = args.health_path.unwrap_or_else(|| "/health".to_string());
+
+    // Build router combination based on protocols
+    let router_setup = generate_router_setup(&args.protocols);
+
+    // Generate the serve method
+    let serve_impl = quote! {
+        impl #struct_name {
+            /// Start serving all configured protocols.
+            pub async fn serve(self, addr: impl ::std::convert::AsRef<str>) -> ::std::io::Result<()>
+            where
+                Self: Clone + Send + Sync + 'static,
+            {
+                #router_setup
+
+                // Add health check
+                let router = router.route(
+                    #health_path,
+                    ::axum::routing::get(|| async { "ok" })
+                );
+
+                let listener = ::tokio::net::TcpListener::bind(addr.as_ref()).await?;
+                ::axum::serve(listener, router).await
+            }
+
+            /// Build the combined router without starting the server.
+            pub fn router(self) -> ::axum::Router
+            where
+                Self: Clone + Send + Sync + 'static,
+            {
+                #router_setup
+
+                router.route(
+                    #health_path,
+                    ::axum::routing::get(|| async { "ok" })
+                )
+            }
+        }
+    };
+
+    Ok(quote! {
+        #impl_block
+
+        #serve_impl
+    })
+}
+
+/// Generate router setup code based on enabled protocols
+fn generate_router_setup(protocols: &[String]) -> TokenStream2 {
+    let has_http = protocols.contains(&"http".to_string());
+    let has_ws = protocols.contains(&"ws".to_string());
+    let has_jsonrpc = protocols.contains(&"jsonrpc".to_string());
+    let has_graphql = protocols.contains(&"graphql".to_string());
+
+    // Build list of merge operations
+    let mut parts = Vec::new();
+
+    if has_http {
+        parts.push(quote! { self.clone().http_router() });
+    }
+    if has_ws {
+        parts.push(quote! { self.clone().ws_router() });
+    }
+    if has_jsonrpc {
+        parts.push(quote! { self.clone().jsonrpc_router() });
+    }
+    if has_graphql {
+        parts.push(quote! { self.clone().graphql_router() });
+    }
+
+    if parts.is_empty() {
+        quote! {
+            let router = ::axum::Router::new();
+        }
+    } else if parts.len() == 1 {
+        let first = &parts[0];
+        quote! {
+            let router = #first;
+        }
+    } else {
+        let first = &parts[0];
+        let rest = &parts[1..];
+        quote! {
+            let router = #first #(.merge(#rest))*;
+        }
     }
 }

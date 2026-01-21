@@ -1,4 +1,7 @@
-//! Common parsing utilities for extracting method information.
+//! Shared parsing utilities for trellis proc macros.
+//!
+//! This crate provides common types and functions for extracting
+//! method information from impl blocks.
 
 use syn::{
     FnArg, GenericArgument, Ident, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Pat, PathArguments,
@@ -7,9 +10,8 @@ use syn::{
 
 /// Parsed information about a method
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct MethodInfo {
-    /// The original method (kept for potential future use)
+    /// The original method
     pub method: ImplItemFn,
     /// Method name
     pub name: Ident,
@@ -38,7 +40,6 @@ pub struct ParamInfo {
 
 /// Parsed return type information
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ReturnInfo {
     /// The full return type
     pub ty: Option<Type>,
@@ -69,7 +70,11 @@ impl MethodInfo {
         let is_async = method.sig.asyncness.is_some();
 
         // Skip associated functions without self receiver (constructors, etc.)
-        let has_receiver = method.sig.inputs.iter().any(|arg| matches!(arg, FnArg::Receiver(_)));
+        let has_receiver = method
+            .sig
+            .inputs
+            .iter()
+            .any(|arg| matches!(arg, FnArg::Receiver(_)));
         if !has_receiver {
             return Ok(None);
         }
@@ -95,18 +100,18 @@ impl MethodInfo {
 }
 
 /// Extract doc comments from attributes
-fn extract_docs(attrs: &[syn::Attribute]) -> Option<String> {
+pub fn extract_docs(attrs: &[syn::Attribute]) -> Option<String> {
     let docs: Vec<String> = attrs
         .iter()
         .filter_map(|attr| {
             if attr.path().is_ident("doc")
                 && let Meta::NameValue(meta) = &attr.meta
-                    && let syn::Expr::Lit(syn::ExprLit {
-                        lit: Lit::Str(s), ..
-                    }) = &meta.value
-                    {
-                        return Some(s.value().trim().to_string());
-                    }
+                && let syn::Expr::Lit(syn::ExprLit {
+                    lit: Lit::Str(s), ..
+                }) = &meta.value
+            {
+                return Some(s.value().trim().to_string());
+            }
             None
         })
         .collect();
@@ -119,7 +124,9 @@ fn extract_docs(attrs: &[syn::Attribute]) -> Option<String> {
 }
 
 /// Parse function parameters (excluding self)
-fn parse_params(inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>) -> syn::Result<Vec<ParamInfo>> {
+pub fn parse_params(
+    inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>,
+) -> syn::Result<Vec<ParamInfo>> {
     let mut params = Vec::new();
 
     for arg in inputs {
@@ -154,7 +161,7 @@ fn parse_params(inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>) -> 
 }
 
 /// Parse return type information
-fn parse_return_type(output: &ReturnType) -> ReturnInfo {
+pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
     match output {
         ReturnType::Default => ReturnInfo {
             ty: None,
@@ -247,60 +254,64 @@ fn parse_return_type(output: &ReturnType) -> ReturnInfo {
 }
 
 /// Check if a type is Option<T> and extract T
-fn extract_option_type(ty: &Type) -> Option<Type> {
+pub fn extract_option_type(ty: &Type) -> Option<Type> {
     if let Type::Path(type_path) = ty
         && let Some(segment) = type_path.path.segments.last()
-            && segment.ident == "Option"
-                && let PathArguments::AngleBracketed(args) = &segment.arguments
-                    && let Some(GenericArgument::Type(inner)) = args.args.first() {
-                        return Some(inner.clone());
-                    }
+        && segment.ident == "Option"
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(GenericArgument::Type(inner)) = args.args.first()
+    {
+        return Some(inner.clone());
+    }
     None
 }
 
 /// Check if a type is Option<T>
-fn is_option_type(ty: &Type) -> bool {
+pub fn is_option_type(ty: &Type) -> bool {
     extract_option_type(ty).is_some()
 }
 
 /// Check if a type is Result<T, E> and extract T and E
-fn extract_result_types(ty: &Type) -> Option<(Type, Type)> {
+pub fn extract_result_types(ty: &Type) -> Option<(Type, Type)> {
     if let Type::Path(type_path) = ty
         && let Some(segment) = type_path.path.segments.last()
-            && segment.ident == "Result"
-                && let PathArguments::AngleBracketed(args) = &segment.arguments {
-                    let mut iter = args.args.iter();
-                    if let (Some(GenericArgument::Type(ok)), Some(GenericArgument::Type(err))) =
-                        (iter.next(), iter.next())
-                    {
-                        return Some((ok.clone(), err.clone()));
-                    }
-                }
+        && segment.ident == "Result"
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+    {
+        let mut iter = args.args.iter();
+        if let (Some(GenericArgument::Type(ok)), Some(GenericArgument::Type(err))) =
+            (iter.next(), iter.next())
+        {
+            return Some((ok.clone(), err.clone()));
+        }
+    }
     None
 }
 
 /// Check if a type is impl Stream<Item=T> and extract T
-fn extract_stream_item(ty: &Type) -> Option<Type> {
+pub fn extract_stream_item(ty: &Type) -> Option<Type> {
     if let Type::ImplTrait(impl_trait) = ty {
         for bound in &impl_trait.bounds {
             if let syn::TypeParamBound::Trait(trait_bound) = bound
                 && let Some(segment) = trait_bound.path.segments.last()
-                    && segment.ident == "Stream"
-                        && let PathArguments::AngleBracketed(args) = &segment.arguments {
-                            for arg in &args.args {
-                                if let GenericArgument::AssocType(assoc) = arg
-                                    && assoc.ident == "Item" {
-                                        return Some(assoc.ty.clone());
-                                    }
-                            }
-                        }
+                && segment.ident == "Stream"
+                && let PathArguments::AngleBracketed(args) = &segment.arguments
+            {
+                for arg in &args.args {
+                    if let GenericArgument::AssocType(assoc) = arg
+                        && assoc.ident == "Item"
+                    {
+                        return Some(assoc.ty.clone());
+                    }
+                }
+            }
         }
     }
     None
 }
 
 /// Check if a type is ()
-fn is_unit_type(ty: &Type) -> bool {
+pub fn is_unit_type(ty: &Type) -> bool {
     if let Type::Tuple(tuple) = ty {
         return tuple.elems.is_empty();
     }
@@ -308,7 +319,7 @@ fn is_unit_type(ty: &Type) -> bool {
 }
 
 /// Check if a parameter name looks like an ID
-fn is_id_param(name: &Ident) -> bool {
+pub fn is_id_param(name: &Ident) -> bool {
     let name_str = name.to_string();
     name_str == "id" || name_str.ends_with("_id")
 }
@@ -340,9 +351,10 @@ pub fn extract_methods(impl_block: &ItemImpl) -> syn::Result<Vec<MethodInfo>> {
 /// Get the struct name from an impl block
 pub fn get_impl_name(impl_block: &ItemImpl) -> syn::Result<Ident> {
     if let Type::Path(type_path) = impl_block.self_ty.as_ref()
-        && let Some(segment) = type_path.path.segments.last() {
-            return Ok(segment.ident.clone());
-        }
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        return Ok(segment.ident.clone());
+    }
     Err(syn::Error::new_spanned(
         &impl_block.self_ty,
         "Expected a simple type name",

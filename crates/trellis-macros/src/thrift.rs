@@ -1,21 +1,19 @@
-//! Apache Thrift schema generation.
-//!
-//! Generates .thrift schema definitions from impl blocks.
+//! Apache Thrift schema generation macro.
 
 use heck::{ToSnakeCase, ToUpperCamelCase};
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parse, ItemImpl, Token};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo, ReturnInfo};
 
 /// Arguments for the #[thrift] attribute
 #[derive(Default)]
-pub struct ThriftArgs {
+pub(crate) struct ThriftArgs {
     /// Namespace for the thrift file
-    pub namespace: Option<String>,
+    namespace: Option<String>,
     /// Path to expected schema for validation
-    pub schema: Option<String>,
+    schema: Option<String>,
 }
 
 impl Parse for ThriftArgs {
@@ -52,8 +50,8 @@ impl Parse for ThriftArgs {
     }
 }
 
-/// Expand the #[thrift] attribute macro
-pub fn expand_thrift(args: ThriftArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+
+pub(crate) fn expand_thrift(args: ThriftArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
@@ -176,7 +174,7 @@ fn generate_thrift_method(method: &MethodInfo, index: usize) -> String {
 }
 
 /// Get Thrift return type
-fn get_thrift_return_type(ret: &crate::parse::ReturnInfo) -> &'static str {
+fn get_thrift_return_type(ret: &ReturnInfo) -> &'static str {
     if ret.is_unit {
         "void"
     } else {

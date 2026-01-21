@@ -1,21 +1,19 @@
-//! Cap'n Proto schema generation.
-//!
-//! Generates .capnp schema definitions from impl blocks.
+//! Cap'n Proto schema generation macro.
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
-use proc_macro2::TokenStream;
+
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parse, ItemImpl, Token};
-
-use crate::parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
 
 /// Arguments for the #[capnp] attribute
 #[derive(Default)]
-pub struct CapnpArgs {
+pub(crate) struct CapnpArgs {
     /// Schema ID (required for Cap'n Proto)
-    pub id: Option<String>,
+    id: Option<String>,
     /// Path to expected schema for validation
-    pub schema: Option<String>,
+    schema: Option<String>,
 }
 
 impl Parse for CapnpArgs {
@@ -52,8 +50,8 @@ impl Parse for CapnpArgs {
     }
 }
 
-/// Expand the #[capnp] attribute macro
-pub fn expand_capnp(args: CapnpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream> {
+
+pub(crate) fn expand_capnp(args: CapnpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
@@ -222,7 +220,7 @@ fn rust_type_to_capnp(ty: &Option<syn::Type>) -> &'static str {
         return "Void";
     };
 
-    let type_str = quote::quote!(#ty).to_string();
+    let type_str = quote!(#ty).to_string();
 
     // Check compound types first (Vec, Option) before primitives
     if type_str.contains("Vec < u8 >")
