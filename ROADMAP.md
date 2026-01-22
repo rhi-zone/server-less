@@ -4,7 +4,7 @@ This document outlines the development roadmap for Trellis. Last updated: 2026-0
 
 ## Current Status - Foundation ✅
 
-**18 macros implemented, 171 tests passing, 0 failures**
+**18 macros implemented, 187 tests passing, 0 failures**
 
 ### What's Working
 - ✅ Core runtime protocols (HTTP, CLI, MCP, WebSocket, JSON-RPC, GraphQL)

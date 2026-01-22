@@ -279,7 +279,7 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
                 match #method_call {
                     Ok(items) => {
                         let values: Vec<_> = items.into_iter()
-                            .map(|item| ::async_graphql::Value::String(format!("{:?}", item)))
+                            .map(|item| value_to_graphql(item))
                             .collect();
                         Ok(Some(::async_graphql::Value::List(values)))
                     }
@@ -305,7 +305,7 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
         quote! {
             let items = #method_call;
             let values: Vec<_> = items.into_iter()
-                .map(|item| ::async_graphql::Value::String(format!("{:?}", item)))
+                .map(|item| value_to_graphql(item))
                 .collect();
             Ok(Some(::async_graphql::Value::List(values)))
         }
@@ -317,8 +317,59 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
     };
 
     quote! {
-        fn value_to_graphql<T: std::fmt::Debug>(v: T) -> ::async_graphql::Value {
-            ::async_graphql::Value::String(format!("{:?}", v))
+        fn value_to_graphql<T>(v: T) -> ::async_graphql::Value
+        where
+            T: ::serde::Serialize + std::fmt::Debug,
+        {
+            // Try to serialize to JSON value first
+            if let Ok(json_val) = ::serde_json::to_value(&v) {
+                match json_val {
+                    ::serde_json::Value::Null => ::async_graphql::Value::Null,
+                    ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
+                    ::serde_json::Value::Number(n) => {
+                        if let Some(i) = n.as_i64() {
+                            ::async_graphql::Value::Number((i as i32).into())
+                        } else if let Some(f) = n.as_f64() {
+                            // Convert f64 to JSON value then to GraphQL value
+                            match ::serde_json::to_value(f) {
+                                Ok(::serde_json::Value::Number(num)) => {
+                                    ::async_graphql::Value::Number(num.into())
+                                }
+                                _ => ::async_graphql::Value::String(f.to_string())
+                            }
+                        } else {
+                            ::async_graphql::Value::String(n.to_string())
+                        }
+                    }
+                    ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
+                    ::serde_json::Value::Array(arr) => {
+                        let values: Vec<_> = arr.into_iter()
+                            .map(|item| match item {
+                                ::serde_json::Value::Null => ::async_graphql::Value::Null,
+                                ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
+                                ::serde_json::Value::Number(n) => {
+                                    if let Some(i) = n.as_i64() {
+                                        ::async_graphql::Value::Number((i as i32).into())
+                                    } else {
+                                        // Use the serde_json Number directly
+                                        ::async_graphql::Value::Number(n.into())
+                                    }
+                                }
+                                ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
+                                other => ::async_graphql::Value::String(other.to_string()),
+                            })
+                            .collect();
+                        ::async_graphql::Value::List(values)
+                    }
+                    ::serde_json::Value::Object(_) => {
+                        // For now, serialize objects as strings
+                        ::async_graphql::Value::String(json_val.to_string())
+                    }
+                }
+            } else {
+                // Fallback to Debug formatting
+                ::async_graphql::Value::String(format!("{:?}", v))
+            }
         }
 
         let field = Field::new(#field_name, #type_ref, move |ctx| {
@@ -405,14 +456,51 @@ fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> Toke
 }
 
 fn rust_type_to_graphql(ty: &syn::Type) -> &'static str {
-    let type_str = rhizome_trellis_rpc::infer_json_type(ty);
-    match type_str {
+    let type_str = quote!(#ty).to_string();
+
+    // Try to extract inner type for Vec<T>
+    if type_str.contains("Vec") {
+        return extract_vec_inner_type(&type_str);
+    }
+
+    let json_type = rhizome_trellis_rpc::infer_json_type(ty);
+    match json_type {
         "integer" => "Int",
         "number" => "Float",
         "boolean" => "Boolean",
         "string" => "String",
-        "array" => "String",
-        "object" => "String",
-        _ => "String",
+        _ => "String", // Custom types default to String for now
+    }
+}
+
+fn extract_vec_inner_type(type_str: &str) -> &'static str {
+    // Try to extract T from Vec<T>
+    if let Some(start) = type_str.find("Vec<") {
+        let inner = &type_str[start + 4..];
+        if let Some(end) = inner.find('>') {
+            let inner_type = inner[..end].trim();
+            return map_inner_type_to_graphql(inner_type);
+        }
+    }
+    "String"
+}
+
+fn map_inner_type_to_graphql(inner: &str) -> &'static str {
+    if inner.contains("String") || inner.contains("str") {
+        "String"
+    } else if inner.contains("i32")
+        || inner.contains("i64")
+        || inner.contains("u32")
+        || inner.contains("u64")
+        || inner.contains("isize")
+        || inner.contains("usize")
+    {
+        "Int"
+    } else if inner.contains("f32") || inner.contains("f64") {
+        "Float"
+    } else if inner.contains("bool") {
+        "Boolean"
+    } else {
+        "String" // Custom types default to String
     }
 }
