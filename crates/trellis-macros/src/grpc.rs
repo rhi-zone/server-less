@@ -75,7 +75,7 @@ service {service_name} {{
 
     let validation_method = if let Some(schema_path) = &args.schema {
         quote! {
-            pub fn validate_schema() -> Result<(), String> {
+            pub fn validate_schema() -> Result<(), ::rhizome_trellis::SchemaValidationError> {
                 let expected = include_str!(#schema_path);
                 let generated = Self::proto_schema();
                 fn normalize(s: &str) -> Vec<String> {
@@ -83,28 +83,30 @@ service {service_name} {{
                 }
                 let expected_lines = normalize(expected);
                 let generated_lines = normalize(generated);
-                if expected_lines == generated_lines {
-                    Ok(())
+
+                let mut error = ::rhizome_trellis::SchemaValidationError::new("Proto");
+
+                for line in &expected_lines {
+                    if !generated_lines.contains(line) {
+                        error.add_missing(line.clone());
+                    }
+                }
+
+                for line in &generated_lines {
+                    if !expected_lines.contains(line) {
+                        error.add_extra(line.clone());
+                    }
+                }
+
+                if error.has_differences() {
+                    Err(error)
                 } else {
-                    let mut diff = String::from("Schema mismatch:\n\n");
-                    diff.push_str("Expected methods/messages not found in generated:\n");
-                    for line in &expected_lines {
-                        if !generated_lines.contains(line) {
-                            diff.push_str(&format!("  - {}\n", line));
-                        }
-                    }
-                    diff.push_str("\nGenerated methods/messages not in expected:\n");
-                    for line in &generated_lines {
-                        if !expected_lines.contains(line) {
-                            diff.push_str(&format!("  + {}\n", line));
-                        }
-                    }
-                    Err(diff)
+                    Ok(())
                 }
             }
             pub fn assert_schema_matches() {
-                if let Err(diff) = Self::validate_schema() {
-                    panic!("Proto schema validation failed:\n{}", diff);
+                if let Err(err) = Self::validate_schema() {
+                    panic!("{}", err);
                 }
             }
         }

@@ -246,5 +246,5 @@ fn test_schema_validation_fails_on_mismatch() {
     );
 
     let err = result.unwrap_err();
-    assert!(err.contains("mismatch"), "Error should mention mismatch");
+    assert!(err.has_differences(), "Error should have differences");
 }

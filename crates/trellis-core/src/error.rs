@@ -175,6 +175,69 @@ impl fmt::Display for ErrorResponse {
 
 impl std::error::Error for ErrorResponse {}
 
+/// Error type for schema validation failures.
+///
+/// Used by schema validation methods (validate_schema) in generated code.
+#[derive(Debug, Clone)]
+pub struct SchemaValidationError {
+    /// Schema type (proto, capnp, thrift, smithy, etc.)
+    pub schema_type: String,
+    /// Lines present in expected schema but missing from generated
+    pub missing_lines: Vec<String>,
+    /// Lines present in generated schema but not in expected
+    pub extra_lines: Vec<String>,
+}
+
+impl SchemaValidationError {
+    /// Create a new schema validation error
+    pub fn new(schema_type: impl Into<String>) -> Self {
+        Self {
+            schema_type: schema_type.into(),
+            missing_lines: Vec::new(),
+            extra_lines: Vec::new(),
+        }
+    }
+
+    /// Add a line that's missing from the generated schema
+    pub fn add_missing(&mut self, line: impl Into<String>) {
+        self.missing_lines.push(line.into());
+    }
+
+    /// Add a line that's extra in the generated schema
+    pub fn add_extra(&mut self, line: impl Into<String>) {
+        self.extra_lines.push(line.into());
+    }
+
+    /// Check if there are any differences
+    pub fn has_differences(&self) -> bool {
+        !self.missing_lines.is_empty() || !self.extra_lines.is_empty()
+    }
+}
+
+impl fmt::Display for SchemaValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{} schema validation failed:", self.schema_type)?;
+
+        if !self.missing_lines.is_empty() {
+            writeln!(f, "\nExpected methods/messages not found in generated:")?;
+            for line in &self.missing_lines {
+                writeln!(f, "  - {}", line)?;
+            }
+        }
+
+        if !self.extra_lines.is_empty() {
+            writeln!(f, "\nGenerated methods/messages not in expected:")?;
+            for line in &self.extra_lines {
+                writeln!(f, "  + {}", line)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl std::error::Error for SchemaValidationError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

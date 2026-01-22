@@ -5,7 +5,7 @@
 pub mod error;
 pub mod extract;
 
-pub use error::{ErrorCode, ErrorResponse, IntoErrorCode};
+pub use error::{ErrorCode, ErrorResponse, IntoErrorCode, SchemaValidationError};
 pub use extract::Context;
 
 /// Method metadata extracted from an impl block.
