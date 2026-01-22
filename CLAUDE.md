@@ -204,3 +204,6 @@ Do not:
 - Assume specific runtime environments (tokio vs async-std, etc.)
 - Couple to specific versions of dependencies
 - Use string-based code generation (use `quote!`)
+- Use path dependencies in Cargo.toml - causes clippy to stash changes across repos
+- Use `--no-verify` - fix the issue or fix the hook
+- Assume tools are missing - check if `nix develop` is available for the right environment
