@@ -415,9 +415,41 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
                             .collect();
                         ::async_graphql::Value::List(values)
                     }
-                    ::serde_json::Value::Object(_) => {
-                        // For now, serialize objects as strings
-                        ::async_graphql::Value::String(json_val.to_string())
+                    ::serde_json::Value::Object(obj) => {
+                        // Convert JSON object to GraphQL object
+                        let mut fields = ::async_graphql::indexmap::IndexMap::new();
+                        for (key, value) in obj {
+                            let gql_value = match value {
+                                ::serde_json::Value::Null => ::async_graphql::Value::Null,
+                                ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
+                                ::serde_json::Value::Number(n) => {
+                                    if let Some(i) = n.as_i64() {
+                                        ::async_graphql::Value::Number((i as i32).into())
+                                    } else {
+                                        ::async_graphql::Value::Number(n.into())
+                                    }
+                                }
+                                ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
+                                ::serde_json::Value::Array(arr) => {
+                                    let values: Vec<_> = arr.into_iter()
+                                        .map(|item| match item {
+                                            ::serde_json::Value::Null => ::async_graphql::Value::Null,
+                                            ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
+                                            ::serde_json::Value::Number(n) => ::async_graphql::Value::Number(n.into()),
+                                            ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
+                                            other => ::async_graphql::Value::String(other.to_string()),
+                                        })
+                                        .collect();
+                                    ::async_graphql::Value::List(values)
+                                }
+                                ::serde_json::Value::Object(_) => {
+                                    // Recursively convert nested objects to strings for now
+                                    ::async_graphql::Value::String(value.to_string())
+                                }
+                            };
+                            fields.insert(::async_graphql::Name::new(key), gql_value);
+                        }
+                        ::async_graphql::Value::Object(fields)
                     }
                 }
             } else {

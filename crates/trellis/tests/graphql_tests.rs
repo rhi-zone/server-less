@@ -4,6 +4,7 @@
 #![allow(unused_variables)]
 
 use rhizome_trellis::graphql;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 struct SimpleService {
@@ -188,4 +189,133 @@ async fn test_graphql_execute_list_query() {
         "List query should succeed: {:?}",
         result.errors
     );
+}
+
+// Test custom struct objects
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct User {
+    id: i32,
+    name: String,
+    email: String,
+    active: bool,
+}
+
+#[derive(Clone)]
+struct UserService;
+
+#[graphql]
+impl UserService {
+    /// Get user by ID
+    pub fn get_user(&self, id: i32) -> User {
+        User {
+            id,
+            name: "Alice".to_string(),
+            email: "alice@example.com".to_string(),
+            active: true,
+        }
+    }
+
+    /// List all users
+    pub fn list_users(&self) -> Vec<User> {
+        vec![
+            User {
+                id: 1,
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+                active: true,
+            },
+            User {
+                id: 2,
+                name: "Bob".to_string(),
+                email: "bob@example.com".to_string(),
+                active: false,
+            },
+        ]
+    }
+
+    /// Create user
+    pub fn create_user(&self, name: String, email: String) -> User {
+        User {
+            id: 99,
+            name,
+            email,
+            active: true,
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_graphql_custom_struct_query() {
+    let service = UserService;
+    let schema = service.graphql_schema();
+
+    let result = schema.execute("{ getUser(id: 1) }").await;
+    assert!(
+        result.errors.is_empty(),
+        "Custom struct query should succeed: {:?}",
+        result.errors
+    );
+
+    // The result should be a proper object, not a string
+    let data = result.data.into_json().unwrap();
+    let user = &data["getUser"];
+
+    // Verify we get an object with fields
+    assert!(user.is_object(), "Should return object, got: {:?}", user);
+    assert_eq!(user["id"], 1, "Should have correct id field");
+    assert_eq!(user["name"], "Alice", "Should have correct name field");
+    assert_eq!(
+        user["email"], "alice@example.com",
+        "Should have correct email field"
+    );
+    assert_eq!(user["active"], true, "Should have correct active field");
+}
+
+#[tokio::test]
+async fn test_graphql_custom_struct_list_query() {
+    let service = UserService;
+    let schema = service.graphql_schema();
+
+    let result = schema.execute("{ listUsers }").await;
+    assert!(
+        result.errors.is_empty(),
+        "Custom struct list query should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    let users = &data["listUsers"];
+
+    assert!(users.is_array(), "Should return array");
+    let users_array = users.as_array().unwrap();
+    assert_eq!(users_array.len(), 2, "Should have 2 users");
+
+    // Check first user
+    assert!(users_array[0].is_object(), "User should be object");
+    assert_eq!(users_array[0]["id"], 1);
+    assert_eq!(users_array[0]["name"], "Alice");
+}
+
+#[tokio::test]
+async fn test_graphql_custom_struct_mutation() {
+    let service = UserService;
+    let schema = service.graphql_schema();
+
+    let result = schema
+        .execute(r#"mutation { createUser(name: "Charlie", email: "charlie@example.com") }"#)
+        .await;
+    assert!(
+        result.errors.is_empty(),
+        "Custom struct mutation should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    let user = &data["createUser"];
+
+    assert!(user.is_object(), "Should return object");
+    assert_eq!(user["id"], 99);
+    assert_eq!(user["name"], "Charlie");
+    assert_eq!(user["email"], "charlie@example.com");
+    assert_eq!(user["active"], true);
 }
