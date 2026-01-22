@@ -88,9 +88,98 @@ mod ws;
 /// }
 /// ```
 ///
+/// # Parameter Handling
+///
+/// ```ignore
+/// #[http]
+/// impl BlogService {
+///     // Path parameters (id, post_id, etc. go in URL)
+///     async fn get_post(&self, post_id: u32) -> Post { /* ... */ }
+///     // GET /posts/{post_id}
+///
+///     // Query parameters (GET methods use query string)
+///     async fn search_posts(&self, query: String, tag: Option<String>) -> Vec<Post> {
+///         /* ... */
+///     }
+///     // GET /posts?query=rust&tag=tutorial
+///
+///     // Body parameters (POST/PUT/PATCH use JSON body)
+///     async fn create_post(&self, title: String, content: String) -> Post {
+///         /* ... */
+///     }
+///     // POST /posts with body: {"title": "...", "content": "..."}
+/// }
+/// ```
+///
+/// # Error Handling
+///
+/// ```ignore
+/// #[http]
+/// impl UserService {
+///     // Return Result for error handling
+///     async fn get_user(&self, id: u32) -> Result<User, MyError> {
+///         if id == 0 {
+///             return Err(MyError::InvalidId);
+///         }
+///         Ok(User { id, name: "Alice".into() })
+///     }
+///
+///     // Return Option - None becomes 404
+///     async fn find_user(&self, email: String) -> Option<User> {
+///         // Returns 200 with user or 404 if None
+///         None
+///     }
+/// }
+/// ```
+///
+/// # Real-World Example
+///
+/// ```ignore
+/// #[http(prefix = "/api/v1")]
+/// impl UserService {
+///     // GET /api/v1/users?page=0&limit=10
+///     async fn list_users(
+///         &self,
+///         #[param(default = 0)] page: u32,
+///         #[param(default = 20)] limit: u32,
+///     ) -> Vec<User> {
+///         /* ... */
+///     }
+///
+///     // GET /api/v1/users/{user_id}
+///     async fn get_user(&self, user_id: u32) -> Result<User, ApiError> {
+///         /* ... */
+///     }
+///
+///     // POST /api/v1/users with body: {"name": "...", "email": "..."}
+///     #[response(status = 201)]
+///     #[response(header = "Location", value = "/api/v1/users/{id}")]
+///     async fn create_user(&self, name: String, email: String) -> Result<User, ApiError> {
+///         /* ... */
+///     }
+///
+///     // PUT /api/v1/users/{user_id}
+///     async fn update_user(
+///         &self,
+///         user_id: u32,
+///         name: Option<String>,
+///         email: Option<String>,
+///     ) -> Result<User, ApiError> {
+///         /* ... */
+///     }
+///
+///     // DELETE /api/v1/users/{user_id}
+///     #[response(status = 204)]
+///     async fn delete_user(&self, user_id: u32) -> Result<(), ApiError> {
+///         /* ... */
+///     }
+/// }
+/// ```
+///
 /// # Generated Methods
 /// - `http_router() -> axum::Router` - Complete router with all endpoints
 /// - `http_routes() -> Vec<&'static str>` - List of route paths
+/// - `openapi_spec() -> serde_json::Value` - OpenAPI 3.0 specification
 #[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -188,31 +277,79 @@ pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Generate WebSocket JSON-RPC handlers from an impl block.
 ///
-/// # Example
+/// Methods are exposed as JSON-RPC methods over WebSocket connections.
+/// Supports both sync and async methods.
+///
+/// # Basic Usage
 ///
 /// ```ignore
 /// use server_less::ws;
 ///
-/// struct ChatService;
-///
 /// #[ws(path = "/ws")]
 /// impl ChatService {
-///     /// Send a message to a room
 ///     fn send_message(&self, room: String, content: String) -> Message {
-///         // ...
-///     }
-///
-///     /// Get recent messages
-///     fn get_history(&self, room: String, limit: Option<u32>) -> Vec<Message> {
 ///         // ...
 ///     }
 /// }
 /// ```
 ///
-/// This generates:
-/// - `ChatService::ws_router()` returning an axum Router with WS endpoint
-/// - `ChatService::ws_handle_message(msg)` to handle incoming messages
-/// - `ChatService::ws_methods()` listing available methods
+/// # With Async Methods
+///
+/// ```ignore
+/// #[ws(path = "/ws")]
+/// impl ChatService {
+///     // Async methods work seamlessly
+///     async fn send_message(&self, room: String, content: String) -> Message {
+///         // Can await database, network calls, etc.
+///     }
+///
+///     // Mix sync and async
+///     fn get_rooms(&self) -> Vec<String> {
+///         // Synchronous method
+///     }
+/// }
+/// ```
+///
+/// # Error Handling
+///
+/// ```ignore
+/// #[ws(path = "/ws")]
+/// impl ChatService {
+///     fn send_message(&self, room: String, content: String) -> Result<Message, ChatError> {
+///         if room.is_empty() {
+///             return Err(ChatError::InvalidRoom);
+///         }
+///         Ok(Message::new(room, content))
+///     }
+/// }
+/// ```
+///
+/// # Client Usage
+///
+/// Clients send JSON-RPC 2.0 messages over WebSocket:
+///
+/// ```json
+/// // Request
+/// {
+///   "jsonrpc": "2.0",
+///   "method": "send_message",
+///   "params": {"room": "general", "content": "Hello!"},
+///   "id": 1
+/// }
+///
+/// // Response
+/// {
+///   "jsonrpc": "2.0",
+///   "result": {"id": 123, "room": "general", "content": "Hello!"},
+///   "id": 1
+/// }
+/// ```
+///
+/// # Generated Methods
+/// - `ws_router() -> axum::Router` - Router with WebSocket endpoint
+/// - `ws_handle_message(msg) -> String` - Sync message handler
+/// - `ws_handle_message_async(msg) -> String` - Async message handler
+/// - `ws_methods() -> Vec<&'static str>` - List of available methods
 #[cfg(feature = "ws")]
 #[proc_macro_attribute]
 pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -616,32 +753,96 @@ pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Generate GraphQL schema from an impl block using async-graphql.
 ///
-/// # Example
+/// Methods are automatically classified as Queries or Mutations based on naming:
+/// - Queries: `get_*`, `list_*`, `find_*`, `search_*`, `fetch_*`, `query_*`
+/// - Mutations: everything else (create, update, delete, etc.)
+///
+/// # Basic Usage
 ///
 /// ```ignore
 /// use server_less::graphql;
 ///
-/// struct UserService;
+/// #[graphql]
+/// impl UserService {
+///     // Query: returns single user
+///     async fn get_user(&self, id: String) -> Option<User> {
+///         // ...
+///     }
+///
+///     // Query: returns list of users
+///     async fn list_users(&self) -> Vec<User> {
+///         // ...
+///     }
+///
+///     // Mutation: creates new user
+///     async fn create_user(&self, name: String, email: String) -> User {
+///         // ...
+///     }
+/// }
+/// ```
+///
+/// # Type Mappings
+///
+/// - `String`, `i32`, `bool`, etc. → GraphQL scalars
+/// - `Option<T>` → nullable GraphQL field
+/// - `Vec<T>` → GraphQL list `[T]`
+/// - Custom structs → GraphQL objects (must derive SimpleObject)
+///
+/// ```ignore
+/// use async_graphql::SimpleObject;
+///
+/// #[derive(SimpleObject)]
+/// struct User {
+///     id: String,
+///     name: String,
+///     email: Option<String>,  // Nullable field
+/// }
 ///
 /// #[graphql]
 /// impl UserService {
-///     /// Get user by ID
-///     async fn get_user(&self, id: String) -> Option<User> { None }
+///     async fn get_user(&self, id: String) -> Option<User> {
+///         // Returns User object with proper GraphQL schema
+///     }
 ///
-///     /// Create a new user
-///     async fn create_user(&self, name: String) -> User { ... }
+///     async fn list_users(&self) -> Vec<User> {
+///         // Returns [User] in GraphQL
+///     }
 /// }
-///
-/// // Generated:
-/// // - UserServiceQuery with get_user resolver
-/// // - UserServiceMutation with create_user resolver
-/// // - service.graphql_schema() -> Schema
-/// // - service.graphql_router() -> axum Router at /graphql
-/// // - service.graphql_sdl() -> SDL string
 /// ```
 ///
-/// Methods starting with `get_`, `list_`, `find_`, etc. become Queries.
-/// Other methods become Mutations.
+/// # GraphQL Queries
+///
+/// ```graphql
+/// # Query single user
+/// query {
+///   getUser(id: "123") {
+///     id
+///     name
+///     email
+///   }
+/// }
+///
+/// # List all users
+/// query {
+///   listUsers {
+///     id
+///     name
+///   }
+/// }
+///
+/// # Mutation
+/// mutation {
+///   createUser(name: "Alice", email: "alice@example.com") {
+///     id
+///     name
+///   }
+/// }
+/// ```
+///
+/// # Generated Methods
+/// - `graphql_schema() -> Schema` - async-graphql Schema
+/// - `graphql_router() -> axum::Router` - Router with /graphql endpoint
+/// - `graphql_sdl() -> String` - Schema Definition Language string
 #[cfg(feature = "graphql")]
 #[proc_macro_attribute]
 pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -727,27 +928,131 @@ pub fn route(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This attribute is used within `#[http]` impl blocks to customize
 /// individual method responses. It is a no-op on its own.
 ///
-/// # Example
+/// # Supported Options
+///
+/// - `status = <code>` - Custom HTTP status code (e.g., 201, 204)
+/// - `content_type = "<type>"` - Custom content type
+/// - `header = "<name>", value = "<value>"` - Add custom response header
+///
+/// Multiple `#[response(...)]` attributes can be combined on a single method.
+///
+/// # Examples
 ///
 /// ```ignore
 /// #[http(prefix = "/api")]
 /// impl MyService {
+///     // Custom status code for creation
 ///     #[response(status = 201)]
 ///     fn create_item(&self, name: String) -> Item { /* ... */ }
 ///
+///     // No content response
 ///     #[response(status = 204)]
 ///     fn delete_item(&self, id: String) { /* ... */ }
 ///
+///     // Binary response with custom content type
 ///     #[response(content_type = "application/octet-stream")]
 ///     fn download(&self, id: String) -> Vec<u8> { /* ... */ }
 ///
+///     // Add custom headers
 ///     #[response(header = "X-Custom", value = "foo")]
 ///     fn with_header(&self) -> String { /* ... */ }
+///
+///     // Combine multiple response attributes
+///     #[response(status = 201)]
+///     #[response(header = "Location", value = "/api/items/123")]
+///     #[response(header = "X-Request-Id", value = "abc")]
+///     fn create_with_headers(&self, name: String) -> Item { /* ... */ }
 /// }
 /// ```
 #[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn response(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Pass through unchanged - the #[http] macro parses these attributes
+    item
+}
+
+/// Helper attribute for parameter-level HTTP customization.
+///
+/// This attribute is used on function parameters within `#[http]` impl blocks
+/// to customize parameter extraction and naming. It is a no-op on its own.
+///
+/// **Note:** Requires nightly Rust with `#![feature(register_tool)]` and
+/// `#![register_tool(param)]` at the crate root.
+///
+/// # Supported Options
+///
+/// - `name = "<wire_name>"` - Use a different name on the wire (e.g., `q` instead of `query`)
+/// - `default = <value>` - Provide a default value for optional parameters
+/// - `query` - Force parameter to come from query string
+/// - `path` - Force parameter to come from URL path
+/// - `body` - Force parameter to come from request body
+/// - `header` - Extract parameter from HTTP header
+///
+/// # Location Inference
+///
+/// When no location is specified, parameters are inferred based on conventions:
+/// - Parameters named `id` or ending in `_id` → path parameters
+/// - POST/PUT/PATCH methods → body parameters
+/// - GET/DELETE methods → query parameters
+///
+/// # Examples
+///
+/// ```ignore
+/// #![feature(register_tool)]
+/// #![register_tool(param)]
+///
+/// #[http(prefix = "/api")]
+/// impl SearchService {
+///     // Rename parameter: code uses `query`, API accepts `q`
+///     fn search(&self, #[param(name = "q")] query: String) -> Vec<Result> {
+///         /* ... */
+///     }
+///
+///     // Default value for pagination
+///     fn list_items(
+///         &self,
+///         #[param(default = 0)] offset: u32,
+///         #[param(default = 10)] limit: u32,
+///     ) -> Vec<Item> {
+///         /* ... */
+///     }
+///
+///     // Extract API key from header
+///     fn protected_endpoint(
+///         &self,
+///         #[param(header, name = "X-API-Key")] api_key: String,
+///         data: String,
+///     ) -> String {
+///         /* ... */
+///     }
+///
+///     // Override location inference: force to query even though method is POST
+///     fn search_posts(
+///         &self,
+///         #[param(query)] filter: String,
+///         #[param(body)] content: String,
+///     ) -> Vec<Post> {
+///         /* ... */
+///     }
+///
+///     // Combine multiple options
+///     fn advanced(
+///         &self,
+///         #[param(query, name = "page", default = 1)] page_num: u32,
+///     ) -> Vec<Item> {
+///         /* ... */
+///     }
+/// }
+/// ```
+///
+/// # OpenAPI Integration
+///
+/// - Parameters with `name` are documented with their wire names
+/// - Parameters with `default` are marked as not required
+/// - Location overrides are reflected in OpenAPI specs
+#[cfg(feature = "http")]
+#[proc_macro_attribute]
+pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Pass through unchanged - the #[http] macro parses these attributes
     item
 }
