@@ -1,48 +1,12 @@
-# Trellis Backlog
+# Trellis TODO
 
-Prioritized backlog of features, improvements, and ideas.
+Prioritized backlog of pending features, improvements, and ideas.
 
-## Completed
-
-### ✅ Recent (January 2025)
-- **GraphQL array type mapping**: Vec<T> → proper GraphQL List(T) with inner type extraction
-- **GraphQL object type mapping**: Custom structs convert to proper GraphQL objects (not JSON strings)
-- **Schema validation error types**: Replaced panic!() with Result<_, SchemaValidationError>
-- **Module-level documentation**: Added comprehensive docs to all 17 macro modules
-- **Compile-time validation**: HTTP path validation with detailed error messages
-- **Duplicate route detection**: Catches conflicting routes at compile time
-- **Route override implementation**: `#[route(method="POST", path="/custom", skip, hidden)]`
-- **Tutorial creation**: REST API and Multi-Protocol tutorials (1000+ lines)
-- **Helpful error messages**: All macros now provide actionable hints and examples
-
-### ✅ Feature Gates in lib.rs
-Added `#[cfg(feature = "...")]` guards around macro re-exports.
-Features: `mcp`, `http`, `cli`, `ws`, `full` (default = all).
-
-### ✅ E2E Testing Strategy
-Implemented in `tests/e2e_tests.rs`:
-- Reference implementations in `Calculator` struct
-- Protocol wrappers (`McpCalculator`, `WsCalculator`, etc.)
-- Cross-protocol consistency tests
-
-### ✅ Async Method Support
-MCP and WS now support async methods:
-- `mcp_call` / `ws_handle_message`: sync callers, error on async methods
-- `mcp_call_async` / `ws_handle_message_async`: async callers, await async methods
-- WebSocket connections use async dispatch (real connections work with async)
-
-### ✅ Better Error Messages with Spans
-Improved all macro error messages:
-- Unknown attributes now list valid options
-- Associated functions without `&self` (constructors) are silently skipped
-- Unsupported parameter patterns report errors instead of being silently skipped
-
-### ✅ Documentation
-- Updated lib.rs crate docs with all features
-- Updated README.md with real examples
-- Documented async support, SSE streaming, feature flags
+> **Note:** For completed items, see [CHANGELOG.md](./CHANGELOG.md)
 
 **Current Status:** 187 tests passing, all clippy checks clean
+
+---
 
 ## High Priority
 
