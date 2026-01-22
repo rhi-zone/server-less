@@ -1,8 +1,8 @@
 //! Integration tests for the MCP macro.
 
 use serde::{Deserialize, Serialize};
-use trellis::mcp;
 use tokio;
+use trellis::mcp;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -232,7 +232,9 @@ async fn test_mcp_sync_method_with_async_call() {
     let service = AsyncService;
 
     // Sync method should work with async call
-    let result = service.mcp_call_async("async_sync_add", serde_json::json!({"a": 10, "b": 7})).await;
+    let result = service
+        .mcp_call_async("async_sync_add", serde_json::json!({"a": 10, "b": 7}))
+        .await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), serde_json::json!(17));
 }
@@ -242,7 +244,9 @@ async fn test_mcp_async_method_with_async_call() {
     let service = AsyncService;
 
     // Async method should work with async call
-    let result = service.mcp_call_async("async_async_fetch", serde_json::json!({"id": "abc"})).await;
+    let result = service
+        .mcp_call_async("async_async_fetch", serde_json::json!({"id": "abc"}))
+        .await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), serde_json::json!("Fetched: abc"));
 }
@@ -251,7 +255,9 @@ async fn test_mcp_async_method_with_async_call() {
 async fn test_mcp_async_compute() {
     let service = AsyncService;
 
-    let result = service.mcp_call_async("async_async_compute", serde_json::json!({"n": 21})).await;
+    let result = service
+        .mcp_call_async("async_async_compute", serde_json::json!({"n": 21}))
+        .await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), serde_json::json!(42));
 }

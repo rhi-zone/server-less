@@ -191,7 +191,10 @@ fn test_capnp_return_types() {
 #[derive(Clone)]
 struct ValidatedCapnpService;
 
-#[capnp(id = "0xabcd1234abcd1234", schema = "../fixtures/validated_service.capnp")]
+#[capnp(
+    id = "0xabcd1234abcd1234",
+    schema = "../fixtures/validated_service.capnp"
+)]
 impl ValidatedCapnpService {
     /// Get greeting
     pub fn get_greeting(&self) -> String {
@@ -222,7 +225,10 @@ fn test_capnp_schema_validation_result() {
 struct MismatchedCapnpService;
 
 // This service doesn't match the validated_service.capnp
-#[capnp(id = "0xabcd1234abcd1234", schema = "../fixtures/validated_service.capnp")]
+#[capnp(
+    id = "0xabcd1234abcd1234",
+    schema = "../fixtures/validated_service.capnp"
+)]
 impl MismatchedCapnpService {
     /// Different method
     pub fn different_method(&self) -> String {

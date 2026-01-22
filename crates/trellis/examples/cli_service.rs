@@ -35,13 +35,11 @@ pub struct UserService {
 impl UserService {
     pub fn new() -> Self {
         Self {
-            users: std::sync::Arc::new(std::sync::Mutex::new(vec![
-                User {
-                    id: "1".to_string(),
-                    name: "Alice".to_string(),
-                    email: "alice@example.com".to_string(),
-                },
-            ])),
+            users: std::sync::Arc::new(std::sync::Mutex::new(vec![User {
+                id: "1".to_string(),
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+            }])),
         }
     }
 }

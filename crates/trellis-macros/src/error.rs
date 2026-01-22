@@ -14,7 +14,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse::Parse, punctuated::Punctuated, Data, DeriveInput, Fields, Ident, Token};
+use syn::{Data, DeriveInput, Fields, Ident, Token, parse::Parse, punctuated::Punctuated};
 
 /// Arguments for the #[error(...)] attribute on variants
 #[derive(Default)]
@@ -125,7 +125,7 @@ pub fn expand_trellis_error(input: DeriveInput) -> syn::Result<TokenStream> {
             }
             Some(ErrorCodeSpec::Numeric(status)) => {
                 // Map HTTP status to ErrorCode
-                
+
                 match status {
                     400 => quote! { ::trellis::ErrorCode::InvalidInput },
                     401 => quote! { ::trellis::ErrorCode::Unauthenticated },

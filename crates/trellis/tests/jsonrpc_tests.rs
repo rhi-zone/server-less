@@ -95,10 +95,12 @@ async fn test_jsonrpc_method_not_found() {
 
     let response = calc.jsonrpc_handle(request).await;
     assert!(response["error"].is_object());
-    assert!(response["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("not found"));
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not found")
+    );
 }
 
 #[tokio::test]

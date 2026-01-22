@@ -338,9 +338,17 @@ fn test_http_openapi_has_endpoints() {
     let paths = spec["paths"].as_object().unwrap();
 
     // Should have our endpoints (create_sum -> POST /sums, get_sqrt -> GET /sqrts)
-    assert!(paths.contains_key("/api/sums"), "Expected /api/sums, got: {:?}", paths.keys().collect::<Vec<_>>());
+    assert!(
+        paths.contains_key("/api/sums"),
+        "Expected /api/sums, got: {:?}",
+        paths.keys().collect::<Vec<_>>()
+    );
     // get_sqrt takes n which is not an ID, so it's /sqrts not /sqrts/{id}
-    assert!(paths.contains_key("/api/sqrts"), "Expected /api/sqrts, got: {:?}", paths.keys().collect::<Vec<_>>());
+    assert!(
+        paths.contains_key("/api/sqrts"),
+        "Expected /api/sqrts, got: {:?}",
+        paths.keys().collect::<Vec<_>>()
+    );
 }
 
 // ============================================================================
@@ -372,8 +380,12 @@ fn test_mcp_ws_produce_same_results() {
     let ws_calc = WsCalculator(Calculator::new(2));
 
     // Test add
-    let mcp_result = mcp_calc.mcp_call("calc_add", serde_json::json!({"a": 15, "b": 7})).unwrap();
-    let ws_response = ws_calc.ws_handle_message(r#"{"method": "add", "params": {"a": 15, "b": 7}}"#).unwrap();
+    let mcp_result = mcp_calc
+        .mcp_call("calc_add", serde_json::json!({"a": 15, "b": 7}))
+        .unwrap();
+    let ws_response = ws_calc
+        .ws_handle_message(r#"{"method": "add", "params": {"a": 15, "b": 7}}"#)
+        .unwrap();
     let ws_json: serde_json::Value = serde_json::from_str(&ws_response).unwrap();
 
     assert_eq!(mcp_result.as_i64(), ws_json["result"].as_i64());
@@ -389,11 +401,18 @@ fn test_all_protocols_agree_on_sqrt() {
     let expected = ref_calc.ref_find_sqrt(n).unwrap();
 
     // MCP
-    let mcp_result = mcp_calc.mcp_call("calc_find_sqrt", serde_json::json!({"n": n})).unwrap();
+    let mcp_result = mcp_calc
+        .mcp_call("calc_find_sqrt", serde_json::json!({"n": n}))
+        .unwrap();
     assert_eq!(mcp_result.as_i64().unwrap(), expected);
 
     // WS
-    let ws_response = ws_calc.ws_handle_message(&format!(r#"{{"method": "find_sqrt", "params": {{"n": {}}}}}"#, n)).unwrap();
+    let ws_response = ws_calc
+        .ws_handle_message(&format!(
+            r#"{{"method": "find_sqrt", "params": {{"n": {}}}}}"#,
+            n
+        ))
+        .unwrap();
     let ws_json: serde_json::Value = serde_json::from_str(&ws_response).unwrap();
     assert_eq!(ws_json["result"].as_i64().unwrap(), expected);
 }

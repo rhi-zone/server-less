@@ -7,8 +7,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[jsonschema] attribute
 #[derive(Default)]
@@ -53,8 +53,10 @@ impl Parse for JsonSchemaArgs {
     }
 }
 
-
-pub(crate) fn expand_jsonschema(args: JsonSchemaArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_jsonschema(
+    args: JsonSchemaArgs,
+    impl_block: ItemImpl,
+) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
@@ -110,11 +112,7 @@ fn generate_schema_definitions(method: &MethodInfo) -> Vec<String> {
     let response_name = format!("{}Response", capitalize(&method_name));
 
     // Generate request schema
-    let request_props: Vec<String> = method
-        .params
-        .iter()
-        .map(generate_property)
-        .collect();
+    let request_props: Vec<String> = method.params.iter().map(generate_property).collect();
 
     let required_fields: Vec<String> = method
         .params

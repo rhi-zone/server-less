@@ -51,9 +51,18 @@ fn test_proto_rpc_methods() {
     // Check RPC methods (CamelCase)
     assert!(proto.contains("rpc GetUser"), "Should have GetUser rpc");
     assert!(proto.contains("rpc ListUsers"), "Should have ListUsers rpc");
-    assert!(proto.contains("rpc CreateUser"), "Should have CreateUser rpc");
-    assert!(proto.contains("rpc DeleteUser"), "Should have DeleteUser rpc");
-    assert!(proto.contains("rpc UpdateUser"), "Should have UpdateUser rpc");
+    assert!(
+        proto.contains("rpc CreateUser"),
+        "Should have CreateUser rpc"
+    );
+    assert!(
+        proto.contains("rpc DeleteUser"),
+        "Should have DeleteUser rpc"
+    );
+    assert!(
+        proto.contains("rpc UpdateUser"),
+        "Should have UpdateUser rpc"
+    );
 }
 
 #[test]
@@ -179,7 +188,10 @@ fn test_proto_return_types() {
 #[derive(Clone)]
 struct ValidatedService;
 
-#[grpc(package = "validated.v1", schema = "../fixtures/validated_service.proto")]
+#[grpc(
+    package = "validated.v1",
+    schema = "../fixtures/validated_service.proto"
+)]
 impl ValidatedService {
     /// Get greeting
     pub fn get_greeting(&self) -> String {
@@ -210,7 +222,10 @@ fn test_schema_validation_result() {
 struct MismatchedService;
 
 // This service doesn't match the validated_service.proto
-#[grpc(package = "validated.v1", schema = "../fixtures/validated_service.proto")]
+#[grpc(
+    package = "validated.v1",
+    schema = "../fixtures/validated_service.proto"
+)]
 impl MismatchedService {
     /// Different method
     pub fn different_method(&self) -> String {
@@ -222,7 +237,10 @@ impl MismatchedService {
 fn test_schema_validation_fails_on_mismatch() {
     // Should return Err - schema doesn't match
     let result = MismatchedService::validate_schema();
-    assert!(result.is_err(), "Validation should fail for mismatched service");
+    assert!(
+        result.is_err(),
+        "Validation should fail for mismatched service"
+    );
 
     let err = result.unwrap_err();
     assert!(err.contains("mismatch"), "Error should mention mismatch");

@@ -6,22 +6,18 @@ use heck::ToKebabCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{parse::Parse, GenericArgument, ItemImpl, PathArguments, Token, Type};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
-use trellis_rpc;
+use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Extract the inner type T from Option<T>
 fn extract_option_inner(ty: &Type) -> Option<Type> {
-    if let Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "Option" {
-                if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
-                        return Some(inner.clone());
-                    }
-                }
-            }
-        }
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == "Option"
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(GenericArgument::Type(inner)) = args.args.first()
+    {
+        return Some(inner.clone());
     }
     None
 }
@@ -104,7 +100,6 @@ impl Parse for HttpArgs {
         Ok(args)
     }
 }
-
 
 pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
@@ -191,12 +186,17 @@ fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Resul
     Ok(handler)
 }
 
-fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>)> {
+fn generate_param_handling(
+    method: &MethodInfo,
+) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>)> {
     let mut extractions = Vec::new();
     let mut calls = Vec::new();
 
     let http_method = infer_http_method(&method.name.to_string());
-    let has_body = matches!(http_method, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch);
+    let has_body = matches!(
+        http_method,
+        HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
+    );
 
     let id_params: Vec<_> = method.params.iter().filter(|p| p.is_id).collect();
     let other_params: Vec<_> = method.params.iter().filter(|p| !p.is_id).collect();
@@ -256,7 +256,10 @@ fn generate_param_handling(method: &MethodInfo) -> syn::Result<(Vec<TokenStream2
     Ok((extractions, calls))
 }
 
-fn generate_response_handling(method: &MethodInfo, call: &TokenStream2) -> syn::Result<TokenStream2> {
+fn generate_response_handling(
+    method: &MethodInfo,
+    call: &TokenStream2,
+) -> syn::Result<TokenStream2> {
     let ret = &method.return_info;
 
     if ret.is_unit {
@@ -312,7 +315,12 @@ fn generate_response_handling(method: &MethodInfo, call: &TokenStream2) -> syn::
     }
 }
 
-fn generate_route(prefix: &str, method: &MethodInfo, overrides: &HttpMethodOverride, struct_name: &syn::Ident) -> syn::Result<TokenStream2> {
+fn generate_route(
+    prefix: &str,
+    method: &MethodInfo,
+    overrides: &HttpMethodOverride,
+    struct_name: &syn::Ident,
+) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
@@ -384,34 +392,46 @@ fn generate_openapi_spec(
         let summary = method.docs.clone().unwrap_or_else(|| method_name.clone());
         let operation_id = method_name.clone();
 
-        let has_body = matches!(http_method, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch);
+        let has_body = matches!(
+            http_method,
+            HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
+        );
         let id_params: Vec<_> = method.params.iter().filter(|p| p.is_id).collect();
         let other_params: Vec<_> = method.params.iter().filter(|p| !p.is_id).collect();
 
-        let path_param_specs: Vec<_> = id_params.iter().map(|p| {
-            let name = p.name.to_string();
-            let json_type = trellis_rpc::infer_json_type(&p.ty);
-            quote! { (#name, "path", #json_type, true) }
-        }).collect();
-
-        let query_param_specs: Vec<TokenStream2> = if !has_body {
-            other_params.iter().map(|p| {
+        let path_param_specs: Vec<_> = id_params
+            .iter()
+            .map(|p| {
                 let name = p.name.to_string();
                 let json_type = trellis_rpc::infer_json_type(&p.ty);
-                let required = !p.is_optional;
-                quote! { (#name, "query", #json_type, #required) }
-            }).collect()
+                quote! { (#name, "path", #json_type, true) }
+            })
+            .collect();
+
+        let query_param_specs: Vec<TokenStream2> = if !has_body {
+            other_params
+                .iter()
+                .map(|p| {
+                    let name = p.name.to_string();
+                    let json_type = trellis_rpc::infer_json_type(&p.ty);
+                    let required = !p.is_optional;
+                    quote! { (#name, "query", #json_type, #required) }
+                })
+                .collect()
         } else {
             vec![]
         };
 
         let body_props: Vec<TokenStream2> = if has_body {
-            other_params.iter().map(|p| {
-                let name = p.name.to_string();
-                let json_type = trellis_rpc::infer_json_type(&p.ty);
-                let required = !p.is_optional;
-                quote! { (#name, #json_type, #required) }
-            }).collect()
+            other_params
+                .iter()
+                .map(|p| {
+                    let name = p.name.to_string();
+                    let json_type = trellis_rpc::infer_json_type(&p.ty);
+                    let required = !p.is_optional;
+                    quote! { (#name, #json_type, #required) }
+                })
+                .collect()
         } else {
             vec![]
         };
@@ -640,11 +660,6 @@ fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo])
     }
 }
 
-/// Helper attribute for method-level HTTP route customization.
-///
-/// This attribute is used within `#[http]` impl blocks to customize
-/// individual method routing. It is a no-op on its own.
-
 /// Arguments for the #[serve] attribute
 #[derive(Default)]
 pub(crate) struct ServeArgs {
@@ -674,7 +689,9 @@ impl Parse for ServeArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown protocol `{other}`. Valid: http, ws, jsonrpc, graphql, health"),
+                        format!(
+                            "unknown protocol `{other}`. Valid: http, ws, jsonrpc, graphql, health"
+                        ),
                     ));
                 }
             }
@@ -689,7 +706,6 @@ impl Parse for ServeArgs {
 }
 
 /// Coordinate multiple protocol handlers into a single server.
-
 pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
 

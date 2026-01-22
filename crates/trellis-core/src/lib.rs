@@ -2,7 +2,6 @@
 //!
 //! This crate provides the foundational types that trellis macros generate code against.
 
-
 pub mod error;
 pub mod extract;
 
@@ -25,9 +24,9 @@ pub struct MethodInfo {
     pub is_async: bool,
     /// Whether the return type is a Stream
     pub is_streaming: bool,
-    /// Whether the return type is Option<T>
+    /// Whether the return type is `Option<T>`
     pub is_optional: bool,
-    /// Whether the return type is Result<T, E>
+    /// Whether the return type is `Result<T, E>`
     pub is_result: bool,
 }
 
@@ -38,7 +37,7 @@ pub struct ParamInfo {
     pub name: String,
     /// Type as string
     pub ty: String,
-    /// Whether this is an Option<T>
+    /// Whether this is an `Option<T>`
     pub is_optional: bool,
     /// Whether this looks like an ID parameter (ends with _id or is named id)
     pub is_id: bool,
@@ -65,7 +64,9 @@ impl HttpMethod {
             || name.starts_with("search_")
         {
             HttpMethod::Get
-        } else if name.starts_with("create_") || name.starts_with("add_") || name.starts_with("new_")
+        } else if name.starts_with("create_")
+            || name.starts_with("add_")
+            || name.starts_with("new_")
         {
             HttpMethod::Post
         } else if name.starts_with("update_") || name.starts_with("set_") {
@@ -122,7 +123,11 @@ pub fn infer_path(method_name: &str, http_method: HttpMethod) -> String {
     match http_method {
         // Collection operations
         HttpMethod::Post => format!("/{path_resource}"),
-        HttpMethod::Get if method_name.starts_with("list_") || method_name.starts_with("search_") || method_name.starts_with("find_") => {
+        HttpMethod::Get
+            if method_name.starts_with("list_")
+                || method_name.starts_with("search_")
+                || method_name.starts_with("find_") =>
+        {
             format!("/{path_resource}")
         }
         // Single resource operations
@@ -142,27 +147,21 @@ mod tests {
         assert_eq!(HttpMethod::infer_from_name("list_users"), HttpMethod::Get);
         assert_eq!(HttpMethod::infer_from_name("create_user"), HttpMethod::Post);
         assert_eq!(HttpMethod::infer_from_name("update_user"), HttpMethod::Put);
-        assert_eq!(HttpMethod::infer_from_name("delete_user"), HttpMethod::Delete);
-        assert_eq!(HttpMethod::infer_from_name("do_something"), HttpMethod::Post); // RPC fallback
+        assert_eq!(
+            HttpMethod::infer_from_name("delete_user"),
+            HttpMethod::Delete
+        );
+        assert_eq!(
+            HttpMethod::infer_from_name("do_something"),
+            HttpMethod::Post
+        ); // RPC fallback
     }
 
     #[test]
     fn test_path_inference() {
-        assert_eq!(
-            infer_path("create_user", HttpMethod::Post),
-            "/users"
-        );
-        assert_eq!(
-            infer_path("get_user", HttpMethod::Get),
-            "/users/{id}"
-        );
-        assert_eq!(
-            infer_path("list_users", HttpMethod::Get),
-            "/users"
-        );
-        assert_eq!(
-            infer_path("delete_user", HttpMethod::Delete),
-            "/users/{id}"
-        );
+        assert_eq!(infer_path("create_user", HttpMethod::Post), "/users");
+        assert_eq!(infer_path("get_user", HttpMethod::Get), "/users/{id}");
+        assert_eq!(infer_path("list_users", HttpMethod::Get), "/users");
+        assert_eq!(infer_path("delete_user", HttpMethod::Delete), "/users/{id}");
     }
 }

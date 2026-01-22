@@ -32,7 +32,7 @@ pub struct ParamInfo {
     pub name: Ident,
     /// Parameter type
     pub ty: Type,
-    /// Whether this is Option<T>
+    /// Whether this is `Option<T>`
     pub is_optional: bool,
     /// Whether this looks like an ID (ends with _id or is named id)
     pub is_id: bool,
@@ -43,11 +43,11 @@ pub struct ParamInfo {
 pub struct ReturnInfo {
     /// The full return type
     pub ty: Option<Type>,
-    /// Inner type if Result<T, E>
+    /// Inner type if `Result<T, E>`
     pub ok_type: Option<Type>,
-    /// Error type if Result<T, E>
+    /// Error type if `Result<T, E>`
     pub err_type: Option<Type>,
-    /// Inner type if Option<T>
+    /// Inner type if `Option<T>`
     pub some_type: Option<Type>,
     /// Whether it's a Result
     pub is_result: bool,
@@ -253,7 +253,7 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
     }
 }
 
-/// Check if a type is Option<T> and extract T
+/// Check if a type is `Option<T>` and extract T
 pub fn extract_option_type(ty: &Type) -> Option<Type> {
     if let Type::Path(type_path) = ty
         && let Some(segment) = type_path.path.segments.last()
@@ -266,7 +266,7 @@ pub fn extract_option_type(ty: &Type) -> Option<Type> {
     None
 }
 
-/// Check if a type is Option<T>
+/// Check if a type is `Option<T>`
 pub fn is_option_type(ty: &Type) -> bool {
     extract_option_type(ty).is_some()
 }

@@ -3,11 +3,10 @@
 //! This crate provides the `#[mcp]` attribute macro for generating
 //! MCP tool definitions from Rust impl blocks.
 
-
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
 use trellis_rpc::{self, AsyncHandling};
 
 /// Arguments for the #[mcp] attribute
@@ -69,7 +68,6 @@ impl Parse for McpArgs {
 /// // - MyService::mcp_call(&self, name, args) -> Result<Value, String>
 /// // - MyService::mcp_call_async(&self, name, args).await -> Result<Value, String>
 /// ```
-
 pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;

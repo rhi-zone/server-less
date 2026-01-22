@@ -4,8 +4,8 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[capnp] attribute
 #[derive(Default)]
@@ -50,7 +50,6 @@ impl Parse for CapnpArgs {
     }
 }
 
-
 pub(crate) fn expand_capnp(args: CapnpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
@@ -66,10 +65,7 @@ pub(crate) fn expand_capnp(args: CapnpArgs, impl_block: ItemImpl) -> syn::Result
         .map(|(i, m)| generate_capnp_method(m, i))
         .collect();
 
-    let structs: Vec<String> = methods
-        .iter()
-        .flat_map(generate_capnp_structs)
-        .collect();
+    let structs: Vec<String> = methods.iter().flat_map(generate_capnp_structs).collect();
 
     let capnp_schema = format!(
         r#"@{schema_id};
@@ -186,11 +182,7 @@ fn generate_capnp_structs(method: &MethodInfo) -> Vec<String> {
         .map(|(i, p)| generate_capnp_field(p, i))
         .collect();
 
-    let params_struct = format!(
-        "struct {} {{\n{}\n}}",
-        params_name,
-        param_fields.join("\n")
-    );
+    let params_struct = format!("struct {} {{\n{}\n}}", params_name, param_fields.join("\n"));
 
     // Generate result struct
     let ret = &method.return_info;
@@ -198,10 +190,7 @@ fn generate_capnp_structs(method: &MethodInfo) -> Vec<String> {
         format!("struct {} {{\n}}", result_name)
     } else {
         let capnp_type = rust_type_to_capnp(&ret.ty);
-        format!(
-            "struct {} {{\n  value @0 :{};\n}}",
-            result_name, capnp_type
-        )
+        format!("struct {} {{\n  value @0 :{};\n}}", result_name, capnp_type)
     };
 
     vec![params_struct, result_struct]
@@ -223,17 +212,14 @@ fn rust_type_to_capnp(ty: &Option<syn::Type>) -> &'static str {
     let type_str = quote!(#ty).to_string();
 
     // Check compound types first (Vec, Option) before primitives
-    if type_str.contains("Vec < u8 >")
-        || type_str.contains("Vec<u8>")
-        || type_str.contains("[u8]")
+    if type_str.contains("Vec < u8 >") || type_str.contains("Vec<u8>") || type_str.contains("[u8]")
     {
         "Data"
     } else if type_str.contains("Vec") {
         "List(Text)" // simplified
-    } else if type_str.contains("Option") {
+    } else if type_str.contains("Option") || type_str.contains("String") || type_str.contains("str")
+    {
         "Text" // simplified - Cap'n Proto doesn't have optional, uses union
-    } else if type_str.contains("String") || type_str.contains("str") {
-        "Text"
     } else if type_str.contains("i8") {
         "Int8"
     } else if type_str.contains("i16") {

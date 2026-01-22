@@ -3,11 +3,10 @@
 //! Generates JSON-RPC style message handlers over WebSocket.
 //! Methods become callable via `{"method": "name", "params": {...}}` messages.
 
-
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
 use trellis_rpc::{self, AsyncHandling};
 
 /// Arguments for the #[ws] attribute
@@ -46,7 +45,6 @@ impl Parse for WsArgs {
         Ok(args)
     }
 }
-
 
 pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
@@ -253,11 +251,19 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 /// Generate a dispatch match arm for a method (sync version)
 fn generate_dispatch_arm_sync(method: &MethodInfo) -> syn::Result<TokenStream2> {
     // Use shared RPC dispatch generation
-    Ok(trellis_rpc::generate_dispatch_arm(method, None, AsyncHandling::Error))
+    Ok(trellis_rpc::generate_dispatch_arm(
+        method,
+        None,
+        AsyncHandling::Error,
+    ))
 }
 
 /// Generate a dispatch match arm for a method (async version)
 fn generate_dispatch_arm_async(method: &MethodInfo) -> syn::Result<TokenStream2> {
     // Use shared RPC dispatch generation with await support
-    Ok(trellis_rpc::generate_dispatch_arm(method, None, AsyncHandling::Await))
+    Ok(trellis_rpc::generate_dispatch_arm(
+        method,
+        None,
+        AsyncHandling::Await,
+    ))
 }

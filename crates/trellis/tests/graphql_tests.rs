@@ -9,7 +9,9 @@ struct SimpleService {
 
 impl SimpleService {
     fn new() -> Self {
-        Self { prefix: "Hello".to_string() }
+        Self {
+            prefix: "Hello".to_string(),
+        }
     }
 }
 
@@ -66,7 +68,10 @@ fn test_graphql_sdl_generated() {
     );
 
     // Check query methods (camelCase)
-    assert!(sdl.contains("getGreeting"), "SDL should have getGreeting query");
+    assert!(
+        sdl.contains("getGreeting"),
+        "SDL should have getGreeting query"
+    );
     assert!(sdl.contains("listItems"), "SDL should have listItems query");
 
     // Check mutation methods
@@ -117,7 +122,11 @@ async fn test_graphql_execute_query() {
     let schema = service.graphql_schema();
 
     let result = schema.execute("{ getGreeting }").await;
-    assert!(result.errors.is_empty(), "Query should succeed: {:?}", result.errors);
+    assert!(
+        result.errors.is_empty(),
+        "Query should succeed: {:?}",
+        result.errors
+    );
 
     // The result should contain our greeting
     let data = result.data.into_json().unwrap();
@@ -130,7 +139,11 @@ async fn test_graphql_execute_query_with_int() {
     let schema = service.graphql_schema();
 
     let result = schema.execute("{ getCount }").await;
-    assert!(result.errors.is_empty(), "Query should succeed: {:?}", result.errors);
+    assert!(
+        result.errors.is_empty(),
+        "Query should succeed: {:?}",
+        result.errors
+    );
 }
 
 #[tokio::test]
@@ -139,7 +152,11 @@ async fn test_graphql_execute_query_with_bool() {
     let schema = service.graphql_schema();
 
     let result = schema.execute("{ isActive }").await;
-    assert!(result.errors.is_empty(), "Query should succeed: {:?}", result.errors);
+    assert!(
+        result.errors.is_empty(),
+        "Query should succeed: {:?}",
+        result.errors
+    );
 }
 
 #[tokio::test]
@@ -147,8 +164,14 @@ async fn test_graphql_execute_mutation() {
     let service = SimpleService::new();
     let schema = service.graphql_schema();
 
-    let result = schema.execute(r#"mutation { createItem(name: "test") }"#).await;
-    assert!(result.errors.is_empty(), "Mutation should succeed: {:?}", result.errors);
+    let result = schema
+        .execute(r#"mutation { createItem(name: "test") }"#)
+        .await;
+    assert!(
+        result.errors.is_empty(),
+        "Mutation should succeed: {:?}",
+        result.errors
+    );
 }
 
 #[tokio::test]
@@ -157,5 +180,9 @@ async fn test_graphql_execute_list_query() {
     let schema = service.graphql_schema();
 
     let result = schema.execute("{ listItems }").await;
-    assert!(result.errors.is_empty(), "List query should succeed: {:?}", result.errors);
+    assert!(
+        result.errors.is_empty(),
+        "List query should succeed: {:?}",
+        result.errors
+    );
 }

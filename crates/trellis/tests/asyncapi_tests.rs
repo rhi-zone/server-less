@@ -5,7 +5,11 @@ use trellis::asyncapi;
 #[derive(Clone)]
 struct ChatService;
 
-#[asyncapi(title = "Chat API", version = "2.0.0", server = "ws://chat.example.com")]
+#[asyncapi(
+    title = "Chat API",
+    version = "2.0.0",
+    server = "ws://chat.example.com"
+)]
 impl ChatService {
     /// Send a message to a chat room
     pub fn send_message(&self, room: String, content: String) -> bool {

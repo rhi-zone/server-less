@@ -14,8 +14,14 @@ enum BasicError {
 #[test]
 fn test_basic_error_code_inference() {
     assert_eq!(BasicError::NotFound.error_code(), ErrorCode::NotFound);
-    assert_eq!(BasicError::InvalidInput.error_code(), ErrorCode::InvalidInput);
-    assert_eq!(BasicError::Unauthorized.error_code(), ErrorCode::Unauthenticated);
+    assert_eq!(
+        BasicError::InvalidInput.error_code(),
+        ErrorCode::InvalidInput
+    );
+    assert_eq!(
+        BasicError::Unauthorized.error_code(),
+        ErrorCode::Unauthenticated
+    );
     assert_eq!(BasicError::InternalError.error_code(), ErrorCode::Internal);
 }
 
@@ -44,8 +50,14 @@ enum ExplicitCodeError {
 #[test]
 fn test_explicit_error_codes() {
     assert_eq!(ExplicitCodeError::Missing.error_code(), ErrorCode::NotFound);
-    assert_eq!(ExplicitCodeError::AccessDenied.error_code(), ErrorCode::Forbidden);
-    assert_eq!(ExplicitCodeError::TooManyRequests.error_code(), ErrorCode::RateLimited);
+    assert_eq!(
+        ExplicitCodeError::AccessDenied.error_code(),
+        ErrorCode::Forbidden
+    );
+    assert_eq!(
+        ExplicitCodeError::TooManyRequests.error_code(),
+        ErrorCode::RateLimited
+    );
 }
 
 // Test custom messages
@@ -138,11 +150,23 @@ enum HttpStatusError {
 
 #[test]
 fn test_http_status_mapping() {
-    assert_eq!(HttpStatusError::BadRequest.error_code(), ErrorCode::InvalidInput);
-    assert_eq!(HttpStatusError::Unauthorized.error_code(), ErrorCode::Unauthenticated);
-    assert_eq!(HttpStatusError::Forbidden.error_code(), ErrorCode::Forbidden);
+    assert_eq!(
+        HttpStatusError::BadRequest.error_code(),
+        ErrorCode::InvalidInput
+    );
+    assert_eq!(
+        HttpStatusError::Unauthorized.error_code(),
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(
+        HttpStatusError::Forbidden.error_code(),
+        ErrorCode::Forbidden
+    );
     assert_eq!(HttpStatusError::NotFound.error_code(), ErrorCode::NotFound);
     assert_eq!(HttpStatusError::Conflict.error_code(), ErrorCode::Conflict);
     assert_eq!(HttpStatusError::Internal.error_code(), ErrorCode::Internal);
-    assert_eq!(HttpStatusError::Unavailable.error_code(), ErrorCode::Unavailable);
+    assert_eq!(
+        HttpStatusError::Unavailable.error_code(),
+        ErrorCode::Unavailable
+    );
 }

@@ -4,7 +4,7 @@
 //! and derive macros for common patterns.
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, DeriveInput, ItemImpl};
+use syn::{DeriveInput, ItemImpl, parse_macro_input};
 
 #[cfg(feature = "asyncapi")]
 mod asyncapi;
@@ -31,14 +31,10 @@ mod markdown;
 mod mcp;
 #[cfg(feature = "openrpc")]
 mod openrpc;
-#[cfg(feature = "python")]
-mod python;
 #[cfg(feature = "smithy")]
 mod smithy;
 #[cfg(feature = "thrift")]
 mod thrift;
-#[cfg(feature = "typescript")]
-mod typescript;
 #[cfg(feature = "ws")]
 mod ws;
 
@@ -541,49 +537,6 @@ pub fn smithy(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-/// Generate TypeScript type definitions from an impl block.
-///
-/// Generates TypeScript interfaces for request/response types and a service interface.
-/// Useful for frontend developers consuming Rust APIs.
-///
-/// # Example
-///
-/// ```ignore
-/// use trellis::typescript;
-///
-/// struct UserService;
-///
-/// #[typescript(namespace = "Api")]
-/// impl UserService {
-///     /// Get user by ID
-///     fn get_user(&self, id: String) -> User { ... }
-///
-///     /// Create a new user
-///     fn create_user(&self, name: String, email: String) -> User { ... }
-/// }
-///
-/// // Get TypeScript type definitions
-/// let ts = UserService::typescript_types();
-/// // Write to file
-/// UserService::write_typescript("api.d.ts")?;
-/// ```
-///
-/// The generated TypeScript includes:
-/// - Request/Response interfaces for each method
-/// - A service interface with all methods
-/// - Optional namespace wrapping
-#[cfg(feature = "typescript")]
-#[proc_macro_attribute]
-pub fn typescript(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(attr as typescript::TypeScriptArgs);
-    let impl_block = parse_macro_input!(item as ItemImpl);
-
-    match typescript::expand_typescript(args, impl_block) {
-        Ok(tokens) => tokens.into(),
-        Err(err) => err.to_compile_error().into(),
-    }
-}
-
 /// Generate JSON Schema from an impl block.
 ///
 /// Generates JSON Schema definitions for request/response types.
@@ -617,44 +570,6 @@ pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match jsonschema::expand_jsonschema(args, impl_block) {
-        Ok(tokens) => tokens.into(),
-        Err(err) => err.to_compile_error().into(),
-    }
-}
-
-/// Generate Python type stubs (.pyi) from an impl block.
-///
-/// Generates TypedDict classes and method stubs for Python type checking.
-/// Useful for Python code interacting with Rust APIs (via PyO3, HTTP, etc.).
-///
-/// # Example
-///
-/// ```ignore
-/// use trellis::python;
-///
-/// struct UserService;
-///
-/// #[python(module = "user_api")]
-/// impl UserService {
-///     /// Get user by ID
-///     fn get_user(&self, id: String) -> User { ... }
-///
-///     /// Create a new user
-///     fn create_user(&self, name: String, email: String) -> User { ... }
-/// }
-///
-/// // Get Python stubs
-/// let stubs = UserService::python_stubs();
-/// // Write to file
-/// UserService::write_python_stubs("user_api.pyi")?;
-/// ```
-#[cfg(feature = "python")]
-#[proc_macro_attribute]
-pub fn python(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(attr as python::PythonArgs);
-    let impl_block = parse_macro_input!(item as ItemImpl);
-
-    match python::expand_python(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

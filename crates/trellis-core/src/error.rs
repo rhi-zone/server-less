@@ -77,17 +77,32 @@ impl ErrorCode {
     pub fn infer_from_name(name: &str) -> Self {
         let name_lower = name.to_lowercase();
 
-        if name_lower.contains("notfound") || name_lower.contains("not_found") || name_lower.contains("missing") {
+        if name_lower.contains("notfound")
+            || name_lower.contains("not_found")
+            || name_lower.contains("missing")
+        {
             ErrorCode::NotFound
-        } else if name_lower.contains("invalid") || name_lower.contains("validation") || name_lower.contains("parse") {
+        } else if name_lower.contains("invalid")
+            || name_lower.contains("validation")
+            || name_lower.contains("parse")
+        {
             ErrorCode::InvalidInput
         } else if name_lower.contains("unauthorized") || name_lower.contains("unauthenticated") {
             ErrorCode::Unauthenticated
-        } else if name_lower.contains("forbidden") || name_lower.contains("permission") || name_lower.contains("denied") {
+        } else if name_lower.contains("forbidden")
+            || name_lower.contains("permission")
+            || name_lower.contains("denied")
+        {
             ErrorCode::Forbidden
-        } else if name_lower.contains("conflict") || name_lower.contains("exists") || name_lower.contains("duplicate") {
+        } else if name_lower.contains("conflict")
+            || name_lower.contains("exists")
+            || name_lower.contains("duplicate")
+        {
             ErrorCode::Conflict
-        } else if name_lower.contains("ratelimit") || name_lower.contains("rate_limit") || name_lower.contains("throttle") {
+        } else if name_lower.contains("ratelimit")
+            || name_lower.contains("rate_limit")
+            || name_lower.contains("throttle")
+        {
             ErrorCode::RateLimited
         } else if name_lower.contains("unavailable") || name_lower.contains("temporarily") {
             ErrorCode::Unavailable
@@ -116,7 +131,9 @@ impl IntoErrorCode for std::io::Error {
         match self.kind() {
             std::io::ErrorKind::NotFound => ErrorCode::NotFound,
             std::io::ErrorKind::PermissionDenied => ErrorCode::Forbidden,
-            std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => ErrorCode::InvalidInput,
+            std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => {
+                ErrorCode::InvalidInput
+            }
             _ => ErrorCode::Internal,
         }
     }
@@ -165,10 +182,22 @@ mod tests {
     #[test]
     fn test_error_code_inference() {
         assert_eq!(ErrorCode::infer_from_name("NotFound"), ErrorCode::NotFound);
-        assert_eq!(ErrorCode::infer_from_name("UserNotFound"), ErrorCode::NotFound);
-        assert_eq!(ErrorCode::infer_from_name("InvalidEmail"), ErrorCode::InvalidInput);
-        assert_eq!(ErrorCode::infer_from_name("Forbidden"), ErrorCode::Forbidden);
-        assert_eq!(ErrorCode::infer_from_name("AlreadyExists"), ErrorCode::Conflict);
+        assert_eq!(
+            ErrorCode::infer_from_name("UserNotFound"),
+            ErrorCode::NotFound
+        );
+        assert_eq!(
+            ErrorCode::infer_from_name("InvalidEmail"),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            ErrorCode::infer_from_name("Forbidden"),
+            ErrorCode::Forbidden
+        );
+        assert_eq!(
+            ErrorCode::infer_from_name("AlreadyExists"),
+            ErrorCode::Conflict
+        );
     }
 
     #[test]

@@ -6,9 +6,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo};
-use trellis_rpc;
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[graphql] attribute
 #[derive(Default)]
@@ -46,8 +45,10 @@ impl Parse for GraphqlArgs {
     }
 }
 
-
-pub(crate) fn expand_graphql(_args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_graphql(
+    _args: GraphqlArgs,
+    impl_block: ItemImpl,
+) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
@@ -206,7 +207,10 @@ fn is_query_method(name: &str) -> bool {
 }
 
 fn generate_field_registrations(methods: &[&MethodInfo]) -> Vec<TokenStream2> {
-    methods.iter().map(|m| generate_field_registration(m)).collect()
+    methods
+        .iter()
+        .map(|m| generate_field_registration(m))
+        .collect()
 }
 
 fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
@@ -218,20 +222,24 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
     let ret = &method.return_info;
     let (type_ref, is_list) = infer_graphql_type_ref(ret);
 
-    let arg_registrations: Vec<_> = method.params.iter().map(|p| {
-        let arg_name = p.name.to_string();
-        let gql_type = rust_type_to_graphql(&p.ty);
-        let is_required = !p.is_optional;
-        if is_required {
-            quote! {
-                .argument(InputValue::new(#arg_name, TypeRef::named_nn(#gql_type)))
+    let arg_registrations: Vec<_> = method
+        .params
+        .iter()
+        .map(|p| {
+            let arg_name = p.name.to_string();
+            let gql_type = rust_type_to_graphql(&p.ty);
+            let is_required = !p.is_optional;
+            if is_required {
+                quote! {
+                    .argument(InputValue::new(#arg_name, TypeRef::named_nn(#gql_type)))
+                }
+            } else {
+                quote! {
+                    .argument(InputValue::new(#arg_name, TypeRef::named(#gql_type)))
+                }
             }
-        } else {
-            quote! {
-                .argument(InputValue::new(#arg_name, TypeRef::named(#gql_type)))
-            }
-        }
-    }).collect();
+        })
+        .collect();
 
     let arg_extractions: Vec<_> = method.params.iter().map(|p| {
         let arg_name = p.name.to_string();
@@ -336,7 +344,12 @@ fn infer_graphql_type_ref(ret: &trellis_parse::ReturnInfo) -> (TokenStream2, boo
 
         let base_type = if type_str.contains("String") || type_str.contains("str") {
             quote! { TypeRef::STRING }
-        } else if type_str.contains("i32") || type_str.contains("i64") || type_str.contains("u32") || type_str.contains("u64") || type_str.contains("usize") {
+        } else if type_str.contains("i32")
+            || type_str.contains("i64")
+            || type_str.contains("u32")
+            || type_str.contains("u64")
+            || type_str.contains("usize")
+        {
             quote! { TypeRef::INT }
         } else if type_str.contains("f32") || type_str.contains("f64") {
             quote! { TypeRef::FLOAT }
@@ -348,7 +361,10 @@ fn infer_graphql_type_ref(ret: &trellis_parse::ReturnInfo) -> (TokenStream2, boo
 
         if ret.is_option {
             if is_list {
-                (quote! { TypeRef::named(TypeRef::named_list(#base_type)) }, true)
+                (
+                    quote! { TypeRef::named(TypeRef::named_list(#base_type)) },
+                    true,
+                )
             } else {
                 (quote! { TypeRef::named(#base_type) }, false)
             }
@@ -368,8 +384,14 @@ fn infer_graphql_type_ref(ret: &trellis_parse::ReturnInfo) -> (TokenStream2, boo
     }
 }
 
-fn generate_resolver_dispatch(struct_name: &syn::Ident, methods: &[&MethodInfo]) -> Vec<TokenStream2> {
-    methods.iter().map(|m| generate_resolver_arm(struct_name, m)).collect()
+fn generate_resolver_dispatch(
+    struct_name: &syn::Ident,
+    methods: &[&MethodInfo],
+) -> Vec<TokenStream2> {
+    methods
+        .iter()
+        .map(|m| generate_resolver_arm(struct_name, m))
+        .collect()
 }
 
 fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> TokenStream2 {

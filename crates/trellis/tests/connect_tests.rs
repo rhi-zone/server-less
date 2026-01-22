@@ -53,7 +53,10 @@ fn test_connect_rpc_methods() {
 
     // Check RPC methods (CamelCase)
     assert!(schema.contains("rpc GetUser"), "Should have GetUser rpc");
-    assert!(schema.contains("rpc ListUsers"), "Should have ListUsers rpc");
+    assert!(
+        schema.contains("rpc ListUsers"),
+        "Should have ListUsers rpc"
+    );
     assert!(
         schema.contains("rpc CreateUser"),
         "Should have CreateUser rpc"

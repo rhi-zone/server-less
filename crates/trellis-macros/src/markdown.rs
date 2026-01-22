@@ -6,8 +6,8 @@ use heck::ToTitleCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[markdown] attribute
 #[derive(Default)]
@@ -18,8 +18,10 @@ pub(crate) struct MarkdownArgs {
 
 impl Parse for MarkdownArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut args = MarkdownArgs::default();
-        args.types = true;
+        let mut args = MarkdownArgs {
+            title: None,
+            types: true,
+        };
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
@@ -52,8 +54,10 @@ impl Parse for MarkdownArgs {
     }
 }
 
-
-pub(crate) fn expand_markdown(args: MarkdownArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_markdown(
+    args: MarkdownArgs,
+    impl_block: ItemImpl,
+) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
@@ -145,11 +149,12 @@ fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
 
     doc.push(')');
 
-    if let Some(ty) = &method.return_info.ty {
-        if show_types && !method.return_info.is_unit {
-            let type_str = quote::quote!(#ty).to_string();
-            doc.push_str(&format!(" -> {}", simplify_type(&type_str)));
-        }
+    if let Some(ty) = &method.return_info.ty
+        && show_types
+        && !method.return_info.is_unit
+    {
+        let type_str = quote::quote!(#ty).to_string();
+        doc.push_str(&format!(" -> {}", simplify_type(&type_str)));
     }
 
     doc.push_str("\n```\n\n");

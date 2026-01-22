@@ -59,8 +59,7 @@ impl EchoService {
 
     /// Get message count
     pub fn get_count(&self) -> u64 {
-        self.message_count
-            .load(std::sync::atomic::Ordering::SeqCst)
+        self.message_count.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Reverse a string
@@ -73,7 +72,10 @@ impl EchoService {
 async fn main() {
     let service = EchoService::new();
 
-    println!("Available WebSocket methods: {:?}", EchoService::ws_methods());
+    println!(
+        "Available WebSocket methods: {:?}",
+        EchoService::ws_methods()
+    );
     println!("\nStarting WebSocket server on ws://localhost:3000/ws");
     println!("Test with: websocat ws://localhost:3000/ws");
     println!("\nExample messages:");

@@ -7,8 +7,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[asyncapi] attribute
 #[derive(Default)]
@@ -61,8 +61,10 @@ impl Parse for AsyncApiArgs {
     }
 }
 
-
-pub(crate) fn expand_asyncapi(args: AsyncApiArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_asyncapi(
+    args: AsyncApiArgs,
+    impl_block: ItemImpl,
+) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;

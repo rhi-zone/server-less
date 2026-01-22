@@ -38,7 +38,11 @@ pub fn generate_param_extraction(param: &ParamInfo) -> TokenStream {
 
 /// Generate all param extractions for a method.
 pub fn generate_all_param_extractions(method: &MethodInfo) -> Vec<TokenStream> {
-    method.params.iter().map(generate_param_extraction).collect()
+    method
+        .params
+        .iter()
+        .map(generate_param_extraction)
+        .collect()
 }
 
 /// Generate the method call expression.

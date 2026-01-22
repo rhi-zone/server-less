@@ -7,8 +7,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[openrpc] attribute
 #[derive(Default)]
@@ -53,7 +53,6 @@ impl Parse for OpenRpcArgs {
     }
 }
 
-
 pub(crate) fn expand_openrpc(args: OpenRpcArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
@@ -63,10 +62,7 @@ pub(crate) fn expand_openrpc(args: OpenRpcArgs, impl_block: ItemImpl) -> syn::Re
     let version = args.version.unwrap_or_else(|| "1.0.0".to_string());
 
     // Generate method specs
-    let method_specs: Vec<String> = methods
-        .iter()
-        .map(generate_method_spec)
-        .collect();
+    let method_specs: Vec<String> = methods.iter().map(generate_method_spec).collect();
 
     let methods_json = method_specs.join(",\n");
 
@@ -111,11 +107,7 @@ fn generate_method_spec(method: &MethodInfo) -> String {
     let name = method.name.to_string().to_lower_camel_case();
     let description = method.docs.clone().unwrap_or_default();
 
-    let params: Vec<String> = method
-        .params
-        .iter()
-        .map(generate_param_spec)
-        .collect();
+    let params: Vec<String> = method.params.iter().map(generate_param_spec).collect();
 
     let result_schema = get_json_schema(&method.return_info.ty);
 

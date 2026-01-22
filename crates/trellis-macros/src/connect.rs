@@ -7,8 +7,8 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[connect] attribute
 #[derive(Default)]
@@ -47,7 +47,6 @@ impl Parse for ConnectArgs {
     }
 }
 
-
 pub(crate) fn expand_connect(args: ConnectArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
@@ -61,10 +60,7 @@ pub(crate) fn expand_connect(args: ConnectArgs, impl_block: ItemImpl) -> syn::Re
     // Generate proto schema (Connect uses protobuf)
     let proto_methods: Vec<String> = methods.iter().map(generate_proto_method).collect();
 
-    let proto_messages: Vec<String> = methods
-        .iter()
-        .flat_map(generate_proto_messages)
-        .collect();
+    let proto_messages: Vec<String> = methods.iter().flat_map(generate_proto_messages).collect();
 
     let proto_schema = format!(
         r#"syntax = "proto3";

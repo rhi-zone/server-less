@@ -38,7 +38,10 @@ fn test_smithy_schema_generated() {
     let schema = UserService::smithy_schema();
 
     // Check Smithy version
-    assert!(schema.contains("$version: \"2\""), "Should have Smithy 2 version");
+    assert!(
+        schema.contains("$version: \"2\""),
+        "Should have Smithy 2 version"
+    );
 
     // Check namespace
     assert!(
@@ -69,7 +72,10 @@ fn test_smithy_operations() {
     let schema = UserService::smithy_schema();
 
     // Check operations list in service
-    assert!(schema.contains("operations:"), "Should have operations list");
+    assert!(
+        schema.contains("operations:"),
+        "Should have operations list"
+    );
 
     // Check operation definitions (PascalCase)
     assert!(

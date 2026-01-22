@@ -168,14 +168,8 @@ pub use trellis_macros::smithy;
 #[cfg(feature = "markdown")]
 pub use trellis_macros::markdown;
 
-#[cfg(feature = "typescript")]
-pub use trellis_macros::typescript;
-
 #[cfg(feature = "jsonschema")]
 pub use trellis_macros::jsonschema;
-
-#[cfg(feature = "python")]
-pub use trellis_macros::python;
 
 #[cfg(feature = "asyncapi")]
 pub use trellis_macros::asyncapi;
@@ -203,52 +197,46 @@ pub use serde_json;
 /// Prelude for convenient imports
 pub mod prelude {
     // Runtime protocols
-    #[cfg(feature = "mcp")]
-    pub use super::mcp;
+    #[cfg(feature = "cli")]
+    pub use super::cli;
+    #[cfg(feature = "graphql")]
+    pub use super::graphql;
     #[cfg(feature = "http")]
     pub use super::http;
+    #[cfg(feature = "jsonrpc")]
+    pub use super::jsonrpc;
+    #[cfg(feature = "mcp")]
+    pub use super::mcp;
     #[cfg(feature = "http")]
     pub use super::route;
     #[cfg(feature = "http")]
     pub use super::serve;
-    #[cfg(feature = "jsonrpc")]
-    pub use super::jsonrpc;
-    #[cfg(feature = "cli")]
-    pub use super::cli;
     #[cfg(feature = "ws")]
     pub use super::ws;
-    #[cfg(feature = "graphql")]
-    pub use super::graphql;
 
     // Schema generators
-    #[cfg(feature = "grpc")]
-    pub use super::grpc;
     #[cfg(feature = "capnp")]
     pub use super::capnp;
-    #[cfg(feature = "thrift")]
-    pub use super::thrift;
     #[cfg(feature = "connect")]
     pub use super::connect;
+    #[cfg(feature = "grpc")]
+    pub use super::grpc;
     #[cfg(feature = "smithy")]
     pub use super::smithy;
+    #[cfg(feature = "thrift")]
+    pub use super::thrift;
 
     // Specification generators
-    #[cfg(feature = "openrpc")]
-    pub use super::openrpc;
     #[cfg(feature = "asyncapi")]
     pub use super::asyncapi;
     #[cfg(feature = "jsonschema")]
     pub use super::jsonschema;
+    #[cfg(feature = "openrpc")]
+    pub use super::openrpc;
 
     // Documentation generators
     #[cfg(feature = "markdown")]
     pub use super::markdown;
-
-    // Type stubs
-    #[cfg(feature = "typescript")]
-    pub use super::typescript;
-    #[cfg(feature = "python")]
-    pub use super::python;
 
     // Always available
     pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, TrellisError};

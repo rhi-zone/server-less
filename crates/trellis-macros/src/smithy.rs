@@ -7,8 +7,8 @@ use heck::{ToPascalCase, ToSnakeCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[smithy] attribute
 #[derive(Default)]
@@ -39,9 +39,7 @@ impl Parse for SmithyArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!(
-                            "unknown argument `{other}`. Valid arguments: namespace, version"
-                        ),
+                        format!("unknown argument `{other}`. Valid arguments: namespace, version"),
                     ));
                 }
             }
@@ -54,7 +52,6 @@ impl Parse for SmithyArgs {
         Ok(args)
     }
 }
-
 
 pub(crate) fn expand_smithy(args: SmithyArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
@@ -70,10 +67,7 @@ pub(crate) fn expand_smithy(args: SmithyArgs, impl_block: ItemImpl) -> syn::Resu
     let operations: Vec<String> = methods.iter().map(generate_operation).collect();
 
     // Generate structure definitions
-    let structures: Vec<String> = methods
-        .iter()
-        .flat_map(generate_structures)
-        .collect();
+    let structures: Vec<String> = methods.iter().flat_map(generate_structures).collect();
 
     // Generate the Smithy IDL
     let smithy_schema = format!(
@@ -153,11 +147,7 @@ fn generate_structures(method: &MethodInfo) -> Vec<String> {
     let output_name = format!("{}Output", op_name);
 
     // Generate input structure
-    let input_fields: Vec<String> = method
-        .params
-        .iter()
-        .map(generate_field)
-        .collect();
+    let input_fields: Vec<String> = method.params.iter().map(generate_field).collect();
 
     let input_struct = if input_fields.is_empty() {
         format!("structure {} {{}}", input_name)
@@ -188,7 +178,11 @@ fn generate_structures(method: &MethodInfo) -> Vec<String> {
 fn generate_field(param: &ParamInfo) -> String {
     let name = param.name.to_string().to_snake_case();
     let smithy_type = rust_type_to_smithy(&Some(param.ty.clone()));
-    let required = if param.is_optional { "" } else { "@required\n    " };
+    let required = if param.is_optional {
+        ""
+    } else {
+        "@required\n    "
+    };
     format!("    {required}{name}: {smithy_type}")
 }
 

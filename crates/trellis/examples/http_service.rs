@@ -35,13 +35,11 @@ pub struct UserService {
 impl UserService {
     pub fn new() -> Self {
         Self {
-            users: std::sync::Arc::new(std::sync::Mutex::new(vec![
-                User {
-                    id: "1".to_string(),
-                    name: "Alice".to_string(),
-                    email: "alice@example.com".to_string(),
-                },
-            ])),
+            users: std::sync::Arc::new(std::sync::Mutex::new(vec![User {
+                id: "1".to_string(),
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+            }])),
         }
     }
 }
@@ -78,7 +76,10 @@ async fn main() {
 
     // Print OpenAPI spec
     println!("OpenAPI spec:");
-    println!("{}", serde_json::to_string_pretty(&UserService::openapi_spec()).unwrap());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&UserService::openapi_spec()).unwrap()
+    );
 
     println!("\nStarting server on http://localhost:3000");
     println!("Try: curl http://localhost:3000/api/users");

@@ -43,10 +43,7 @@ fn test_openrpc_methods_present() {
     let spec = Calculator::openrpc_spec();
     let methods = spec["methods"].as_array().unwrap();
 
-    let method_names: Vec<&str> = methods
-        .iter()
-        .filter_map(|m| m["name"].as_str())
-        .collect();
+    let method_names: Vec<&str> = methods.iter().filter_map(|m| m["name"].as_str()).collect();
 
     assert!(method_names.contains(&"add"));
     assert!(method_names.contains(&"subtract"));

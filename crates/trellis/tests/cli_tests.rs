@@ -34,7 +34,12 @@ impl ItemService {
 
     /// Get item by ID
     pub fn get_item(&self, item_id: String) -> Option<Item> {
-        self.items.lock().unwrap().iter().find(|i| i.id == item_id).cloned()
+        self.items
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|i| i.id == item_id)
+            .cloned()
     }
 
     /// Create an item

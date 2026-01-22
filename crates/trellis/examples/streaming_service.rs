@@ -36,9 +36,18 @@ impl StreamService {
     /// Stream a list of items
     pub fn list_events(&self) -> Vec<Event> {
         vec![
-            Event { id: 1, message: "First".to_string() },
-            Event { id: 2, message: "Second".to_string() },
-            Event { id: 3, message: "Third".to_string() },
+            Event {
+                id: 1,
+                message: "First".to_string(),
+            },
+            Event {
+                id: 2,
+                message: "Second".to_string(),
+            },
+            Event {
+                id: 3,
+                message: "Third".to_string(),
+            },
         ]
     }
 }

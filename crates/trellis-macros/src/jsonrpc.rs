@@ -2,11 +2,10 @@
 //!
 //! Generates JSON-RPC 2.0 handlers over HTTP POST.
 
-
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
 use trellis_rpc::{self, AsyncHandling};
 
 /// Arguments for the #[jsonrpc] attribute
@@ -44,7 +43,6 @@ impl Parse for JsonRpcArgs {
         Ok(args)
     }
 }
-
 
 pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
@@ -195,5 +193,9 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 }
 
 fn generate_dispatch_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    Ok(trellis_rpc::generate_dispatch_arm(method, None, AsyncHandling::Await))
+    Ok(trellis_rpc::generate_dispatch_arm(
+        method,
+        None,
+        AsyncHandling::Await,
+    ))
 }

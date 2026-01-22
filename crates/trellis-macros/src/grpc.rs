@@ -4,8 +4,8 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 #[derive(Default)]
 pub(crate) struct GrpcArgs {
@@ -43,13 +43,14 @@ impl Parse for GrpcArgs {
     }
 }
 
-
 pub(crate) fn expand_grpc(args: GrpcArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
 
-    let package = args.package.unwrap_or_else(|| struct_name_str.to_snake_case());
+    let package = args
+        .package
+        .unwrap_or_else(|| struct_name_str.to_snake_case());
     let service_name = struct_name_str.clone();
 
     let proto_methods: Vec<String> = methods.iter().map(generate_proto_method).collect();
@@ -129,22 +130,41 @@ fn generate_proto_method(method: &MethodInfo) -> String {
     let method_name = method.name.to_string().to_upper_camel_case();
     let request_name = format!("{}Request", method_name);
     let response_name = format!("{}Response", method_name);
-    let doc = method.docs.as_ref().map(|d| format!("  // {}\n", d)).unwrap_or_default();
-    format!("{}  rpc {}({}) returns ({});", doc, method_name, request_name, response_name)
+    let doc = method
+        .docs
+        .as_ref()
+        .map(|d| format!("  // {}\n", d))
+        .unwrap_or_default();
+    format!(
+        "{}  rpc {}({}) returns ({});",
+        doc, method_name, request_name, response_name
+    )
 }
 
 fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
     let method_name = method.name.to_string().to_upper_camel_case();
     let request_name = format!("{}Request", method_name);
     let response_name = format!("{}Response", method_name);
-    let request_fields: Vec<String> = method.params.iter().enumerate().map(|(i, p)| generate_proto_field(p, i + 1)).collect();
-    let request_msg = format!("message {} {{\n{}\n}}", request_name, request_fields.join("\n"));
+    let request_fields: Vec<String> = method
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| generate_proto_field(p, i + 1))
+        .collect();
+    let request_msg = format!(
+        "message {} {{\n{}\n}}",
+        request_name,
+        request_fields.join("\n")
+    );
     let ret = &method.return_info;
     let response_msg = if ret.is_unit {
         format!("message {} {{\n}}", response_name)
     } else {
         let proto_type = rust_type_to_proto(&ret.ty);
-        format!("message {} {{\n  {} result = 1;\n}}", response_name, proto_type)
+        format!(
+            "message {} {{\n  {} result = 1;\n}}",
+            response_name, proto_type
+        )
     };
     vec![request_msg, response_msg]
 }
@@ -157,16 +177,29 @@ fn generate_proto_field(param: &ParamInfo, field_num: usize) -> String {
 }
 
 fn rust_type_to_proto(ty: &Option<syn::Type>) -> &'static str {
-    let Some(ty) = ty else { return "google.protobuf.Empty"; };
+    let Some(ty) = ty else {
+        return "google.protobuf.Empty";
+    };
     let type_str = quote!(#ty).to_string();
-    if type_str.contains("String") || type_str.contains("str") { "string" }
-    else if type_str.contains("i32") { "int32" }
-    else if type_str.contains("i64") { "int64" }
-    else if type_str.contains("u32") { "uint32" }
-    else if type_str.contains("u64") { "uint64" }
-    else if type_str.contains("f32") { "float" }
-    else if type_str.contains("f64") { "double" }
-    else if type_str.contains("bool") { "bool" }
-    else if type_str.contains("Vec") { "repeated string" }
-    else { "bytes" }
+    if type_str.contains("String") || type_str.contains("str") {
+        "string"
+    } else if type_str.contains("i32") {
+        "int32"
+    } else if type_str.contains("i64") {
+        "int64"
+    } else if type_str.contains("u32") {
+        "uint32"
+    } else if type_str.contains("u64") {
+        "uint64"
+    } else if type_str.contains("f32") {
+        "float"
+    } else if type_str.contains("f64") {
+        "double"
+    } else if type_str.contains("bool") {
+        "bool"
+    } else if type_str.contains("Vec") {
+        "repeated string"
+    } else {
+        "bytes"
+    }
 }

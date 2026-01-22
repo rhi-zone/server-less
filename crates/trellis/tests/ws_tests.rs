@@ -1,8 +1,8 @@
 //! Integration tests for the WebSocket macro.
 
 use serde::{Deserialize, Serialize};
-use trellis::ws;
 use tokio;
+use trellis::ws;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -37,22 +37,27 @@ impl TestService {
 
     /// Get next counter value
     pub fn next_id(&self) -> u32 {
-        self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        self.counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Create an item
     pub fn create_item(&self, name: String) -> Item {
-        let id = self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = self
+            .counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Item { id, name }
     }
 
     /// Search with optional limit
     pub fn search(&self, query: String, limit: Option<u32>) -> Vec<Item> {
         let limit = limit.unwrap_or(10);
-        (0..limit).map(|i| Item {
-            id: i,
-            name: format!("{} {}", query, i),
-        }).collect()
+        (0..limit)
+            .map(|i| Item {
+                id: i,
+                name: format!("{} {}", query, i),
+            })
+            .collect()
     }
 }
 
@@ -70,7 +75,8 @@ fn test_ws_methods_generated() {
 #[test]
 fn test_ws_handle_echo() {
     let service = TestService::new();
-    let response = service.ws_handle_message(r#"{"method": "echo", "params": {"message": "hello"}}"#);
+    let response =
+        service.ws_handle_message(r#"{"method": "echo", "params": {"message": "hello"}}"#);
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
@@ -90,7 +96,8 @@ fn test_ws_handle_add() {
 #[test]
 fn test_ws_handle_with_id() {
     let service = TestService::new();
-    let response = service.ws_handle_message(r#"{"method": "add", "params": {"a": 1, "b": 2}, "id": 42}"#);
+    let response =
+        service.ws_handle_message(r#"{"method": "add", "params": {"a": 1, "b": 2}, "id": 42}"#);
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
@@ -105,7 +112,12 @@ fn test_ws_handle_unknown_method() {
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
-    assert!(json["error"]["message"].as_str().unwrap().contains("Unknown method"));
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Unknown method")
+    );
 }
 
 #[test]
@@ -115,7 +127,12 @@ fn test_ws_handle_missing_param() {
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
-    assert!(json["error"]["message"].as_str().unwrap().contains("Missing required parameter"));
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Missing required parameter")
+    );
 }
 
 #[test]
@@ -123,14 +140,16 @@ fn test_ws_handle_optional_param() {
     let service = TestService::new();
 
     // Without optional param
-    let response = service.ws_handle_message(r#"{"method": "search", "params": {"query": "test"}}"#);
+    let response =
+        service.ws_handle_message(r#"{"method": "search", "params": {"query": "test"}}"#);
     assert!(response.is_ok());
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
     let items = json["result"].as_array().unwrap();
     assert_eq!(items.len(), 10); // default limit
 
     // With optional param
-    let response = service.ws_handle_message(r#"{"method": "search", "params": {"query": "test", "limit": 3}}"#);
+    let response = service
+        .ws_handle_message(r#"{"method": "search", "params": {"query": "test", "limit": 3}}"#);
     assert!(response.is_ok());
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
     let items = json["result"].as_array().unwrap();
@@ -140,7 +159,8 @@ fn test_ws_handle_optional_param() {
 #[test]
 fn test_ws_handle_create_item() {
     let service = TestService::new();
-    let response = service.ws_handle_message(r#"{"method": "create_item", "params": {"name": "Test Item"}}"#);
+    let response =
+        service.ws_handle_message(r#"{"method": "create_item", "params": {"name": "Test Item"}}"#);
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
@@ -196,7 +216,8 @@ fn test_ws_sync_method_with_sync_handler() {
     let service = AsyncWsService;
 
     // Sync method should work with sync handler
-    let response = service.ws_handle_message(r#"{"method": "sync_echo", "params": {"message": "test"}}"#);
+    let response =
+        service.ws_handle_message(r#"{"method": "sync_echo", "params": {"message": "test"}}"#);
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
@@ -208,11 +229,17 @@ fn test_ws_async_method_with_sync_handler_returns_error() {
     let service = AsyncWsService;
 
     // Async method should return error with sync handler
-    let response = service.ws_handle_message(r#"{"method": "async_fetch", "params": {"url": "http://example.com"}}"#);
+    let response = service
+        .ws_handle_message(r#"{"method": "async_fetch", "params": {"url": "http://example.com"}}"#);
     assert!(response.is_ok()); // Response is OK, but contains error in body
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
-    assert!(json["error"]["message"].as_str().unwrap().contains("Async methods not supported"));
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Async methods not supported")
+    );
 }
 
 #[tokio::test]
@@ -220,7 +247,9 @@ async fn test_ws_sync_method_with_async_handler() {
     let service = AsyncWsService;
 
     // Sync method should work with async handler
-    let response = service.ws_handle_message_async(r#"{"method": "sync_echo", "params": {"message": "async test"}}"#).await;
+    let response = service
+        .ws_handle_message_async(r#"{"method": "sync_echo", "params": {"message": "async test"}}"#)
+        .await;
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
@@ -232,7 +261,11 @@ async fn test_ws_async_method_with_async_handler() {
     let service = AsyncWsService;
 
     // Async method should work with async handler
-    let response = service.ws_handle_message_async(r#"{"method": "async_fetch", "params": {"url": "http://example.com"}}"#).await;
+    let response = service
+        .ws_handle_message_async(
+            r#"{"method": "async_fetch", "params": {"url": "http://example.com"}}"#,
+        )
+        .await;
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
@@ -243,7 +276,9 @@ async fn test_ws_async_method_with_async_handler() {
 async fn test_ws_async_compute() {
     let service = AsyncWsService;
 
-    let response = service.ws_handle_message_async(r#"{"method": "async_compute", "params": {"n": 7}}"#).await;
+    let response = service
+        .ws_handle_message_async(r#"{"method": "async_compute", "params": {"n": 7}}"#)
+        .await;
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
@@ -254,7 +289,11 @@ async fn test_ws_async_compute() {
 async fn test_ws_async_with_request_id() {
     let service = AsyncWsService;
 
-    let response = service.ws_handle_message_async(r#"{"method": "async_compute", "params": {"n": 5}, "id": "req-123"}"#).await;
+    let response = service
+        .ws_handle_message_async(
+            r#"{"method": "async_compute", "params": {"n": 5}, "id": "req-123"}"#,
+        )
+        .await;
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();

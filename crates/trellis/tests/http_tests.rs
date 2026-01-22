@@ -52,7 +52,12 @@ impl ItemService {
 
     /// Get item by ID
     pub fn get_item(&self, item_id: String) -> Option<Item> {
-        self.items.lock().unwrap().iter().find(|i| i.id == item_id).cloned()
+        self.items
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|i| i.id == item_id)
+            .cloned()
     }
 
     /// Create an item
@@ -287,7 +292,8 @@ fn test_openapi_query_parameters() {
     let params = get_op.get("parameters").unwrap().as_array().unwrap();
 
     // Should have page and limit parameters
-    let param_names: Vec<_> = params.iter()
+    let param_names: Vec<_> = params
+        .iter()
         .map(|p| p.get("name").unwrap().as_str().unwrap())
         .collect();
     assert!(param_names.contains(&"page"), "Expected 'page' parameter");
@@ -310,7 +316,8 @@ fn test_openapi_path_parameters() {
     let params = get_op.get("parameters").unwrap().as_array().unwrap();
 
     // Should have item_id as path parameter
-    let path_params: Vec<_> = params.iter()
+    let path_params: Vec<_> = params
+        .iter()
         .filter(|p| p.get("in").unwrap() == "path")
         .collect();
     assert!(!path_params.is_empty(), "Expected path parameters");
@@ -351,6 +358,12 @@ fn test_openapi_error_responses() {
     let responses = put_op.get("responses").unwrap().as_object().unwrap();
 
     assert!(responses.contains_key("200"), "Expected 200 response");
-    assert!(responses.contains_key("400"), "Expected 400 response for Result");
-    assert!(responses.contains_key("500"), "Expected 500 response for Result");
+    assert!(
+        responses.contains_key("400"),
+        "Expected 400 response for Result"
+    );
+    assert!(
+        responses.contains_key("500"),
+        "Expected 500 response for Result"
+    );
 }

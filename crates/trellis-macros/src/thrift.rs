@@ -4,8 +4,8 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo, ReturnInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, ReturnInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[thrift] attribute
 #[derive(Default)]
@@ -50,7 +50,6 @@ impl Parse for ThriftArgs {
     }
 }
 
-
 pub(crate) fn expand_thrift(args: ThriftArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let struct_name_str = struct_name.to_string();
@@ -67,10 +66,7 @@ pub(crate) fn expand_thrift(args: ThriftArgs, impl_block: ItemImpl) -> syn::Resu
         .map(|(i, m)| generate_thrift_method(m, i + 1))
         .collect();
 
-    let structs: Vec<String> = methods
-        .iter()
-        .flat_map(generate_thrift_structs)
-        .collect();
+    let structs: Vec<String> = methods.iter().flat_map(generate_thrift_structs).collect();
 
     let thrift_schema = format!(
         r#"namespace rs {namespace}
@@ -195,11 +191,7 @@ fn generate_thrift_structs(method: &MethodInfo) -> Vec<String> {
         .map(|(i, p)| generate_thrift_field(p, i + 1))
         .collect();
 
-    let args_struct = format!(
-        "struct {} {{\n{}\n}}",
-        args_name,
-        arg_fields.join("\n")
-    );
+    let args_struct = format!("struct {} {{\n{}\n}}", args_name, arg_fields.join("\n"));
 
     vec![args_struct]
 }
@@ -230,10 +222,9 @@ fn rust_type_to_thrift(ty: &Option<syn::Type>) -> &'static str {
         "map<string, string>" // simplified
     } else if type_str.contains("HashSet") || type_str.contains("BTreeSet") {
         "set<string>" // simplified
-    } else if type_str.contains("Option") {
+    } else if type_str.contains("Option") || type_str.contains("String") || type_str.contains("str")
+    {
         "string" // simplified
-    } else if type_str.contains("String") || type_str.contains("str") {
-        "string"
     } else if type_str.contains("bool") {
         "bool"
     } else if type_str.contains("i8") {

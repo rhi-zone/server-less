@@ -6,8 +6,8 @@ use heck::ToKebabCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse::Parse, ItemImpl, Token};
-use trellis_parse::{extract_methods, get_impl_name, MethodInfo, ParamInfo};
+use syn::{ItemImpl, Token, parse::Parse};
+use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[cli] attribute
 #[derive(Default)]
@@ -41,7 +41,9 @@ impl Parse for CliArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: name, version, about"),
+                        format!(
+                            "unknown argument `{other}`. Valid arguments: name, version, about"
+                        ),
                     ));
                 }
             }
@@ -54,7 +56,6 @@ impl Parse for CliArgs {
         Ok(args)
     }
 }
-
 
 pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;

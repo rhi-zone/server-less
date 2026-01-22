@@ -102,9 +102,6 @@ impl Service {
 
 ## Ideas / Research
 
-### Replace typescript/python with moss typegen
-The `typescript` and `python` macros are simple type stub generators. When moss's typegen becomes comprehensive, remove/subsume these with a more general solution that leverages moss's type generation infrastructure.
-
 ### Hot Reloading
 Could macros generate code that supports hot reloading for development?
 

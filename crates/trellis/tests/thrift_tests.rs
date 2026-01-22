@@ -173,17 +173,17 @@ fn test_thrift_return_types() {
         schema.contains("binary get_bytes"),
         "Should map Vec<u8> to binary"
     );
-    assert!(
-        schema.contains("void do_nothing"),
-        "Should map () to void"
-    );
+    assert!(schema.contains("void do_nothing"), "Should map () to void");
 }
 
 // Test with schema validation
 #[derive(Clone)]
 struct ValidatedThriftService;
 
-#[thrift(namespace = "validated", schema = "../fixtures/validated_service.thrift")]
+#[thrift(
+    namespace = "validated",
+    schema = "../fixtures/validated_service.thrift"
+)]
 impl ValidatedThriftService {
     /// Get greeting
     pub fn get_greeting(&self) -> String {

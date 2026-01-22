@@ -61,17 +61,12 @@ jsonschema = ["trellis-macros/jsonschema"]
 # Documentation generators (no runtime deps)
 markdown = ["trellis-macros/markdown"]
 
-# Type stubs (no runtime deps)
-typescript = ["trellis-macros/typescript"]
-python = ["trellis-macros/python"]
-
 # All features
 full = [
     "mcp", "http", "cli", "ws", "graphql", "jsonrpc",
     "grpc", "capnp", "thrift", "connect", "smithy",
     "openrpc", "asyncapi", "jsonschema",
-    "markdown",
-    "typescript", "python"
+    "markdown"
 ]
 
 [dev-dependencies]
