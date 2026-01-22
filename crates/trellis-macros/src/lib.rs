@@ -61,6 +61,33 @@ mod ws;
 /// }
 /// ```
 ///
+/// # Per-Method Route Overrides
+///
+/// ```ignore
+/// #[http]
+/// impl UserService {
+///     // Override HTTP method: GET /data becomes POST /data
+///     #[route(method = "POST")]
+///     async fn get_data(&self, payload: String) -> String { /* ... */ }
+///
+///     // Override path: POST /users becomes POST /custom-endpoint
+///     #[route(path = "/custom-endpoint")]
+///     async fn create_user(&self, name: String) -> User { /* ... */ }
+///
+///     // Override both
+///     #[route(method = "PUT", path = "/special/{id}")]
+///     async fn do_something(&self, id: String) -> String { /* ... */ }
+///
+///     // Skip route generation (internal methods)
+///     #[route(skip)]
+///     fn internal_helper(&self) -> String { /* ... */ }
+///
+///     // Hide from OpenAPI but still generate route
+///     #[route(hidden)]
+///     fn secret_endpoint(&self) -> String { /* ... */ }
+/// }
+/// ```
+///
 /// # Generated Methods
 /// - `http_router() -> axum::Router` - Complete router with all endpoints
 /// - `http_routes() -> Vec<&'static str>` - List of route paths
