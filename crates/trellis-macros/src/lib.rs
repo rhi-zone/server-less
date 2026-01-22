@@ -40,30 +40,30 @@ mod ws;
 
 /// Generate HTTP handlers from an impl block.
 ///
-/// # Example
+/// # Basic Usage
 ///
 /// ```ignore
 /// use rhizome_trellis::http;
 ///
-/// struct UserService;
-///
 /// #[http]
 /// impl UserService {
-///     /// Create a new user
-///     async fn create_user(&self, name: String, email: String) -> User {
-///         // ...
-///     }
-///
-///     /// Get user by ID
-///     async fn get_user(&self, id: UserId) -> Option<User> {
-///         // ...
-///     }
+///     async fn create_user(&self, name: String) -> User { /* ... */ }
 /// }
 /// ```
 ///
-/// This generates:
-/// - `UserService::http_router()` returning an axum Router
-/// - Individual handler functions for each method
+/// # With URL Prefix
+///
+/// ```ignore
+/// #[http(prefix = "/api/v1")]
+/// impl UserService {
+///     // POST /api/v1/users
+///     async fn create_user(&self, name: String) -> User { /* ... */ }
+/// }
+/// ```
+///
+/// # Generated Methods
+/// - `http_router() -> axum::Router` - Complete router with all endpoints
+/// - `http_routes() -> Vec<&'static str>` - List of route paths
 #[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -78,30 +78,37 @@ pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Generate a CLI application from an impl block.
 ///
-/// # Example
+/// # Basic Usage
 ///
 /// ```ignore
 /// use rhizome_trellis::cli;
 ///
-/// struct MyApp;
-///
-/// #[cli(name = "myapp")]
+/// #[cli]
 /// impl MyApp {
-///     /// Create a new user
-///     fn create_user(&self, name: String, email: String) {
-///         // ...
-///     }
-///
-///     /// Get user by ID
-///     fn get_user(&self, id: String) {
-///         // ...
-///     }
+///     fn create_user(&self, name: String) { /* ... */ }
 /// }
 /// ```
 ///
-/// This generates:
-/// - `MyApp::cli()` returning a clap Command
-/// - `MyApp::run()` to execute the CLI
+/// # With All Options
+///
+/// ```ignore
+/// #[cli(
+///     name = "myapp",
+///     version = "1.0.0",
+///     about = "My awesome application"
+/// )]
+/// impl MyApp {
+///     /// Create a new user (becomes: myapp create-user <NAME>)
+///     fn create_user(&self, name: String) { /* ... */ }
+///
+///     /// Optional flags use Option<T>
+///     fn list_users(&self, limit: Option<usize>) { /* ... */ }
+/// }
+/// ```
+///
+/// # Generated Methods
+/// - `cli_app() -> clap::Command` - Complete CLI application
+/// - `cli_run(&self, matches: &ArgMatches)` - Execute matched command
 #[cfg(feature = "cli")]
 #[proc_macro_attribute]
 pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -116,25 +123,30 @@ pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Generate MCP (Model Context Protocol) tools from an impl block.
 ///
-/// # Example
+/// # Basic Usage
 ///
 /// ```ignore
 /// use rhizome_trellis::mcp;
 ///
-/// struct MyTools;
-///
 /// #[mcp]
-/// impl MyTools {
-///     /// Search for users by name
-///     fn search_users(&self, query: String, limit: Option<u32>) -> Vec<User> {
-///         // ...
-///     }
+/// impl FileTools {
+///     fn read_file(&self, path: String) -> String { /* ... */ }
 /// }
 /// ```
 ///
-/// This generates:
-/// - `MyTools::mcp_tools()` returning tool definitions
-/// - `MyTools::mcp_call(name, args)` to dispatch tool calls
+/// # With Namespace
+///
+/// ```ignore
+/// #[mcp(namespace = "file")]
+/// impl FileTools {
+///     // Exposed as "file_read_file" tool
+///     fn read_file(&self, path: String) -> String { /* ... */ }
+/// }
+/// ```
+///
+/// # Generated Methods
+/// - `mcp_tools() -> Vec<serde_json::Value>` - Tool definitions
+/// - `mcp_call(&self, name, args) -> Result<Value, String>` - Execute tool
 #[cfg(feature = "mcp")]
 #[proc_macro_attribute]
 pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
