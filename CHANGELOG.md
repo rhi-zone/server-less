@@ -45,6 +45,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - OpenAPI spec generation reflects custom status codes, content types, and headers
   - Added 8 comprehensive tests covering all response customization scenarios
 
+#### Parameter Customization
+- **Parameter override implementation**: Full support for `#[param(...)]` attribute
+  - `#[param(name = "q")]` - custom wire name for parameters
+  - `#[param(default = 10)]` - default values for optional parameters
+  - `#[param(query/path/body/header)]` - parameter location override (parsed but not yet fully implemented)
+  - Extended ParamInfo with wire_name, location, and default_value fields
+  - Updated HTTP parameter extraction to use custom names
+  - OpenAPI generation reflects renamed parameters and default values
+  - Parameters with defaults marked as not required in OpenAPI
+  - Note: Requires nightly Rust due to `#[register_tool(param)]` requirement
+
 #### Documentation
 - **Module-level documentation**: Added comprehensive docs to all 17 macro modules
 - **Tutorial creation**: Created REST API and Multi-Protocol tutorials (1000+ lines total)

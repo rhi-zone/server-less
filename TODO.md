@@ -72,36 +72,6 @@ Once bidirectional support is implemented, add examples showing:
 
 ## Medium Priority
 
-### Parameter Customization
-**Feature:** `#[param(query, name="q")]` and related attributes
-
-Currently, parameter names in URLs must match function parameter names. Users should be able to customize:
-- Parameter location (query, path, body, header)
-- Parameter name in the protocol vs code
-- Default values and required/optional overrides
-
-**Desired usage:**
-```rust
-#[http]
-impl SearchService {
-    // Query param "q" maps to function param "query"
-    async fn search(
-        &self,
-        #[param(query, name = "q")] query: String,
-        #[param(query, name = "limit", default = 10)] max_results: i32,
-        #[param(header, name = "X-API-Key")] api_key: String,
-    ) -> Vec<SearchResult> {
-        // ...
-    }
-}
-```
-
-**Technical considerations:**
-- Extend `ParamInfo` in `crates/trellis-parse/src/lib.rs` with location, wire_name, default_value
-- Update parameter extraction in all protocol macros (http, jsonrpc, graphql, cli)
-- Parse `#[param(...)]` attributes from function parameters
-- Update OpenAPI generation to reflect custom names
-
 ### Streaming Support
 **Status:** Partially implemented
 
