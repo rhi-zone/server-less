@@ -138,7 +138,11 @@ pub fn parse_params(
                     other => {
                         return Err(syn::Error::new_spanned(
                             other,
-                            "unsupported parameter pattern. Use a simple identifier like `name: String`",
+                            "unsupported parameter pattern\n\
+                             \n\
+                             Trellis macros require simple parameter names.\n\
+                             Use: name: String\n\
+                             Not: (name, _): (String, i32) or &name: &String",
                         ));
                     }
                 };

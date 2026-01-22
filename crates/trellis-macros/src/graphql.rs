@@ -85,7 +85,13 @@ impl Parse for GraphqlArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: name"),
+                        format!(
+                            "unknown argument `{other}`\n\
+                             \n\
+                             Valid arguments: name\n\
+                             \n\
+                             Example: #[graphql(name = \"UserAPI\")]"
+                        ),
                     ));
                 }
             }

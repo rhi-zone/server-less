@@ -58,7 +58,12 @@ impl Parse for ErrorVariantArgs {
                         _ => {
                             return Err(syn::Error::new_spanned(
                                 &nv.value,
-                                "expected error code name (e.g., NotFound) or HTTP status (e.g., 404)",
+                                "expected error code name or HTTP status\n\
+                                 \n\
+                                 Valid names: NotFound, InvalidInput, Unauthorized, Forbidden, InternalError\n\
+                                 Or use HTTP status: 400, 404, 500, etc.\n\
+                                 \n\
+                                 Example: #[error(code = NotFound)]",
                             ));
                         }
                     }
@@ -73,7 +78,9 @@ impl Parse for ErrorVariantArgs {
                     } else {
                         return Err(syn::Error::new_spanned(
                             &nv.value,
-                            "message must be a string literal",
+                            "message must be a string literal\n\
+                             \n\
+                             Example: #[error(code = NotFound, message = \"Resource not found\")]",
                         ));
                     }
                 }
@@ -97,7 +104,15 @@ pub fn expand_trellis_error(input: DeriveInput) -> syn::Result<TokenStream> {
     let Data::Enum(data_enum) = &input.data else {
         return Err(syn::Error::new_spanned(
             &input,
-            "TrellisError can only be derived for enums",
+            "TrellisError can only be derived for enums\n\
+             \n\
+             Hint: Define your errors as an enum:\n\
+             \n\
+             #[derive(Debug, TrellisError)]\n\
+             enum MyError {{\n\
+                 #[error(code = NotFound)]\n\
+                 NotFound,\n\
+             }}",
         ));
     };
 

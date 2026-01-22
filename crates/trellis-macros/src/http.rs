@@ -146,7 +146,11 @@ impl Parse for HttpArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: prefix"),
+                        format!(
+                            "unknown argument `{other}`\n\
+                             Valid arguments: prefix\n\
+                             Example: #[http(prefix = \"/api/v1\")]"
+                        ),
                     ));
                 }
             }
@@ -204,7 +208,12 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
             return Err(syn::Error::new_spanned(
                 &method.method.sig,
                 format!(
-                    "Duplicate route: {} {} is already defined by method '{}'",
+                    "Duplicate route: {} {} is already defined by method '{}'\n\
+                     \n\
+                     Hint: You can either:\n\
+                     1. Use #[route(skip)] to exclude this method from HTTP routing\n\
+                     2. Use #[route(path = \"/custom\")] to use a different path\n\
+                     3. Use #[route(method = \"PATCH\")] to use a different HTTP method",
                     http_method_enum.as_str(),
                     full_path,
                     existing_method
@@ -762,18 +771,30 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
     if !path.starts_with('/') {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
-            format!("HTTP path must start with '/'. Got: '{}'", path),
+            format!(
+                "HTTP path must start with '/'. Got: '{}'\n\
+                 \n\
+                 Hint: Change to '/{}'",
+                path, path
+            ),
         ));
     }
 
     // Check for invalid characters
     let invalid_chars = ['<', '>', '"', '`', ' ', '\t', '\n'];
     if let Some(ch) = invalid_chars.iter().find(|&&c| path.contains(c)) {
+        let hint = if *ch == '<' || *ch == '>' {
+            "\n\nHint: Use curly braces for path parameters, e.g., /users/{id}"
+        } else if *ch == ' ' {
+            "\n\nHint: Use hyphens or underscores instead of spaces, e.g., /my-resource"
+        } else {
+            ""
+        };
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
             format!(
-                "HTTP path contains invalid character '{}'. Path: '{}'",
-                ch, path
+                "HTTP path contains invalid character '{}'. Path: '{}'{}",
+                ch, path, hint
             ),
         ));
     }
@@ -784,7 +805,13 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
     if open_braces != close_braces {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
-            format!("HTTP path has mismatched braces. Path: '{}'", path),
+            format!(
+                "HTTP path has mismatched braces. Path: '{}'\n\
+                 \n\
+                 Found {} opening '{{' and {} closing '}}'\n\
+                 Hint: Each path parameter should be wrapped in braces, e.g., /users/{{id}}",
+                path, open_braces, close_braces
+            ),
         ));
     }
 
@@ -794,7 +821,9 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
             return Err(syn::Error::new(
                 proc_macro2::Span::call_site(),
                 format!(
-                    "HTTP path has empty or malformed path parameter. Path: '{}'",
+                    "HTTP path has empty or malformed path parameter. Path: '{}'\n\
+                     \n\
+                     Hint: Path parameters need names, e.g., /users/{{id}} or /posts/{{post_id}}",
                     path
                 ),
             ));
@@ -834,7 +863,12 @@ impl Parse for ServeArgs {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown protocol `{other}`. Valid: http, ws, jsonrpc, graphql, health"
+                            "unknown protocol `{other}`\n\
+                             \n\
+                             Valid protocols: http, ws, jsonrpc, graphql\n\
+                             Valid options: health\n\
+                             \n\
+                             Example: #[serve(http, ws, health = \"/status\")]"
                         ),
                     ));
                 }

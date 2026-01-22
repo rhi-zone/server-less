@@ -94,7 +94,11 @@ impl Parse for CliArgs {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`. Valid arguments: name, version, about"
+                            "unknown argument `{other}`\n\
+                             \n\
+                             Valid arguments: name, version, about\n\
+                             \n\
+                             Example: #[cli(name = \"my-app\", version = \"1.0.0\", about = \"My CLI tool\")]"
                         ),
                     ));
                 }
