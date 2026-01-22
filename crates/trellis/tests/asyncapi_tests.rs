@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::asyncapi;
+use rhizome_trellis::asyncapi;
 
 #[derive(Clone)]
 struct ChatService;

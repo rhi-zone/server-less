@@ -43,7 +43,7 @@ mod ws;
 /// # Example
 ///
 /// ```ignore
-/// use trellis::http;
+/// use rhizome_trellis::http;
 ///
 /// struct UserService;
 ///
@@ -81,7 +81,7 @@ pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::cli;
+/// use rhizome_trellis::cli;
 ///
 /// struct MyApp;
 ///
@@ -119,7 +119,7 @@ pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::mcp;
+/// use rhizome_trellis::mcp;
 ///
 /// struct MyTools;
 ///
@@ -152,7 +152,7 @@ pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::ws;
+/// use rhizome_trellis::ws;
 ///
 /// struct ChatService;
 ///
@@ -191,7 +191,7 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::jsonrpc;
+/// use rhizome_trellis::jsonrpc;
 ///
 /// struct Calculator;
 ///
@@ -240,7 +240,7 @@ pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::openrpc;
+/// use rhizome_trellis::openrpc;
 ///
 /// struct Calculator;
 ///
@@ -277,7 +277,7 @@ pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::markdown;
+/// use rhizome_trellis::markdown;
 ///
 /// struct UserService;
 ///
@@ -315,7 +315,7 @@ pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::asyncapi;
+/// use rhizome_trellis::asyncapi;
 ///
 /// struct ChatService;
 ///
@@ -355,7 +355,7 @@ pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::connect;
+/// use rhizome_trellis::connect;
 ///
 /// struct UserService;
 ///
@@ -385,7 +385,7 @@ pub fn connect(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::grpc;
+/// use rhizome_trellis::grpc;
 ///
 /// struct UserService;
 ///
@@ -424,7 +424,7 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::capnp;
+/// use rhizome_trellis::capnp;
 ///
 /// struct UserService;
 ///
@@ -463,7 +463,7 @@ pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::thrift;
+/// use rhizome_trellis::thrift;
 ///
 /// struct UserService;
 ///
@@ -505,7 +505,7 @@ pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::smithy;
+/// use rhizome_trellis::smithy;
 ///
 /// struct UserService;
 ///
@@ -545,7 +545,7 @@ pub fn smithy(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::jsonschema;
+/// use rhizome_trellis::jsonschema;
 ///
 /// struct UserService;
 ///
@@ -580,7 +580,7 @@ pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::graphql;
+/// use rhizome_trellis::graphql;
 ///
 /// struct UserService;
 ///
@@ -620,7 +620,7 @@ pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::{http, ws, jsonrpc, serve};
+/// use rhizome_trellis::{http, ws, jsonrpc, serve};
 ///
 /// struct MyService;
 ///
@@ -688,7 +688,7 @@ pub fn route(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::TrellisError;
+/// use rhizome_trellis::TrellisError;
 ///
 /// #[derive(TrellisError)]
 /// enum MyError {

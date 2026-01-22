@@ -3,8 +3,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use rhizome_trellis::{http, route};
 use serde::{Deserialize, Serialize};
-use trellis::{http, route};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {

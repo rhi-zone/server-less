@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::grpc;
+use rhizome_trellis::grpc;
 
 #[derive(Clone)]
 struct UserService;

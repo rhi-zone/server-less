@@ -1,13 +1,13 @@
 [package]
-name = "trellis"
+name = "rhizome-trellis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Composable derive macros for common Rust patterns"
 
 [dependencies]
-trellis-core = { path = "../trellis-core" }
-trellis-macros = { path = "../trellis-macros", default-features = false }
+rhizome-trellis-core = { path = "../trellis-core" }
+rhizome-trellis-macros = { path = "../trellis-macros", default-features = false }
 
 # Re-export common dependencies users will need
 serde = { version = "1", features = ["derive"] }
@@ -39,27 +39,27 @@ optional = true
 default = ["full"]
 
 # Runtime protocols (require external deps)
-mcp = ["trellis-macros/mcp"]
-http = ["trellis-macros/http", "axum"]
-cli = ["trellis-macros/cli", "clap"]
-ws = ["trellis-macros/ws", "axum", "futures"]
-graphql = ["trellis-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
-jsonrpc = ["trellis-macros/jsonrpc", "axum"]
+mcp = ["rhizome-trellis-macros/mcp"]
+http = ["rhizome-trellis-macros/http", "axum"]
+cli = ["rhizome-trellis-macros/cli", "clap"]
+ws = ["rhizome-trellis-macros/ws", "axum", "futures"]
+graphql = ["rhizome-trellis-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
+jsonrpc = ["rhizome-trellis-macros/jsonrpc", "axum"]
 
 # Schema generators (no runtime deps, just string generation)
-grpc = ["trellis-macros/grpc"]
-capnp = ["trellis-macros/capnp"]
-thrift = ["trellis-macros/thrift"]
-connect = ["trellis-macros/connect"]
-smithy = ["trellis-macros/smithy"]
+grpc = ["rhizome-trellis-macros/grpc"]
+capnp = ["rhizome-trellis-macros/capnp"]
+thrift = ["rhizome-trellis-macros/thrift"]
+connect = ["rhizome-trellis-macros/connect"]
+smithy = ["rhizome-trellis-macros/smithy"]
 
 # Specification generators (no runtime deps)
-openrpc = ["trellis-macros/openrpc"]
-asyncapi = ["trellis-macros/asyncapi"]
-jsonschema = ["trellis-macros/jsonschema"]
+openrpc = ["rhizome-trellis-macros/openrpc"]
+asyncapi = ["rhizome-trellis-macros/asyncapi"]
+jsonschema = ["rhizome-trellis-macros/jsonschema"]
 
 # Documentation generators (no runtime deps)
-markdown = ["trellis-macros/markdown"]
+markdown = ["rhizome-trellis-macros/markdown"]
 
 # All features
 full = [

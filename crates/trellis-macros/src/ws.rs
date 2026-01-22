@@ -5,9 +5,9 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
+use rhizome_trellis_parse::{MethodInfo, extract_methods, get_impl_name};
+use rhizome_trellis_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
-use trellis_rpc::{self, AsyncHandling};
 
 /// Arguments for the #[ws] attribute
 #[derive(Default)]
@@ -87,7 +87,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 message: &str,
             ) -> ::std::result::Result<String, String> {
                 // Parse the incoming message as JSON-RPC
-                let parsed: ::trellis::serde_json::Value = ::trellis::serde_json::from_str(message)
+                let parsed: ::rhizome_trellis::serde_json::Value = ::rhizome_trellis::serde_json::from_str(message)
                     .map_err(|e| format!("Invalid JSON: {}", e))?;
 
                 let method = parsed.get("method")
@@ -96,7 +96,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
                 let params = parsed.get("params")
                     .cloned()
-                    .unwrap_or(::trellis::serde_json::json!({}));
+                    .unwrap_or(::rhizome_trellis::serde_json::json!({}));
 
                 let id = parsed.get("id").cloned();
 
@@ -115,7 +115,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 message: &str,
             ) -> ::std::result::Result<String, String> {
                 // Parse the incoming message as JSON-RPC
-                let parsed: ::trellis::serde_json::Value = ::trellis::serde_json::from_str(message)
+                let parsed: ::rhizome_trellis::serde_json::Value = ::rhizome_trellis::serde_json::from_str(message)
                     .map_err(|e| format!("Invalid JSON: {}", e))?;
 
                 let method = parsed.get("method")
@@ -124,7 +124,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
                 let params = parsed.get("params")
                     .cloned()
-                    .unwrap_or(::trellis::serde_json::json!({}));
+                    .unwrap_or(::rhizome_trellis::serde_json::json!({}));
 
                 let id = parsed.get("id").cloned();
 
@@ -137,12 +137,12 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
             /// Format a WebSocket JSON-RPC response
             fn __format_ws_response(
-                result: ::std::result::Result<::trellis::serde_json::Value, String>,
-                id: Option<::trellis::serde_json::Value>,
+                result: ::std::result::Result<::rhizome_trellis::serde_json::Value, String>,
+                id: Option<::rhizome_trellis::serde_json::Value>,
             ) -> ::std::result::Result<String, String> {
                 let response = match result {
                     Ok(value) => {
-                        let mut resp = ::trellis::serde_json::json!({
+                        let mut resp = ::rhizome_trellis::serde_json::json!({
                             "result": value
                         });
                         if let Some(id) = id {
@@ -151,7 +151,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                         resp
                     }
                     Err(err) => {
-                        let mut resp = ::trellis::serde_json::json!({
+                        let mut resp = ::rhizome_trellis::serde_json::json!({
                             "error": {
                                 "message": err
                             }
@@ -163,7 +163,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                     }
                 };
 
-                ::trellis::serde_json::to_string(&response)
+                ::rhizome_trellis::serde_json::to_string(&response)
                     .map_err(|e| format!("Serialization error: {}", e))
             }
 
@@ -171,8 +171,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             fn ws_dispatch(
                 &self,
                 method: &str,
-                args: ::trellis::serde_json::Value,
-            ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
+                args: ::rhizome_trellis::serde_json::Value,
+            ) -> ::std::result::Result<::rhizome_trellis::serde_json::Value, String> {
                 match method {
                     #(#dispatch_arms_sync)*
                     _ => Err(format!("Unknown method: {}", method)),
@@ -183,8 +183,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             async fn ws_dispatch_async(
                 &self,
                 method: &str,
-                args: ::trellis::serde_json::Value,
-            ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
+                args: ::rhizome_trellis::serde_json::Value,
+            ) -> ::std::result::Result<::rhizome_trellis::serde_json::Value, String> {
                 match method {
                     #(#dispatch_arms_async)*
                     _ => Err(format!("Unknown method: {}", method)),
@@ -231,7 +231,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                         let response = state.ws_handle_message_async(&text).await;
                         let reply = match response {
                             Ok(json) => json,
-                            Err(err) => ::trellis::serde_json::json!({
+                            Err(err) => ::rhizome_trellis::serde_json::json!({
                                 "error": {"message": err}
                             }).to_string(),
                         };
@@ -251,7 +251,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 /// Generate a dispatch match arm for a method (sync version)
 fn generate_dispatch_arm_sync(method: &MethodInfo) -> syn::Result<TokenStream2> {
     // Use shared RPC dispatch generation
-    Ok(trellis_rpc::generate_dispatch_arm(
+    Ok(rhizome_trellis_rpc::generate_dispatch_arm(
         method,
         None,
         AsyncHandling::Error,
@@ -261,7 +261,7 @@ fn generate_dispatch_arm_sync(method: &MethodInfo) -> syn::Result<TokenStream2> 
 /// Generate a dispatch match arm for a method (async version)
 fn generate_dispatch_arm_async(method: &MethodInfo) -> syn::Result<TokenStream2> {
     // Use shared RPC dispatch generation with await support
-    Ok(trellis_rpc::generate_dispatch_arm(
+    Ok(rhizome_trellis_rpc::generate_dispatch_arm(
         method,
         None,
         AsyncHandling::Await,

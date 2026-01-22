@@ -1,7 +1,7 @@
 //! Example HTTP service demonstrating the #[http] macro.
 
+use rhizome_trellis::http;
 use serde::{Deserialize, Serialize};
-use trellis::http;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {

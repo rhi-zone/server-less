@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::{http, jsonrpc, serve, ws};
+use rhizome_trellis::{http, jsonrpc, serve, ws};
 
 #[derive(Clone)]
 struct MultiService {

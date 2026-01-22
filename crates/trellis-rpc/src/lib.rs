@@ -8,7 +8,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use trellis_parse::{MethodInfo, ParamInfo};
+use rhizome_trellis_parse::{MethodInfo, ParamInfo};
 
 /// Generate code to extract a parameter from a `serde_json::Value` args object.
 pub fn generate_param_extraction(param: &ParamInfo) -> TokenStream {

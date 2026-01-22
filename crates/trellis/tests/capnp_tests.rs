@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::capnp;
+use rhizome_trellis::capnp;
 
 #[derive(Clone)]
 struct UserService;

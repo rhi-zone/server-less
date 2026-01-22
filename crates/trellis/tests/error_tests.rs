@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::{ErrorCode, IntoErrorCode, TrellisError};
+use rhizome_trellis::{ErrorCode, IntoErrorCode, TrellisError};
 
 // Test basic derive with code inference
 #[derive(Debug, TrellisError)]

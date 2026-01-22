@@ -1,5 +1,5 @@
 [package]
-name = "trellis-macros"
+name = "rhizome-trellis-macros"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,8 +10,8 @@ proc-macro = true
 
 [dependencies]
 # Shared parsing and RPC utilities
-trellis-parse = { path = "../trellis-parse" }
-trellis-rpc = { path = "../trellis-rpc" }
+rhizome-trellis-parse = { path = "../trellis-parse" }
+rhizome-trellis-rpc = { path = "../trellis-rpc" }
 
 # Proc macro essentials
 syn = { version = "2", features = ["full", "extra-traits"] }

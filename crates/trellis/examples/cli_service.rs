@@ -1,7 +1,7 @@
 //! Example CLI service demonstrating the #[cli] macro.
 
+use rhizome_trellis::cli;
 use serde::{Deserialize, Serialize};
-use trellis::cli;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {

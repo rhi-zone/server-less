@@ -1140,6 +1140,65 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
+name = "rhizome-trellis"
+version = "0.1.0"
+dependencies = [
+ "async-graphql",
+ "async-graphql-axum",
+ "axum",
+ "clap",
+ "futures",
+ "rhizome-trellis-core",
+ "rhizome-trellis-macros",
+ "serde",
+ "serde_json",
+ "tokio",
+ "trybuild",
+]
+
+[[package]]
+name = "rhizome-trellis-core"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "http",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "rhizome-trellis-macros"
+version = "0.1.0"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rhizome-trellis-parse",
+ "rhizome-trellis-rpc",
+ "syn",
+]
+
+[[package]]
+name = "rhizome-trellis-parse"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "rhizome-trellis-rpc"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rhizome-trellis-parse",
+ "syn",
+]
+
+[[package]]
 name = "rustix"
 version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1559,65 +1618,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "trellis"
-version = "0.1.0"
-dependencies = [
- "async-graphql",
- "async-graphql-axum",
- "axum",
- "clap",
- "futures",
- "serde",
- "serde_json",
- "tokio",
- "trellis-core",
- "trellis-macros",
- "trybuild",
-]
-
-[[package]]
-name = "trellis-core"
-version = "0.1.0"
-dependencies = [
- "futures-core",
- "http",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "trellis-macros"
-version = "0.1.0"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn",
- "trellis-parse",
- "trellis-rpc",
-]
-
-[[package]]
-name = "trellis-parse"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "trellis-rpc"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "trellis-parse",
 ]
 
 [[package]]

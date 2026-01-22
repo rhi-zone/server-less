@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::smithy;
+use rhizome_trellis::smithy;
 
 #[derive(Clone)]
 struct UserService;

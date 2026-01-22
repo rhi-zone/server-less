@@ -5,9 +5,9 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, extract_methods, get_impl_name};
+use rhizome_trellis_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
-use trellis_rpc::{self, AsyncHandling};
 
 /// Arguments for the #[mcp] attribute
 #[derive(Default)]
@@ -107,7 +107,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
 
         impl #struct_name {
             /// Get the list of available MCP tool definitions
-            pub fn mcp_tools() -> Vec<::trellis::serde_json::Value> {
+            pub fn mcp_tools() -> Vec<::rhizome_trellis::serde_json::Value> {
                 vec![
                     #(#tool_definitions),*
                 ]
@@ -124,8 +124,8 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
             pub fn mcp_call(
                 &self,
                 name: &str,
-                args: ::trellis::serde_json::Value
-            ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
+                args: ::rhizome_trellis::serde_json::Value
+            ) -> ::std::result::Result<::rhizome_trellis::serde_json::Value, String> {
                 match name {
                     #(#dispatch_arms_sync)*
                     _ => Err(format!("Unknown tool: {}", name)),
@@ -138,8 +138,8 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
             pub async fn mcp_call_async(
                 &self,
                 name: &str,
-                args: ::trellis::serde_json::Value
-            ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
+                args: ::rhizome_trellis::serde_json::Value
+            ) -> ::std::result::Result<::rhizome_trellis::serde_json::Value, String> {
                 match name {
                     #(#dispatch_arms_async)*
                     _ => Err(format!("Unknown tool: {}", name)),
@@ -158,22 +158,22 @@ fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> Toke
         .unwrap_or_else(|| method.name.to_string());
 
     // Generate parameter schema using shared utility
-    let (properties, required_params) = trellis_rpc::generate_param_schema(&method.params);
+    let (properties, required_params) = rhizome_trellis_rpc::generate_param_schema(&method.params);
 
     quote! {
         {
-            let mut properties = ::trellis::serde_json::Map::new();
+            let mut properties = ::rhizome_trellis::serde_json::Map::new();
             #(
                 {
                     let (name, type_str, desc): (&str, &str, &str) = #properties;
-                    properties.insert(name.to_string(), ::trellis::serde_json::json!({
+                    properties.insert(name.to_string(), ::rhizome_trellis::serde_json::json!({
                         "type": type_str,
                         "description": desc
                     }));
                 }
             )*
 
-            ::trellis::serde_json::json!({
+            ::rhizome_trellis::serde_json::json!({
                 "name": #name,
                 "description": #description,
                 "inputSchema": {
@@ -189,11 +189,11 @@ fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> Toke
 /// Generate a dispatch match arm for calling a method (sync version)
 fn generate_dispatch_arm_sync(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    trellis_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Error)
+    rhizome_trellis_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Error)
 }
 
 /// Generate a dispatch match arm for calling a method (async version)
 fn generate_dispatch_arm_async(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    trellis_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Await)
+    rhizome_trellis_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Await)
 }

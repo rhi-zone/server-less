@@ -7,8 +7,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[asyncapi] attribute
 #[derive(Default)]
@@ -88,16 +88,16 @@ pub(crate) fn expand_asyncapi(
 
         impl #struct_name {
             /// Get the AsyncAPI specification for this service.
-            pub fn asyncapi_spec() -> ::trellis::serde_json::Value {
+            pub fn asyncapi_spec() -> ::rhizome_trellis::serde_json::Value {
                 let channels_str = concat!("{", #channels_json, "}");
                 let messages_str = concat!("{", #messages_json, "}");
 
-                let channels: ::trellis::serde_json::Value =
-                    ::trellis::serde_json::from_str(channels_str).unwrap_or_default();
-                let messages: ::trellis::serde_json::Value =
-                    ::trellis::serde_json::from_str(messages_str).unwrap_or_default();
+                let channels: ::rhizome_trellis::serde_json::Value =
+                    ::rhizome_trellis::serde_json::from_str(channels_str).unwrap_or_default();
+                let messages: ::rhizome_trellis::serde_json::Value =
+                    ::rhizome_trellis::serde_json::from_str(messages_str).unwrap_or_default();
 
-                ::trellis::serde_json::json!({
+                ::rhizome_trellis::serde_json::json!({
                     "asyncapi": "2.6.0",
                     "info": {
                         "title": #title,
@@ -118,7 +118,7 @@ pub(crate) fn expand_asyncapi(
 
             /// Get the AsyncAPI spec as a JSON string.
             pub fn asyncapi_json() -> String {
-                ::trellis::serde_json::to_string_pretty(&Self::asyncapi_spec())
+                ::rhizome_trellis::serde_json::to_string_pretty(&Self::asyncapi_spec())
                     .unwrap_or_else(|_| "{}".to_string())
             }
 

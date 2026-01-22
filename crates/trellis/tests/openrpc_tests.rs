@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::openrpc;
+use rhizome_trellis::openrpc;
 
 #[derive(Clone)]
 struct Calculator;

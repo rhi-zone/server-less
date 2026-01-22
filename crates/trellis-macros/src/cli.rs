@@ -6,8 +6,8 @@ use heck::ToKebabCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[cli] attribute
 #[derive(Default)]
@@ -223,7 +223,7 @@ fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Re
         quote! {
             match result {
                 Ok(value) => {
-                    let json = ::trellis::serde_json::to_string_pretty(&value)?;
+                    let json = ::rhizome_trellis::serde_json::to_string_pretty(&value)?;
                     println!("{}", json);
                 }
                 Err(err) => {
@@ -236,7 +236,7 @@ fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Re
         quote! {
             match result {
                 Some(value) => {
-                    let json = ::trellis::serde_json::to_string_pretty(&value)?;
+                    let json = ::rhizome_trellis::serde_json::to_string_pretty(&value)?;
                     println!("{}", json);
                 }
                 None => {
@@ -247,7 +247,7 @@ fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Re
         }
     } else {
         quote! {
-            let json = ::trellis::serde_json::to_string_pretty(&result)?;
+            let json = ::rhizome_trellis::serde_json::to_string_pretty(&result)?;
             println!("{}", json);
         }
     };

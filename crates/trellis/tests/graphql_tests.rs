@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::graphql;
+use rhizome_trellis::graphql;
 
 #[derive(Clone)]
 struct SimpleService {

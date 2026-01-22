@@ -42,7 +42,7 @@ features:
 ## Quick Example
 
 ```rust
-use trellis::prelude::*;
+use rhizome_trellis::prelude::*;
 
 struct UserService { /* ... */ }
 
@@ -147,10 +147,10 @@ Related projects:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-trellis = { git = "https://github.com/rhizome-lab/trellis" }
+rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis" }
 
 # Or select specific features
-trellis = { git = "https://github.com/rhizome-lab/trellis", default-features = false, features = ["http", "cli", "mcp"] }
+rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ## Contributing

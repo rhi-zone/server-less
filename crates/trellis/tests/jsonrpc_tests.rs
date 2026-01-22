@@ -3,8 +3,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use rhizome_trellis::jsonrpc;
 use serde_json::json;
-use trellis::jsonrpc;
 
 #[derive(Clone)]
 struct Calculator;

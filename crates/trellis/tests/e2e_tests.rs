@@ -6,8 +6,8 @@
 //! These tests define a service with known behavior (the "reference implementation"),
 //! apply macros to generate protocol handlers, and verify the results match.
 
+use rhizome_trellis::{cli, http, mcp, ws};
 use serde::{Deserialize, Serialize};
-use trellis::{cli, http, mcp, ws};
 
 // ============================================================================
 // Reference Implementation

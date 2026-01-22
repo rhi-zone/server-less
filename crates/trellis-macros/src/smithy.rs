@@ -7,8 +7,8 @@ use heck::{ToPascalCase, ToSnakeCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[smithy] attribute
 #[derive(Default)]

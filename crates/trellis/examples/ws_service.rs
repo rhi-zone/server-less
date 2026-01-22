@@ -7,8 +7,8 @@
 //! {"method": "echo", "params": {"message": "hello"}}
 //! {"method": "add", "params": {"a": 5, "b": 3}}
 
+use rhizome_trellis::ws;
 use serde::{Deserialize, Serialize};
-use trellis::ws;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {

@@ -21,7 +21,7 @@ This library does the same for Rust code:
 Write your business logic once, expose it through multiple protocols:
 
 ```rust
-use trellis::prelude::*;
+use rhizome_trellis::prelude::*;
 
 struct UserService { /* ... */ }
 
@@ -129,10 +129,10 @@ Generate API documentation and contracts:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-trellis = { git = "https://github.com/rhizome-lab/trellis" }
+rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis" }
 
 # Or select specific features
-trellis = { git = "https://github.com/rhizome-lab/trellis", default-features = false, features = ["http", "cli", "mcp"] }
+rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ### Available Features

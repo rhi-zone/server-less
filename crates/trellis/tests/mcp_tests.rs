@@ -3,8 +3,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use rhizome_trellis::mcp;
 use serde::{Deserialize, Serialize};
-use trellis::mcp;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {

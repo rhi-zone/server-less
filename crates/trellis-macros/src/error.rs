@@ -121,28 +121,28 @@ pub fn expand_trellis_error(input: DeriveInput) -> syn::Result<TokenStream> {
         // Determine error code
         let error_code = match args.code {
             Some(ErrorCodeSpec::Named(ident)) => {
-                quote! { ::trellis::ErrorCode::#ident }
+                quote! { ::rhizome_trellis::ErrorCode::#ident }
             }
             Some(ErrorCodeSpec::Numeric(status)) => {
                 // Map HTTP status to ErrorCode
 
                 match status {
-                    400 => quote! { ::trellis::ErrorCode::InvalidInput },
-                    401 => quote! { ::trellis::ErrorCode::Unauthenticated },
-                    403 => quote! { ::trellis::ErrorCode::Forbidden },
-                    404 => quote! { ::trellis::ErrorCode::NotFound },
-                    409 => quote! { ::trellis::ErrorCode::Conflict },
-                    422 => quote! { ::trellis::ErrorCode::FailedPrecondition },
-                    429 => quote! { ::trellis::ErrorCode::RateLimited },
-                    500 => quote! { ::trellis::ErrorCode::Internal },
-                    501 => quote! { ::trellis::ErrorCode::NotImplemented },
-                    503 => quote! { ::trellis::ErrorCode::Unavailable },
-                    _ => quote! { ::trellis::ErrorCode::Internal },
+                    400 => quote! { ::rhizome_trellis::ErrorCode::InvalidInput },
+                    401 => quote! { ::rhizome_trellis::ErrorCode::Unauthenticated },
+                    403 => quote! { ::rhizome_trellis::ErrorCode::Forbidden },
+                    404 => quote! { ::rhizome_trellis::ErrorCode::NotFound },
+                    409 => quote! { ::rhizome_trellis::ErrorCode::Conflict },
+                    422 => quote! { ::rhizome_trellis::ErrorCode::FailedPrecondition },
+                    429 => quote! { ::rhizome_trellis::ErrorCode::RateLimited },
+                    500 => quote! { ::rhizome_trellis::ErrorCode::Internal },
+                    501 => quote! { ::rhizome_trellis::ErrorCode::NotImplemented },
+                    503 => quote! { ::rhizome_trellis::ErrorCode::Unavailable },
+                    _ => quote! { ::rhizome_trellis::ErrorCode::Internal },
                 }
             }
             None => {
                 // Infer from variant name
-                quote! { ::trellis::ErrorCode::infer_from_name(#variant_name_str) }
+                quote! { ::rhizome_trellis::ErrorCode::infer_from_name(#variant_name_str) }
             }
         };
 
@@ -202,8 +202,8 @@ pub fn expand_trellis_error(input: DeriveInput) -> syn::Result<TokenStream> {
     }
 
     Ok(quote! {
-        impl ::trellis::IntoErrorCode for #name {
-            fn error_code(&self) -> ::trellis::ErrorCode {
+        impl ::rhizome_trellis::IntoErrorCode for #name {
+            fn error_code(&self) -> ::rhizome_trellis::ErrorCode {
                 match self {
                     #(#error_code_arms,)*
                 }

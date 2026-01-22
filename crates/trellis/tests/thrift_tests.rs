@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::thrift;
+use rhizome_trellis::thrift;
 
 #[derive(Clone)]
 struct UserService;

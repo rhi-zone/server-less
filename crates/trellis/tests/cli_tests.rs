@@ -3,8 +3,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use rhizome_trellis::cli;
 use serde::{Deserialize, Serialize};
-use trellis::cli;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Item {

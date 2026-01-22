@@ -6,8 +6,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[graphql] attribute
 #[derive(Default)]
@@ -334,7 +334,7 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
     }
 }
 
-fn infer_graphql_type_ref(ret: &trellis_parse::ReturnInfo) -> (TokenStream2, bool) {
+fn infer_graphql_type_ref(ret: &rhizome_trellis_parse::ReturnInfo) -> (TokenStream2, bool) {
     if ret.is_unit {
         (quote! { TypeRef::named_nn(TypeRef::BOOLEAN) }, false)
     } else if let Some(ref ty) = ret.ty {
@@ -405,7 +405,7 @@ fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> Toke
 }
 
 fn rust_type_to_graphql(ty: &syn::Type) -> &'static str {
-    let type_str = trellis_rpc::infer_json_type(ty);
+    let type_str = rhizome_trellis_rpc::infer_json_type(ty);
     match type_str {
         "integer" => "Int",
         "number" => "Float",

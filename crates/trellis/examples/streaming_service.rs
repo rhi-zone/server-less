@@ -4,8 +4,8 @@
 //! Test with: curl http://localhost:3000/api/count?n=5
 
 use futures::stream::{self, Stream};
+use rhizome_trellis::http;
 use serde::{Deserialize, Serialize};
-use trellis::http;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {

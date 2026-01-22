@@ -7,8 +7,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[jsonschema] attribute
 #[derive(Default)]
@@ -79,12 +79,12 @@ pub(crate) fn expand_jsonschema(
 
         impl #struct_name {
             /// Get JSON Schema for all request/response types.
-            pub fn json_schema() -> ::trellis::serde_json::Value {
+            pub fn json_schema() -> ::rhizome_trellis::serde_json::Value {
                 let defs_str = concat!("{", #definitions_json, "}");
-                let definitions: ::trellis::serde_json::Value =
-                    ::trellis::serde_json::from_str(defs_str).unwrap_or_default();
+                let definitions: ::rhizome_trellis::serde_json::Value =
+                    ::rhizome_trellis::serde_json::from_str(defs_str).unwrap_or_default();
 
-                ::trellis::serde_json::json!({
+                ::rhizome_trellis::serde_json::json!({
                     "$schema": #draft,
                     "title": #title,
                     "definitions": definitions
@@ -93,7 +93,7 @@ pub(crate) fn expand_jsonschema(
 
             /// Get JSON Schema as a pretty-printed string.
             pub fn json_schema_string() -> String {
-                ::trellis::serde_json::to_string_pretty(&Self::json_schema())
+                ::rhizome_trellis::serde_json::to_string_pretty(&Self::json_schema())
                     .unwrap_or_else(|_| "{}".to_string())
             }
 

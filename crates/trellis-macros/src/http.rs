@@ -6,8 +6,8 @@ use heck::ToKebabCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
+use rhizome_trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
-use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Extract the inner type T from Option<T>
 fn extract_option_inner(ty: &Type) -> Option<Type> {
@@ -149,7 +149,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
             }
 
             /// Get OpenAPI specification for this service
-            pub fn openapi_spec() -> ::trellis::serde_json::Value {
+            pub fn openapi_spec() -> ::rhizome_trellis::serde_json::Value {
                 #openapi_fn
             }
         }
@@ -214,7 +214,7 @@ fn generate_param_handling(
     if !other_params.is_empty() {
         if has_body {
             extractions.push(quote! {
-                body_extractor: ::axum::extract::Json<::trellis::serde_json::Value>
+                body_extractor: ::axum::extract::Json<::rhizome_trellis::serde_json::Value>
             });
 
             for param in &other_params {
@@ -223,11 +223,11 @@ fn generate_param_handling(
                 if param.is_optional {
                     let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
                     calls.push(quote! {
-                        body_extractor.0.get(#name_str).and_then(|v| ::trellis::serde_json::from_value::<#inner_ty>(v.clone()).ok())
+                        body_extractor.0.get(#name_str).and_then(|v| ::rhizome_trellis::serde_json::from_value::<#inner_ty>(v.clone()).ok())
                     });
                 } else {
                     calls.push(quote! {
-                        ::trellis::serde_json::from_value::<#ty>(body_extractor.0.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
+                        ::rhizome_trellis::serde_json::from_value::<#ty>(body_extractor.0.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
                     });
                 }
             }
@@ -273,10 +273,10 @@ fn generate_response_handling(
             match #call {
                 Ok(value) => ::axum::Json(value).into_response(),
                 Err(err) => {
-                    let code = ::trellis::ErrorCode::infer_from_name(&format!("{:?}", err));
+                    let code = ::rhizome_trellis::ErrorCode::infer_from_name(&format!("{:?}", err));
                     let status = ::axum::http::StatusCode::from_u16(code.http_status())
                         .unwrap_or(::axum::http::StatusCode::INTERNAL_SERVER_ERROR);
-                    let body = ::trellis::serde_json::json!({
+                    let body = ::rhizome_trellis::serde_json::json!({
                         "error": format!("{:?}", err),
                         "message": format!("{}", err)
                     });
@@ -294,7 +294,7 @@ fn generate_response_handling(
         })
     } else if ret.is_stream {
         Ok(quote! {
-            use ::trellis::futures::StreamExt;
+            use ::rhizome_trellis::futures::StreamExt;
             let stream = #call;
             let boxed_stream = Box::pin(stream);
             ::axum::response::sse::Sse::new(
@@ -403,7 +403,7 @@ fn generate_openapi_spec(
             .iter()
             .map(|p| {
                 let name = p.name.to_string();
-                let json_type = trellis_rpc::infer_json_type(&p.ty);
+                let json_type = rhizome_trellis_rpc::infer_json_type(&p.ty);
                 quote! { (#name, "path", #json_type, true) }
             })
             .collect();
@@ -413,7 +413,7 @@ fn generate_openapi_spec(
                 .iter()
                 .map(|p| {
                     let name = p.name.to_string();
-                    let json_type = trellis_rpc::infer_json_type(&p.ty);
+                    let json_type = rhizome_trellis_rpc::infer_json_type(&p.ty);
                     let required = !p.is_optional;
                     quote! { (#name, "query", #json_type, #required) }
                 })
@@ -427,7 +427,7 @@ fn generate_openapi_spec(
                 .iter()
                 .map(|p| {
                     let name = p.name.to_string();
-                    let json_type = trellis_rpc::infer_json_type(&p.ty);
+                    let json_type = rhizome_trellis_rpc::infer_json_type(&p.ty);
                     let required = !p.is_optional;
                     quote! { (#name, #json_type, #required) }
                 })
@@ -458,11 +458,11 @@ fn generate_openapi_spec(
                 let has_error_responses = #error_responses;
                 let has_body = #has_body_props;
 
-                let mut parameters: Vec<::trellis::serde_json::Value> = Vec::new();
+                let mut parameters: Vec<::rhizome_trellis::serde_json::Value> = Vec::new();
                 #(
                     {
                         let (name, location, schema_type, required): (&str, &str, &str, bool) = #path_param_specs;
-                        parameters.push(::trellis::serde_json::json!({
+                        parameters.push(::rhizome_trellis::serde_json::json!({
                             "name": name,
                             "in": location,
                             "required": required,
@@ -473,7 +473,7 @@ fn generate_openapi_spec(
                 #(
                     {
                         let (name, location, schema_type, required): (&str, &str, &str, bool) = #query_param_specs;
-                        parameters.push(::trellis::serde_json::json!({
+                        parameters.push(::rhizome_trellis::serde_json::json!({
                             "name": name,
                             "in": location,
                             "required": required,
@@ -482,13 +482,13 @@ fn generate_openapi_spec(
                     }
                 )*
 
-                let request_body: Option<::trellis::serde_json::Value> = if has_body {
-                    let mut properties = ::trellis::serde_json::Map::new();
+                let request_body: Option<::rhizome_trellis::serde_json::Value> = if has_body {
+                    let mut properties = ::rhizome_trellis::serde_json::Map::new();
                     let mut required_props: Vec<String> = Vec::new();
                     #(
                         {
                             let (name, schema_type, required): (&str, &str, bool) = #body_props;
-                            properties.insert(name.to_string(), ::trellis::serde_json::json!({
+                            properties.insert(name.to_string(), ::rhizome_trellis::serde_json::json!({
                                 "type": schema_type
                             }));
                             if required {
@@ -496,7 +496,7 @@ fn generate_openapi_spec(
                             }
                         }
                     )*
-                    Some(::trellis::serde_json::json!({
+                    Some(::rhizome_trellis::serde_json::json!({
                         "required": true,
                         "content": {
                             "application/json": {
@@ -512,20 +512,20 @@ fn generate_openapi_spec(
                     None
                 };
 
-                let mut responses = ::trellis::serde_json::Map::new();
-                responses.insert(success_code.to_string(), ::trellis::serde_json::json!({
+                let mut responses = ::rhizome_trellis::serde_json::Map::new();
+                responses.insert(success_code.to_string(), ::rhizome_trellis::serde_json::json!({
                     "description": "Successful response"
                 }));
                 if has_error_responses {
-                    responses.insert("400".to_string(), ::trellis::serde_json::json!({
+                    responses.insert("400".to_string(), ::rhizome_trellis::serde_json::json!({
                         "description": "Bad request"
                     }));
-                    responses.insert("500".to_string(), ::trellis::serde_json::json!({
+                    responses.insert("500".to_string(), ::rhizome_trellis::serde_json::json!({
                         "description": "Internal server error"
                     }));
                 }
 
-                let mut operation = ::trellis::serde_json::json!({
+                let mut operation = ::rhizome_trellis::serde_json::json!({
                     "summary": summary,
                     "operationId": operation_id,
                     "responses": responses
@@ -533,7 +533,7 @@ fn generate_openapi_spec(
 
                 if !parameters.is_empty() {
                     operation.as_object_mut().unwrap()
-                        .insert("parameters".to_string(), ::trellis::serde_json::Value::Array(parameters));
+                        .insert("parameters".to_string(), ::rhizome_trellis::serde_json::Value::Array(parameters));
                 }
 
                 if let Some(body) = request_body {
@@ -548,20 +548,20 @@ fn generate_openapi_spec(
 
     Ok(quote! {
         {
-            let mut paths = ::trellis::serde_json::Map::new();
+            let mut paths = ::rhizome_trellis::serde_json::Map::new();
 
             #(
                 {
-                    let (path, method, operation): (String, String, ::trellis::serde_json::Value) = #operation_data;
+                    let (path, method, operation): (String, String, ::rhizome_trellis::serde_json::Value) = #operation_data;
                     let path_item = paths.entry(path)
-                        .or_insert_with(|| ::trellis::serde_json::json!({}));
-                    if let ::trellis::serde_json::Value::Object(map) = path_item {
+                        .or_insert_with(|| ::rhizome_trellis::serde_json::json!({}));
+                    if let ::rhizome_trellis::serde_json::Value::Object(map) = path_item {
                         map.insert(method, operation);
                     }
                 }
             )*
 
-            ::trellis::serde_json::json!({
+            ::rhizome_trellis::serde_json::json!({
                 "openapi": "3.0.0",
                 "info": {
                     "title": stringify!(#struct_name),

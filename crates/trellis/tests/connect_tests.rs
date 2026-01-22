@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::connect;
+use rhizome_trellis::connect;
 
 #[derive(Clone)]
 struct UserService;

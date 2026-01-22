@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use trellis::jsonschema;
+use rhizome_trellis::jsonschema;
 
 #[derive(Clone)]
 struct UserService;

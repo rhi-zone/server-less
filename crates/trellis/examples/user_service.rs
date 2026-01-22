@@ -2,8 +2,8 @@
 //!
 //! This example shows how to use the #[mcp] macro to generate MCP tools.
 
+use rhizome_trellis::mcp;
 use serde::{Deserialize, Serialize};
-use trellis::mcp;
 
 // --- Domain types ---
 

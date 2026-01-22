@@ -7,8 +7,8 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[openrpc] attribute
 #[derive(Default)]
@@ -71,8 +71,8 @@ pub(crate) fn expand_openrpc(args: OpenRpcArgs, impl_block: ItemImpl) -> syn::Re
 
         impl #struct_name {
             /// Get the OpenRPC specification for this service.
-            pub fn openrpc_spec() -> ::trellis::serde_json::Value {
-                ::trellis::serde_json::json!({
+            pub fn openrpc_spec() -> ::rhizome_trellis::serde_json::Value {
+                ::rhizome_trellis::serde_json::json!({
                     "openrpc": "1.0.0",
                     "info": {
                         "title": #title,
@@ -83,14 +83,14 @@ pub(crate) fn expand_openrpc(args: OpenRpcArgs, impl_block: ItemImpl) -> syn::Re
             }
 
             /// Get the OpenRPC methods array.
-            fn openrpc_methods() -> Vec<::trellis::serde_json::Value> {
+            fn openrpc_methods() -> Vec<::rhizome_trellis::serde_json::Value> {
                 let methods_str = concat!("[", #methods_json, "]");
-                ::trellis::serde_json::from_str(methods_str).unwrap_or_default()
+                ::rhizome_trellis::serde_json::from_str(methods_str).unwrap_or_default()
             }
 
             /// Get the OpenRPC spec as a JSON string.
             pub fn openrpc_json() -> String {
-                ::trellis::serde_json::to_string_pretty(&Self::openrpc_spec())
+                ::rhizome_trellis::serde_json::to_string_pretty(&Self::openrpc_spec())
                     .unwrap_or_else(|_| "{}".to_string())
             }
 

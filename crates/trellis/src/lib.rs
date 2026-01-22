@@ -6,7 +6,7 @@
 //! # Quick Start
 //!
 //! ```ignore
-//! use trellis::prelude::*;
+//! use rhizome_trellis::prelude::*;
 //!
 //! struct UserService {
 //!     // your state
@@ -124,58 +124,58 @@
 
 // Re-export macros (feature-gated)
 #[cfg(feature = "mcp")]
-pub use trellis_macros::mcp;
+pub use rhizome_trellis_macros::mcp;
 
 #[cfg(feature = "http")]
-pub use trellis_macros::http;
+pub use rhizome_trellis_macros::http;
 
 #[cfg(feature = "http")]
-pub use trellis_macros::route;
+pub use rhizome_trellis_macros::route;
 
 #[cfg(feature = "http")]
-pub use trellis_macros::serve;
+pub use rhizome_trellis_macros::serve;
 
 #[cfg(feature = "cli")]
-pub use trellis_macros::cli;
+pub use rhizome_trellis_macros::cli;
 
 #[cfg(feature = "ws")]
-pub use trellis_macros::ws;
+pub use rhizome_trellis_macros::ws;
 
 #[cfg(feature = "jsonrpc")]
-pub use trellis_macros::jsonrpc;
+pub use rhizome_trellis_macros::jsonrpc;
 
 #[cfg(feature = "openrpc")]
-pub use trellis_macros::openrpc;
+pub use rhizome_trellis_macros::openrpc;
 
 #[cfg(feature = "graphql")]
-pub use trellis_macros::graphql;
+pub use rhizome_trellis_macros::graphql;
 
 #[cfg(feature = "grpc")]
-pub use trellis_macros::grpc;
+pub use rhizome_trellis_macros::grpc;
 
 #[cfg(feature = "capnp")]
-pub use trellis_macros::capnp;
+pub use rhizome_trellis_macros::capnp;
 
 #[cfg(feature = "thrift")]
-pub use trellis_macros::thrift;
+pub use rhizome_trellis_macros::thrift;
 
 #[cfg(feature = "connect")]
-pub use trellis_macros::connect;
+pub use rhizome_trellis_macros::connect;
 
 #[cfg(feature = "smithy")]
-pub use trellis_macros::smithy;
+pub use rhizome_trellis_macros::smithy;
 
 #[cfg(feature = "markdown")]
-pub use trellis_macros::markdown;
+pub use rhizome_trellis_macros::markdown;
 
 #[cfg(feature = "jsonschema")]
-pub use trellis_macros::jsonschema;
+pub use rhizome_trellis_macros::jsonschema;
 
 #[cfg(feature = "asyncapi")]
-pub use trellis_macros::asyncapi;
+pub use rhizome_trellis_macros::asyncapi;
 
 // Error derive macro (always available - no deps, commonly needed)
-pub use trellis_macros::TrellisError;
+pub use rhizome_trellis_macros::TrellisError;
 
 // Re-export futures for generated WebSocket code
 #[cfg(feature = "ws")]
@@ -188,7 +188,7 @@ pub use async_graphql;
 pub use async_graphql_axum;
 
 // Re-export core types
-pub use trellis_core::*;
+pub use rhizome_trellis_core::*;
 
 // Re-export serde for generated code
 pub use serde;

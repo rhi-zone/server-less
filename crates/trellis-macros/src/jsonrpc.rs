@@ -4,9 +4,9 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
+use rhizome_trellis_parse::{MethodInfo, extract_methods, get_impl_name};
+use rhizome_trellis_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, extract_methods, get_impl_name};
-use trellis_rpc::{self, AsyncHandling};
 
 /// Arguments for the #[jsonrpc] attribute
 #[derive(Default)]
@@ -72,8 +72,8 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             /// Handle a JSON-RPC 2.0 request
             pub async fn jsonrpc_handle(
                 &self,
-                request: ::trellis::serde_json::Value,
-            ) -> ::trellis::serde_json::Value {
+                request: ::rhizome_trellis::serde_json::Value,
+            ) -> ::rhizome_trellis::serde_json::Value {
                 if let Some(arr) = request.as_array() {
                     let mut responses = Vec::new();
                     for req in arr {
@@ -82,20 +82,20 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                         }
                     }
                     if responses.is_empty() {
-                        ::trellis::serde_json::Value::Null
+                        ::rhizome_trellis::serde_json::Value::Null
                     } else {
-                        ::trellis::serde_json::Value::Array(responses)
+                        ::rhizome_trellis::serde_json::Value::Array(responses)
                     }
                 } else {
                     self.jsonrpc_handle_single(request).await
-                        .unwrap_or(::trellis::serde_json::Value::Null)
+                        .unwrap_or(::rhizome_trellis::serde_json::Value::Null)
                 }
             }
 
             async fn jsonrpc_handle_single(
                 &self,
-                request: ::trellis::serde_json::Value,
-            ) -> Option<::trellis::serde_json::Value> {
+                request: ::rhizome_trellis::serde_json::Value,
+            ) -> Option<::rhizome_trellis::serde_json::Value> {
                 let id = request.get("id").cloned();
                 let is_notification = id.is_none();
 
@@ -119,7 +119,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
                 let params = request.get("params")
                     .cloned()
-                    .unwrap_or(::trellis::serde_json::json!({}));
+                    .unwrap_or(::rhizome_trellis::serde_json::json!({}));
 
                 let result = self.jsonrpc_dispatch(method, params).await;
 
@@ -129,7 +129,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
                 Some(match result {
                     Ok(value) => {
-                        ::trellis::serde_json::json!({
+                        ::rhizome_trellis::serde_json::json!({
                             "jsonrpc": "2.0",
                             "result": value,
                             "id": id
@@ -142,9 +142,9 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             fn jsonrpc_error(
                 code: i32,
                 message: &str,
-                id: Option<::trellis::serde_json::Value>,
-            ) -> ::trellis::serde_json::Value {
-                ::trellis::serde_json::json!({
+                id: Option<::rhizome_trellis::serde_json::Value>,
+            ) -> ::rhizome_trellis::serde_json::Value {
+                ::rhizome_trellis::serde_json::json!({
                     "jsonrpc": "2.0",
                     "error": {
                         "code": code,
@@ -157,8 +157,8 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             async fn jsonrpc_dispatch(
                 &self,
                 method: &str,
-                args: ::trellis::serde_json::Value,
-            ) -> ::std::result::Result<::trellis::serde_json::Value, String> {
+                args: ::rhizome_trellis::serde_json::Value,
+            ) -> ::std::result::Result<::rhizome_trellis::serde_json::Value, String> {
                 match method {
                     #(#dispatch_arms_async)*
                     _ => Err(format!("Method not found: {}", method)),
@@ -179,7 +179,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
         async fn #handler_name(
             ::axum::extract::State(state): ::axum::extract::State<::std::sync::Arc<#struct_name>>,
-            ::axum::Json(request): ::axum::Json<::trellis::serde_json::Value>,
+            ::axum::Json(request): ::axum::Json<::rhizome_trellis::serde_json::Value>,
         ) -> impl ::axum::response::IntoResponse {
             use ::axum::response::IntoResponse;
             let response = state.jsonrpc_handle(request).await;
@@ -193,7 +193,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 }
 
 fn generate_dispatch_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    Ok(trellis_rpc::generate_dispatch_arm(
+    Ok(rhizome_trellis_rpc::generate_dispatch_arm(
         method,
         None,
         AsyncHandling::Await,

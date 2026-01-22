@@ -6,8 +6,8 @@ use heck::ToTitleCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use rhizome_trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
-use trellis_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 
 /// Arguments for the #[markdown] attribute
 #[derive(Default)]
@@ -209,7 +209,7 @@ fn simplify_type(ty: &str) -> String {
         .replace(":: ", "::")
 }
 
-fn describe_return_type(ty: &str, info: &trellis_parse::ReturnInfo) -> String {
+fn describe_return_type(ty: &str, info: &rhizome_trellis_parse::ReturnInfo) -> String {
     if info.is_result {
         "Result (success or error)".to_string()
     } else if info.is_option {
