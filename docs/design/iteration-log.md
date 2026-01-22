@@ -601,7 +601,7 @@ message GetUserResponse {
 
 **After:**
 - Proper scalar type mapping (String, Int, Float, Boolean)
-- List types supported (Vec<T> -> [T])
+- List types supported (`Vec<T>` -> `[T]`)
 - Resolvers extract arguments from context
 - Resolvers call actual service methods
 - Results converted to GraphQL values
@@ -672,8 +672,8 @@ fn api_contract_stable() {
 | u8/u16/u32/u64 | UInt8/UInt16/UInt32/UInt64 |
 | f32/f64 | Float32/Float64 |
 | bool | Bool |
-| Vec<u8> | Data |
-| Vec<T> | List(Text) |
+| `Vec<u8>` | Data |
+| `Vec<T>` | List(Text) |
 | () | Void |
 
 **Schema Structure:**
@@ -778,9 +778,9 @@ let router = service.router();
 | i16/i32/i64 | i16/i32/i64 |
 | f64 | double |
 | bool | bool |
-| Vec<u8> | binary |
-| Vec<T> | list<string> |
-| HashMap | map<string, string> |
+| `Vec<u8>` | binary |
+| `Vec<T>` | `list<string>` |
+| HashMap | `map<string, string>` |
 | () | void |
 
 **Tests:** 9 new tests, 143 total.
