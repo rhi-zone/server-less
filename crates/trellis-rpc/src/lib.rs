@@ -21,7 +21,7 @@ pub fn generate_param_extraction(param: &ParamInfo) -> TokenStream {
         quote! {
             let #name: #ty = args.get(#name_str)
                 .and_then(|v| if v.is_null() { None } else {
-                    ::trellis::serde_json::from_value(v.clone()).ok()
+                    ::rhizome_trellis::serde_json::from_value(v.clone()).ok()
                 });
         }
     } else {
@@ -30,7 +30,7 @@ pub fn generate_param_extraction(param: &ParamInfo) -> TokenStream {
             let __val = args.get(#name_str)
                 .ok_or_else(|| format!("Missing required parameter: {}", #name_str))?
                 .clone();
-            let #name: #ty = ::trellis::serde_json::from_value::<#ty>(__val)
+            let #name: #ty = ::rhizome_trellis::serde_json::from_value::<#ty>(__val)
                 .map_err(|e| format!("Invalid parameter {}: {}", #name_str, e))?;
         }
     }
@@ -102,12 +102,12 @@ pub fn generate_json_response(method: &MethodInfo) -> TokenStream {
 
     if ret.is_unit {
         quote! {
-            Ok(::trellis::serde_json::json!({"success": true}))
+            Ok(::rhizome_trellis::serde_json::json!({"success": true}))
         }
     } else if ret.is_result {
         quote! {
             match result {
-                Ok(value) => Ok(::trellis::serde_json::to_value(value)
+                Ok(value) => Ok(::rhizome_trellis::serde_json::to_value(value)
                     .map_err(|e| format!("Serialization error: {}", e))?),
                 Err(err) => Err(format!("{:?}", err)),
             }
@@ -115,15 +115,15 @@ pub fn generate_json_response(method: &MethodInfo) -> TokenStream {
     } else if ret.is_option {
         quote! {
             match result {
-                Some(value) => Ok(::trellis::serde_json::to_value(value)
+                Some(value) => Ok(::rhizome_trellis::serde_json::to_value(value)
                     .map_err(|e| format!("Serialization error: {}", e))?),
-                None => Ok(::trellis::serde_json::Value::Null),
+                None => Ok(::rhizome_trellis::serde_json::Value::Null),
             }
         }
     } else {
         // Plain T
         quote! {
-            Ok(::trellis::serde_json::to_value(result)
+            Ok(::rhizome_trellis::serde_json::to_value(result)
                 .map_err(|e| format!("Serialization error: {}", e))?)
         }
     }

@@ -120,7 +120,7 @@ fn test_asyncapi_defaults() {
 #[derive(Clone)]
 struct CombinedService;
 
-#[trellis::ws(path = "/ws")]
+#[rhizome_trellis::ws(path = "/ws")]
 #[asyncapi(title = "Combined WebSocket API")]
 impl CombinedService {
     pub fn echo(&self, message: String) -> String {

@@ -148,7 +148,7 @@ fn test_openrpc_optional_params() {
 #[derive(Clone)]
 struct CombinedService;
 
-#[trellis::jsonrpc]
+#[rhizome_trellis::jsonrpc]
 #[openrpc(title = "Combined Service")]
 impl CombinedService {
     pub fn greet(&self, name: String) -> String {
