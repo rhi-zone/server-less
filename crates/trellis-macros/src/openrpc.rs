@@ -2,6 +2,43 @@
 //!
 //! Generates OpenRPC 1.0 specifications from impl blocks.
 //! OpenRPC is to JSON-RPC what OpenAPI is to REST.
+//!
+//! # OpenRPC
+//!
+//! Machine-readable specification for JSON-RPC APIs:
+//! - Describes methods, parameters, and return types
+//! - Enables automatic client generation
+//! - Powers interactive documentation tools
+//!
+//! # Generated Specification
+//!
+//! Creates a complete OpenRPC document:
+//! - Method definitions with doc comments
+//! - Parameter schemas (JSON Schema format)
+//! - Result type schemas
+//! - Optional/required parameter marking
+//!
+//! # Generated Methods
+//!
+//! - `openrpc_spec() -> serde_json::Value` - Complete OpenRPC specification
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::openrpc;
+//!
+//! struct Calculator;
+//!
+//! #[openrpc(title = "Calculator API")]
+//! impl Calculator {
+//!     /// Add two numbers
+//!     fn add(&self, a: i32, b: i32) -> i32 {
+//!         a + b
+//!     }
+//! }
+//!
+//! let spec = Calculator::openrpc_spec();
+//! ```
 
 use heck::ToLowerCamelCase;
 

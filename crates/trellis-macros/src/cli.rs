@@ -1,6 +1,58 @@
 //! CLI generation macro.
 //!
-//! Generates clap-based CLI from impl blocks.
+//! Generates clap-based CLI applications from impl blocks with automatic command generation.
+//!
+//! # Command Generation
+//!
+//! Each method becomes a subcommand:
+//! - Method name converted to kebab-case: `create_user` → `create-user`
+//! - Doc comments become command descriptions
+//! - Parameters become command arguments/options
+//!
+//! # Parameter Mapping
+//!
+//! - Required parameters → Positional arguments
+//! - `Option<T>` parameters → Optional flags (`--name <NAME>`)
+//! - `bool` parameters → Boolean flags (`--verbose`)
+//!
+//! # Generated Methods
+//!
+//! - `cli_app() -> clap::Command` - Complete CLI application
+//! - `cli_run(matches: &ArgMatches)` - Execute matched command
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::cli;
+//!
+//! struct MyApp;
+//!
+//! #[cli(name = "myapp", version = "1.0")]
+//! impl MyApp {
+//!     /// Create a new user
+//!     fn create_user(&self, name: String, email: String) {
+//!         println!("Creating user: {}", name);
+//!     }
+//!
+//!     /// Delete a user by ID
+//!     fn delete_user(&self, id: u32) {
+//!         println!("Deleting user: {}", id);
+//!     }
+//! }
+//!
+//! // Use it:
+//! let app = MyApp;
+//! let matches = MyApp::cli_app().get_matches();
+//! app.cli_run(&matches);
+//! ```
+//!
+//! # Command Line Usage
+//!
+//! ```bash
+//! myapp create-user "Alice" "alice@example.com"
+//! myapp delete-user 123
+//! myapp --help
+//! ```
 
 use heck::ToKebabCase;
 

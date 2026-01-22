@@ -1,4 +1,47 @@
 //! Cap'n Proto schema generation macro.
+//!
+//! Generates Cap'n Proto schemas from Rust impl blocks for efficient RPC.
+//!
+//! # Schema Generation
+//!
+//! Creates `.capnp` schemas:
+//! - Methods → Interface methods
+//! - Parameters → Struct fields
+//! - Return types → Result structs
+//! - Generates unique IDs for interfaces
+//!
+//! # Type Mapping
+//!
+//! - `String` → Text
+//! - `i32`, `i64` → Int32, Int64
+//! - `u32`, `u64` → UInt32, UInt64
+//! - `f32`, `f64` → Float32, Float64
+//! - `bool` → Bool
+//! - `Vec<T>` → List(T)
+//! - `Option<T>` → Nullable field
+//!
+//! # Generated Methods
+//!
+//! - `capnp_schema() -> &'static str` - Generated Cap'n Proto schema
+//! - `validate_schema() -> Result<(), SchemaValidationError>` - Validate if schema path provided
+//! - `assert_schema_matches()` - Panic if validation fails
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::capnp;
+//!
+//! struct Calculator;
+//!
+//! #[capnp(id = "0xabcd1234")]
+//! impl Calculator {
+//!     fn add(&self, a: i32, b: i32) -> i32 {
+//!         a + b
+//!     }
+//! }
+//!
+//! let schema = Calculator::capnp_schema();
+//! ```
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 

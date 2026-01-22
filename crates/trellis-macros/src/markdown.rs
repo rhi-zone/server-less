@@ -1,6 +1,46 @@
 //! Markdown documentation generation macro.
 //!
 //! Generates API documentation in Markdown format from impl blocks.
+//!
+//! # Documentation Generation
+//!
+//! Creates human-readable API docs:
+//! - Method descriptions from doc comments
+//! - Parameter lists with types
+//! - Return type information
+//! - Async badge for async methods
+//! - Code examples
+//!
+//! # Format
+//!
+//! Generates standard Markdown:
+//! - Headers for each method
+//! - Parameter tables
+//! - Code blocks for examples
+//! - Links and cross-references
+//!
+//! # Generated Methods
+//!
+//! - `markdown_docs() -> String` - Complete Markdown documentation
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::markdown;
+//!
+//! struct PaymentService;
+//!
+//! #[markdown(title = "Payment API")]
+//! impl PaymentService {
+//!     /// Process a payment
+//!     async fn process_payment(&self, amount: f64, currency: String) -> String {
+//!         format!("Processed {} {}", amount, currency)
+//!     }
+//! }
+//!
+//! let docs = PaymentService::markdown_docs();
+//! // Returns formatted Markdown documentation
+//! ```
 
 use heck::ToTitleCase;
 

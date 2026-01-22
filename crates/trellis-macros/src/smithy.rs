@@ -1,7 +1,44 @@
 //! Smithy IDL schema generation macro.
 //!
 //! Generates Smithy interface definition language schemas.
-//! Smithy is AWS's open-source IDL for defining APIs.
+//! Smithy is AWS's open-source IDL for defining APIs and services.
+//!
+//! # Schema Generation
+//!
+//! Creates Smithy IDL from Rust code:
+//! - Methods → Operations
+//! - Parameters → Input structures
+//! - Return types → Output structures
+//! - Service definition with operations
+//!
+//! # Type Mapping
+//!
+//! - `String` → String
+//! - `i32` → Integer
+//! - `bool` → Boolean
+//! - `Vec<T>` → List member: T
+//! - `Option<T>` → Optional member
+//!
+//! # Generated Methods
+//!
+//! - `smithy_schema() -> &'static str` - Generated Smithy schema
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::smithy;
+//!
+//! struct WeatherService;
+//!
+//! #[smithy(namespace = "com.example.weather")]
+//! impl WeatherService {
+//!     fn get_forecast(&self, city: String) -> String {
+//!         format!("Forecast for {}", city)
+//!     }
+//! }
+//!
+//! let schema = WeatherService::smithy_schema();
+//! ```
 
 use heck::{ToPascalCase, ToSnakeCase};
 

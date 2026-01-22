@@ -1,6 +1,60 @@
 //! GraphQL handler generation using async-graphql dynamic schemas.
 //!
-//! Uses async-graphql's dynamic schema API to avoid proc macro limitations.
+//! Generates GraphQL schemas and resolvers from impl blocks using async-graphql.
+//!
+//! # Query vs Mutation
+//!
+//! Methods are classified based on naming conventions:
+//! - Queries: `get_*`, `fetch_*`, `read_*`, `list_*`, `find_*`, `search_*`, `count_*`, `exists_*`, `is_*`, `has_*`
+//! - Mutations: Everything else (create, update, delete, etc.)
+//!
+//! # Field Naming
+//!
+//! Method names are converted to camelCase for GraphQL fields:
+//! - `get_user` → `getUser`
+//! - `create_user` → `createUser`
+//!
+//! # Type Mapping
+//!
+//! Rust types are mapped to GraphQL types:
+//! - `String` → String
+//! - `i32`, `i64` → Int
+//! - `f32`, `f64` → Float
+//! - `bool` → Boolean
+//! - `Vec<T>` → [T]
+//! - `Option<T>` → T (nullable)
+//!
+//! # Generated Methods
+//!
+//! - `graphql_schema(self) -> async_graphql::dynamic::Schema` - Dynamic schema
+//! - `graphql_router(self) -> axum::Router` - HTTP + Playground server
+//! - `graphql_sdl(self) -> String` - Schema Definition Language
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::graphql;
+//!
+//! #[derive(Clone)]
+//! struct UserService;
+//!
+//! #[graphql(name = "UserAPI")]
+//! impl UserService {
+//!     /// Get user by ID (Query)
+//!     async fn get_user(&self, id: i32) -> Option<String> {
+//!         Some(format!("User {}", id))
+//!     }
+//!
+//!     /// Create a new user (Mutation)
+//!     async fn create_user(&self, name: String) -> String {
+//!         format!("Created: {}", name)
+//!     }
+//! }
+//!
+//! // Use it:
+//! let service = UserService;
+//! let app = service.graphql_router();  // Serves GraphQL + Playground at /graphql
+//! ```
 
 use heck::ToLowerCamelCase;
 

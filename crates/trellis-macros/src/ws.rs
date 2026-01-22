@@ -1,7 +1,58 @@
 //! WebSocket handler generation.
 //!
-//! Generates JSON-RPC style message handlers over WebSocket.
-//! Methods become callable via `{"method": "name", "params": {...}}` messages.
+//! Generates JSON-RPC style WebSocket message handlers from impl blocks.
+//!
+//! # Protocol
+//!
+//! Uses JSON-RPC 2.0 message format over WebSocket:
+//! - Request: `{"method": "echo", "params": {"message": "hello"}, "id": 1}`
+//! - Response: `{"result": "Echo: hello", "id": 1}`
+//! - Error: `{"error": {"message": "Unknown method"}, "id": 1}`
+//!
+//! # Message Handling
+//!
+//! - Methods are called by name via JSON messages
+//! - Parameters extracted from `params` object
+//! - Both sync and async methods supported
+//! - Supports optional `id` field for request/response correlation
+//!
+//! # Generated Methods
+//!
+//! - `ws_methods() -> Vec<&'static str>` - List of available methods
+//! - `ws_handle_message(&self, message: &str) -> Result<String, String>` - Sync handler
+//! - `ws_handle_message_async(&self, message: &str).await` - Async handler
+//! - `ws_router(self) -> axum::Router` - Complete WebSocket server
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::ws;
+//!
+//! #[derive(Clone)]
+//! struct ChatService;
+//!
+//! #[ws(path = "/ws")]
+//! impl ChatService {
+//!     /// Echo a message
+//!     fn echo(&self, message: String) -> String {
+//!         format!("Echo: {}", message)
+//!     }
+//!
+//!     /// Add two numbers
+//!     async fn add(&self, a: i32, b: i32) -> i32 {
+//!         a + b
+//!     }
+//! }
+//!
+//! // Use it:
+//! let service = ChatService;
+//! let app = service.ws_router();
+//!
+//! // Client sends:
+//! // {"method": "echo", "params": {"message": "hello"}}
+//! // Server responds:
+//! // {"result": "Echo: hello"}
+//! ```
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};

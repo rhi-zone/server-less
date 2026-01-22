@@ -1,6 +1,59 @@
 //! JSON-RPC over HTTP handler generation macro.
 //!
-//! Generates JSON-RPC 2.0 handlers over HTTP POST.
+//! Generates JSON-RPC 2.0 handlers over HTTP POST with full spec compliance.
+//!
+//! # JSON-RPC 2.0
+//!
+//! Implements the JSON-RPC 2.0 specification:
+//! - Request: `{"jsonrpc": "2.0", "method": "add", "params": {"a": 5, "b": 3}, "id": 1}`
+//! - Response: `{"jsonrpc": "2.0", "result": 8, "id": 1}`
+//! - Error: `{"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": 1}`
+//! - Notification (no response): `{"jsonrpc": "2.0", "method": "log", "params": {"msg": "hello"}}`
+//!
+//! # Features
+//!
+//! - Single requests and batch requests
+//! - Notifications (requests without `id`)
+//! - Both sync and async methods
+//! - Positional and named parameters
+//!
+//! # Generated Methods
+//!
+//! - `jsonrpc_methods() -> Vec<&'static str>` - List of available methods
+//! - `jsonrpc_handle(&self, request: &str) -> String` - Handle request (sync)
+//! - `jsonrpc_handle_async(&self, request: &str).await` - Handle request (async)
+//! - `jsonrpc_router(self) -> axum::Router` - HTTP server at /rpc
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::jsonrpc;
+//!
+//! #[derive(Clone)]
+//! struct Calculator;
+//!
+//! #[jsonrpc(path = "/rpc")]
+//! impl Calculator {
+//!     /// Add two numbers
+//!     fn add(&self, a: i32, b: i32) -> i32 {
+//!         a + b
+//!     }
+//!
+//!     /// Subtract two numbers
+//!     fn subtract(&self, a: i32, b: i32) -> i32 {
+//!         a - b
+//!     }
+//! }
+//!
+//! // Use it:
+//! let calc = Calculator;
+//! let app = calc.jsonrpc_router();
+//!
+//! // Client POST to /rpc:
+//! // {"jsonrpc": "2.0", "method": "add", "params": {"a": 5, "b": 3}, "id": 1}
+//! // Response:
+//! // {"jsonrpc": "2.0", "result": 8, "id": 1}
+//! ```
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};

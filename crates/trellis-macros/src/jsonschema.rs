@@ -2,6 +2,44 @@
 //!
 //! Generates JSON Schema definitions from Rust impl blocks.
 //! Useful for API validation, documentation, and tooling.
+//!
+//! # JSON Schema
+//!
+//! Standard for describing JSON data structures:
+//! - Validates request/response formats
+//! - Enables IDE autocompletion
+//! - Powers form generation
+//! - Language-agnostic type definitions
+//!
+//! # Schema Generation
+//!
+//! Creates schemas for:
+//! - Method parameters (request schema)
+//! - Return types (response schema)
+//! - Required vs optional fields
+//! - Type information
+//!
+//! # Generated Methods
+//!
+//! - `jsonschema() -> serde_json::Value` - Complete JSON Schema
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::jsonschema;
+//!
+//! struct UserService;
+//!
+//! #[jsonschema(title = "User API")]
+//! impl UserService {
+//!     /// Create a user
+//!     fn create_user(&self, name: String, age: Option<i32>) -> String {
+//!         name
+//!     }
+//! }
+//!
+//! let schema = UserService::jsonschema();
+//! ```
 
 use heck::ToLowerCamelCase;
 

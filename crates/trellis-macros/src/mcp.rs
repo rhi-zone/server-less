@@ -1,7 +1,58 @@
 //! MCP (Model Context Protocol) tool generation macro.
 //!
-//! This crate provides the `#[mcp]` attribute macro for generating
-//! MCP tool definitions from Rust impl blocks.
+//! Generates MCP tool definitions from Rust impl blocks for use with Claude and other LLMs.
+//!
+//! # What is MCP?
+//!
+//! Model Context Protocol (MCP) is a standard for exposing tools to language models.
+//! Each method becomes a callable tool with JSON schema for parameters.
+//!
+//! # Tool Naming
+//!
+//! - Methods are exposed with their original names
+//! - Optional namespace prefix: `#[mcp(namespace = "myapp")]` → `myapp_create_user`
+//!
+//! # Parameter Schema
+//!
+//! Parameters are automatically converted to JSON schema:
+//! - `String` → string
+//! - `i32`, `u64`, etc. → integer
+//! - `f32`, `f64` → number
+//! - `bool` → boolean
+//! - `Option<T>` → optional parameter
+//!
+//! # Generated Methods
+//!
+//! - `mcp_tools() -> Vec<serde_json::Value>` - Tool definitions for MCP
+//! - `mcp_tool_names() -> Vec<&'static str>` - List of tool names
+//! - `mcp_call(&self, name: &str, args: Value) -> Result<Value, String>` - Execute tool
+//! - `mcp_call_async(&self, name: &str, args: Value).await` - Async execution
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::mcp;
+//!
+//! struct FileTools;
+//!
+//! #[mcp(namespace = "file")]
+//! impl FileTools {
+//!     /// Read a file from the filesystem
+//!     fn read_file(&self, path: String) -> Result<String, std::io::Error> {
+//!         std::fs::read_to_string(path)
+//!     }
+//!
+//!     /// Write content to a file
+//!     fn write_file(&self, path: String, content: String) -> Result<(), std::io::Error> {
+//!         std::fs::write(path, content)
+//!     }
+//! }
+//!
+//! // Use it:
+//! let tools = FileTools;
+//! let definitions = FileTools::mcp_tools();  // For MCP server
+//! let result = tools.mcp_call("file_read_file", json!({"path": "/tmp/test.txt"}));
+//! ```
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;

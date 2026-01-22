@@ -1,4 +1,48 @@
 //! gRPC/Protobuf schema generation macro.
+//!
+//! Generates Protocol Buffers (.proto) schemas from Rust impl blocks for gRPC services.
+//!
+//! # Schema Generation
+//!
+//! Creates `.proto` files from Rust code:
+//! - Methods → RPC service definitions
+//! - Parameters → Message fields
+//! - Return types → Response messages
+//! - Doc comments → Proto comments
+//!
+//! # Type Mapping
+//!
+//! - `String` → string
+//! - `i32`, `i64` → int32, int64
+//! - `u32`, `u64` → uint32, uint64
+//! - `f32`, `f64` → float, double
+//! - `bool` → bool
+//! - `Vec<T>` → repeated T
+//! - `Option<T>` → optional T
+//!
+//! # Generated Methods
+//!
+//! - `proto_schema() -> &'static str` - Generated .proto schema
+//! - `validate_schema() -> Result<(), SchemaValidationError>` - Validate if schema path provided
+//! - `assert_schema_matches()` - Panic if validation fails (for tests)
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::grpc;
+//!
+//! struct UserService;
+//!
+//! #[grpc(package = "users.v1", service = "UserService")]
+//! impl UserService {
+//!     /// Get user by ID
+//!     fn get_user(&self, user_id: i32) -> String {
+//!         format!("User {}", user_id)
+//!     }
+//! }
+//!
+//! let schema = UserService::proto_schema();
+//! ```
 
 use heck::{ToSnakeCase, ToUpperCamelCase};
 

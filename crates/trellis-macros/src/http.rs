@@ -1,6 +1,65 @@
 //! HTTP handler generation macro.
 //!
-//! Generates axum HTTP handlers from impl blocks.
+//! Generates axum HTTP handlers from impl blocks using convention-based routing.
+//!
+//! # Method Naming Conventions
+//!
+//! HTTP methods are inferred from function name prefixes:
+//! - `get_*`, `fetch_*`, `read_*`, `list_*`, `find_*`, `search_*` → GET
+//! - `create_*`, `add_*`, `new_*` → POST
+//! - `update_*`, `set_*` → PUT
+//! - `patch_*`, `modify_*` → PATCH
+//! - `delete_*`, `remove_*` → DELETE
+//!
+//! # Path Generation
+//!
+//! Paths are derived from method names:
+//! - `create_user` → `POST /users`
+//! - `get_user` → `GET /users/{id}` (requires id parameter)
+//! - `list_users` → `GET /users`
+//! - `update_user` → `PUT /users/{id}`
+//!
+//! # Parameter Binding
+//!
+//! Parameters are automatically bound based on HTTP method:
+//! - GET: Path parameters (`:id`) and query parameters (`?name=value`)
+//! - POST/PUT/PATCH: JSON request body
+//!
+//! # Generated Methods
+//!
+//! - `http_router() -> axum::Router` - Complete router with all endpoints
+//! - `http_routes() -> Vec<&'static str>` - List of route paths
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::http;
+//!
+//! #[derive(Clone)]
+//! struct UserService;
+//!
+//! #[http]
+//! impl UserService {
+//!     /// Create a new user
+//!     async fn create_user(&self, name: String, email: String) -> User {
+//!         // POST /users with JSON body
+//!     }
+//!
+//!     /// Get user by ID
+//!     async fn get_user(&self, id: String) -> Option<User> {
+//!         // GET /users/{id}
+//!     }
+//!
+//!     /// List all users
+//!     async fn list_users(&self) -> Vec<User> {
+//!         // GET /users
+//!     }
+//! }
+//!
+//! // Use it:
+//! let service = UserService;
+//! let app = service.http_router();
+//! ```
 
 use heck::ToKebabCase;
 

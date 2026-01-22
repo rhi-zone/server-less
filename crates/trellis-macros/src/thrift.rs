@@ -1,4 +1,46 @@
 //! Apache Thrift schema generation macro.
+//!
+//! Generates Apache Thrift IDL schemas from Rust impl blocks.
+//!
+//! # Schema Generation
+//!
+//! Creates `.thrift` interface definitions:
+//! - Methods → Service methods
+//! - Parameters → Struct fields
+//! - Return types → Response types
+//! - Generates field IDs automatically
+//!
+//! # Type Mapping
+//!
+//! - `String` → string
+//! - `i32`, `i64` → i32, i64
+//! - `bool` → bool
+//! - `f64` → double
+//! - `Vec<T>` → list<T>
+//! - `Option<T>` → optional T
+//!
+//! # Generated Methods
+//!
+//! - `thrift_schema() -> &'static str` - Generated Thrift schema
+//! - `validate_schema() -> Result<(), SchemaValidationError>` - Validate if schema path provided
+//! - `assert_schema_matches()` - Panic if validation fails
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::thrift;
+//!
+//! struct UserService;
+//!
+//! #[thrift(namespace = "com.example")]
+//! impl UserService {
+//!     fn get_user(&self, user_id: i32) -> String {
+//!         format!("User {}", user_id)
+//!     }
+//! }
+//!
+//! let schema = UserService::thrift_schema();
+//! ```
 
 use heck::{ToSnakeCase, ToUpperCamelCase};
 

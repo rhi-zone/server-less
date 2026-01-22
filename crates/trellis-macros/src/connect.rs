@@ -2,6 +2,41 @@
 //!
 //! Generates Connect/buf-compatible service definitions.
 //! Connect is a modern alternative to gRPC that works over HTTP/1.1, HTTP/2, and HTTP/3.
+//!
+//! # Protocol
+//!
+//! Connect is a simple protocol built on Protocol Buffers:
+//! - Works with standard HTTP and JSON
+//! - Compatible with gRPC clients and servers
+//! - Simpler than gRPC for web applications
+//!
+//! # Schema Generation
+//!
+//! Creates Protocol Buffers schemas for Connect:
+//! - Methods → RPC service definitions
+//! - Uses proto3 syntax
+//! - Compatible with buf.build tooling
+//!
+//! # Generated Methods
+//!
+//! - `connect_schema() -> &'static str` - Generated .proto schema for Connect
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::connect;
+//!
+//! struct ChatService;
+//!
+//! #[connect(package = "chat.v1")]
+//! impl ChatService {
+//!     fn send_message(&self, message: String) -> String {
+//!         format!("Received: {}", message)
+//!     }
+//! }
+//!
+//! let schema = ChatService::connect_schema();
+//! ```
 
 use heck::{ToSnakeCase, ToUpperCamelCase};
 

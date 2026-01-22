@@ -2,6 +2,43 @@
 //!
 //! Generates AsyncAPI 2.6 specifications for event-driven services.
 //! AsyncAPI is to WebSockets/messaging what OpenAPI is to REST.
+//!
+//! # AsyncAPI
+//!
+//! Specification for event-driven and message-based APIs:
+//! - Describes channels (topics/queues)
+//! - Documents message schemas
+//! - Supports WebSocket, Kafka, AMQP, MQTT, etc.
+//!
+//! # Generated Specification
+//!
+//! Creates AsyncAPI document with:
+//! - Channel definitions (one per method)
+//! - Message schemas for parameters and results
+//! - Subscribe/publish operations
+//! - Server information
+//!
+//! # Generated Methods
+//!
+//! - `asyncapi_spec() -> serde_json::Value` - Complete AsyncAPI specification
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rhizome_trellis::asyncapi;
+//!
+//! struct ChatService;
+//!
+//! #[asyncapi(title = "Chat API")]
+//! impl ChatService {
+//!     /// Send a chat message
+//!     fn send_message(&self, text: String) -> String {
+//!         format!("Sent: {}", text)
+//!     }
+//! }
+//!
+//! let spec = ChatService::asyncapi_spec();
+//! ```
 
 use heck::ToLowerCamelCase;
 
