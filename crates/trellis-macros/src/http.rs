@@ -169,6 +169,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
     let mut openapi_methods = Vec::new();
+    let mut route_signatures = std::collections::HashMap::new();
 
     for method in &methods {
         let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
@@ -176,6 +177,41 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         if overrides.skip {
             continue;
         }
+
+        // Check for duplicate routes
+        let http_method_enum = if let Some(ref m) = overrides.method {
+            match m.as_str() {
+                "GET" => HttpMethod::Get,
+                "POST" => HttpMethod::Post,
+                "PUT" => HttpMethod::Put,
+                "PATCH" => HttpMethod::Patch,
+                "DELETE" => HttpMethod::Delete,
+                _ => infer_http_method(&method.name.to_string()),
+            }
+        } else {
+            infer_http_method(&method.name.to_string())
+        };
+
+        let path = if let Some(ref p) = overrides.path {
+            p.clone()
+        } else {
+            infer_path(&method.name.to_string(), &http_method_enum, &method.params)
+        };
+        let full_path = format!("{}{}", prefix, path);
+        let route_sig = format!("{} {}", http_method_enum.as_str(), full_path);
+
+        if let Some(existing_method) = route_signatures.get(&route_sig) {
+            return Err(syn::Error::new_spanned(
+                &method.method.sig,
+                format!(
+                    "Duplicate route: {} {} is already defined by method '{}'",
+                    http_method_enum.as_str(),
+                    full_path,
+                    existing_method
+                ),
+            ));
+        }
+        route_signatures.insert(route_sig, method.name.to_string());
 
         let handler = generate_handler(&struct_name, method)?;
         handlers.push(handler);
@@ -398,6 +434,7 @@ fn generate_route(
     };
 
     let path = if let Some(ref p) = overrides.path {
+        validate_http_path(p)?;
         p.clone()
     } else {
         infer_path(&method_name.to_string(), &http_method, &method.params)
@@ -717,6 +754,54 @@ fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo])
         }
         _ => format!("/{}", path_resource),
     }
+}
+
+/// Validate HTTP path at compile time
+fn validate_http_path(path: &str) -> syn::Result<()> {
+    // Check that path starts with /
+    if !path.starts_with('/') {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!("HTTP path must start with '/'. Got: '{}'", path),
+        ));
+    }
+
+    // Check for invalid characters
+    let invalid_chars = ['<', '>', '"', '`', ' ', '\t', '\n'];
+    if let Some(ch) = invalid_chars.iter().find(|&&c| path.contains(c)) {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "HTTP path contains invalid character '{}'. Path: '{}'",
+                ch, path
+            ),
+        ));
+    }
+
+    // Check for malformed path parameters
+    let open_braces = path.matches('{').count();
+    let close_braces = path.matches('}').count();
+    if open_braces != close_braces {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!("HTTP path has mismatched braces. Path: '{}'", path),
+        ));
+    }
+
+    // Check that path parameters have names
+    for segment in path.split('/') {
+        if segment == "{}" || segment == "{" || segment == "}" {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                format!(
+                    "HTTP path has empty or malformed path parameter. Path: '{}'",
+                    path
+                ),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Arguments for the #[serve] attribute
