@@ -49,10 +49,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Parameter override implementation**: Full support for `#[param(...)]` attribute
   - `#[param(name = "q")]` - custom wire name for parameters
   - `#[param(default = 10)]` - default values for optional parameters
-  - `#[param(query/path/body/header)]` - parameter location override (parsed but not yet fully implemented)
+  - `#[param(query/path/body/header)]` - parameter location override (fully implemented)
   - Extended ParamInfo with wire_name, location, and default_value fields
-  - Updated HTTP parameter extraction to use custom names
-  - OpenAPI generation reflects renamed parameters and default values
+  - Updated HTTP parameter extraction to use custom names and respect location overrides
+  - HTTP handlers group parameters by actual location (path/query/body/header)
+  - Added header parameter extraction support
+  - OpenAPI generation reflects renamed parameters, default values, and location overrides
   - Parameters with defaults marked as not required in OpenAPI
   - Note: Requires nightly Rust due to `#[register_tool(param)]` requirement
 

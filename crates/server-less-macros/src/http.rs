@@ -358,20 +358,45 @@ fn generate_handler(
 fn generate_param_handling(
     method: &MethodInfo,
 ) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>)> {
+    use server_less_parse::ParamLocation;
+
     let mut extractions = Vec::new();
     let mut calls = Vec::new();
 
     let http_method = infer_http_method(&method.name.to_string());
-    let has_body = matches!(
+    let default_has_body = matches!(
         http_method,
         HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
     );
 
-    let id_params: Vec<_> = method.params.iter().filter(|p| p.is_id).collect();
-    let other_params: Vec<_> = method.params.iter().filter(|p| !p.is_id).collect();
+    // Group parameters by their actual location (respecting overrides)
+    let mut path_params = Vec::new();
+    let mut query_params = Vec::new();
+    let mut body_params = Vec::new();
+    let mut header_params = Vec::new();
 
-    if !id_params.is_empty() {
-        for param in &id_params {
+    for param in &method.params {
+        match param.location.as_ref() {
+            Some(ParamLocation::Path) => path_params.push(param),
+            Some(ParamLocation::Query) => query_params.push(param),
+            Some(ParamLocation::Body) => body_params.push(param),
+            Some(ParamLocation::Header) => header_params.push(param),
+            None => {
+                // Infer location based on conventions
+                if param.is_id {
+                    path_params.push(param);
+                } else if default_has_body {
+                    body_params.push(param);
+                } else {
+                    query_params.push(param);
+                }
+            }
+        }
+    }
+
+    // Generate path parameter extraction
+    if !path_params.is_empty() {
+        for param in &path_params {
             let ty = &param.ty;
             extractions.push(quote! {
                 path_extractor: ::axum::extract::Path<#ty>
@@ -380,62 +405,96 @@ fn generate_param_handling(
         }
     }
 
-    if !other_params.is_empty() {
-        if has_body {
-            extractions.push(quote! {
-                body_extractor: ::axum::extract::Json<::server_less::serde_json::Value>
-            });
+    // Generate body parameter extraction
+    if !body_params.is_empty() {
+        extractions.push(quote! {
+            body_extractor: ::axum::extract::Json<::server_less::serde_json::Value>
+        });
 
-            for param in &other_params {
-                // Use wire_name if provided, otherwise use the parameter name
-                let name_str = param
-                    .wire_name
-                    .clone()
-                    .unwrap_or_else(|| param.name.to_string());
-                let ty = &param.ty;
-                if param.is_optional {
-                    let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
-                    calls.push(quote! {
+        for param in &body_params {
+            // Use wire_name if provided, otherwise use the parameter name
+            let name_str = param
+                .wire_name
+                .clone()
+                .unwrap_or_else(|| param.name.to_string());
+            let ty = &param.ty;
+            if param.is_optional {
+                let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
+                calls.push(quote! {
                         body_extractor.0.get(#name_str).and_then(|v| ::server_less::serde_json::from_value::<#inner_ty>(v.clone()).ok())
                     });
-                } else {
-                    calls.push(quote! {
+            } else {
+                calls.push(quote! {
                         ::server_less::serde_json::from_value::<#ty>(body_extractor.0.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
                     });
-                }
             }
-        } else {
-            extractions.push(quote! {
-                query_extractor: ::axum::extract::Query<::std::collections::HashMap<String, String>>
-            });
+        }
+    }
 
-            for param in &other_params {
-                // Use wire_name if provided, otherwise use the parameter name
-                let name_str = param
-                    .wire_name
-                    .clone()
-                    .unwrap_or_else(|| param.name.to_string());
-                let ty = &param.ty;
+    // Generate query parameter extraction
+    if !query_params.is_empty() {
+        extractions.push(quote! {
+            query_extractor: ::axum::extract::Query<::std::collections::HashMap<String, String>>
+        });
 
-                // Handle default values
-                if param.is_optional {
-                    let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
-                    calls.push(quote! {
-                        query_extractor.0.get(#name_str).and_then(|v| v.parse::<#inner_ty>().ok())
-                    });
-                } else if let Some(ref default_val) = param.default_value {
-                    // Parse the default value at compile time
-                    let default_expr: proc_macro2::TokenStream = default_val.parse().unwrap();
-                    calls.push(quote! {
-                        query_extractor.0.get(#name_str)
-                            .and_then(|v| v.parse::<#ty>().ok())
-                            .unwrap_or(#default_expr)
-                    });
-                } else {
-                    calls.push(quote! {
-                        query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok()).unwrap_or_default()
-                    });
-                }
+        for param in &query_params {
+            // Use wire_name if provided, otherwise use the parameter name
+            let name_str = param
+                .wire_name
+                .clone()
+                .unwrap_or_else(|| param.name.to_string());
+            let ty = &param.ty;
+
+            // Handle default values
+            if param.is_optional {
+                let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
+                calls.push(quote! {
+                    query_extractor.0.get(#name_str).and_then(|v| v.parse::<#inner_ty>().ok())
+                });
+            } else if let Some(ref default_val) = param.default_value {
+                // Parse the default value at compile time
+                let default_expr: proc_macro2::TokenStream = default_val.parse().unwrap();
+                calls.push(quote! {
+                    query_extractor.0.get(#name_str)
+                        .and_then(|v| v.parse::<#ty>().ok())
+                        .unwrap_or(#default_expr)
+                });
+            } else {
+                calls.push(quote! {
+                    query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok()).unwrap_or_default()
+                });
+            }
+        }
+    }
+
+    // Generate header parameter extraction
+    if !header_params.is_empty() {
+        extractions.push(quote! {
+            headers: ::axum::http::HeaderMap
+        });
+
+        for param in &header_params {
+            // Use wire_name if provided, otherwise use the parameter name
+            let name_str = param
+                .wire_name
+                .clone()
+                .unwrap_or_else(|| param.name.to_string());
+            let ty = &param.ty;
+
+            if param.is_optional {
+                let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
+                calls.push(quote! {
+                    headers.get(#name_str)
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.parse::<#inner_ty>().ok())
+                });
+            } else {
+                calls.push(quote! {
+                    headers.get(#name_str)
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.parse::<#ty>().ok())
+                        .unwrap_or_default()
+                });
             }
         }
     }
@@ -651,14 +710,38 @@ fn generate_openapi_spec(
         let summary = method.docs.clone().unwrap_or_else(|| method_name.clone());
         let operation_id = method_name.clone();
 
-        let has_body = matches!(
+        let default_has_body = matches!(
             http_method,
             HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
         );
-        let id_params: Vec<_> = method.params.iter().filter(|p| p.is_id).collect();
-        let other_params: Vec<_> = method.params.iter().filter(|p| !p.is_id).collect();
 
-        let path_param_specs: Vec<_> = id_params
+        // Group parameters by their actual location (respecting overrides)
+        use server_less_parse::ParamLocation;
+        let mut path_params = Vec::new();
+        let mut query_params = Vec::new();
+        let mut body_params = Vec::new();
+        let mut header_params = Vec::new();
+
+        for param in &method.params {
+            match param.location.as_ref() {
+                Some(ParamLocation::Path) => path_params.push(param),
+                Some(ParamLocation::Query) => query_params.push(param),
+                Some(ParamLocation::Body) => body_params.push(param),
+                Some(ParamLocation::Header) => header_params.push(param),
+                None => {
+                    // Infer location based on conventions
+                    if param.is_id {
+                        path_params.push(param);
+                    } else if default_has_body {
+                        body_params.push(param);
+                    } else {
+                        query_params.push(param);
+                    }
+                }
+            }
+        }
+
+        let path_param_specs: Vec<_> = path_params
             .iter()
             .map(|p| {
                 // Use wire_name if provided, otherwise use the parameter name
@@ -668,35 +751,38 @@ fn generate_openapi_spec(
             })
             .collect();
 
-        let query_param_specs: Vec<TokenStream2> = if !has_body {
-            other_params
-                .iter()
-                .map(|p| {
-                    // Use wire_name if provided, otherwise use the parameter name
-                    let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
-                    let json_type = server_less_rpc::infer_json_type(&p.ty);
-                    let required = !p.is_optional && p.default_value.is_none();
-                    quote! { (#name, "query", #json_type, #required) }
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+        let query_param_specs: Vec<TokenStream2> = query_params
+            .iter()
+            .map(|p| {
+                // Use wire_name if provided, otherwise use the parameter name
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
+                let json_type = server_less_rpc::infer_json_type(&p.ty);
+                let required = !p.is_optional && p.default_value.is_none();
+                quote! { (#name, "query", #json_type, #required) }
+            })
+            .collect();
 
-        let body_props: Vec<TokenStream2> = if has_body {
-            other_params
-                .iter()
-                .map(|p| {
-                    // Use wire_name if provided, otherwise use the parameter name
-                    let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
-                    let json_type = server_less_rpc::infer_json_type(&p.ty);
-                    let required = !p.is_optional && p.default_value.is_none();
-                    quote! { (#name, #json_type, #required) }
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+        let header_param_specs: Vec<TokenStream2> = header_params
+            .iter()
+            .map(|p| {
+                // Use wire_name if provided, otherwise use the parameter name
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
+                let json_type = server_less_rpc::infer_json_type(&p.ty);
+                let required = !p.is_optional && p.default_value.is_none();
+                quote! { (#name, "header", #json_type, #required) }
+            })
+            .collect();
+
+        let body_props: Vec<TokenStream2> = body_params
+            .iter()
+            .map(|p| {
+                // Use wire_name if provided, otherwise use the parameter name
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
+                let json_type = server_less_rpc::infer_json_type(&p.ty);
+                let required = !p.is_optional && p.default_value.is_none();
+                quote! { (#name, #json_type, #required) }
+            })
+            .collect();
         let has_body_props = !body_props.is_empty();
 
         let ret = &method.return_info;
@@ -754,6 +840,17 @@ fn generate_openapi_spec(
                 #(
                     {
                         let (name, location, schema_type, required): (&str, &str, &str, bool) = #query_param_specs;
+                        parameters.push(::server_less::serde_json::json!({
+                            "name": name,
+                            "in": location,
+                            "required": required,
+                            "schema": { "type": schema_type }
+                        }));
+                    }
+                )*
+                #(
+                    {
+                        let (name, location, schema_type, required): (&str, &str, &str, bool) = #header_param_specs;
                         parameters.push(::server_less::serde_json::json!({
                             "name": name,
                             "in": location,
