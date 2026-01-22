@@ -25,6 +25,27 @@
 //! - GET: Path parameters (`:id`) and query parameters (`?name=value`)
 //! - POST/PUT/PATCH: JSON request body
 //!
+//! # Streaming Support (SSE)
+//!
+//! Return `impl Stream<Item = T>` to enable Server-Sent Events:
+//!
+//! ```ignore
+//! use futures::stream::Stream;
+//!
+//! #[http]
+//! impl Service {
+//!     // SSE streaming endpoint
+//!     // IMPORTANT: Rust 2024 requires `+ use<>` syntax
+//!     fn stream_data(&self, count: u32) -> impl Stream<Item = Event> + use<> {
+//!         // Returns SSE stream
+//!     }
+//! }
+//! ```
+//!
+//! **Rust 2024 Edition Note:** When using `impl Trait` in return position with
+//! streams, you must add `+ use<>` to capture all generic parameters. This is
+//! required by Rust 2024's stricter capture rules for opaque types.
+//!
 //! # Generated Methods
 //!
 //! - `http_router() -> axum::Router` - Complete router with all endpoints

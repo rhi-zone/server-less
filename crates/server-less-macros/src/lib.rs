@@ -132,6 +132,53 @@ mod ws;
 /// }
 /// ```
 ///
+/// # Server-Sent Events (SSE) Streaming
+///
+/// Return `impl Stream<Item = T>` to enable Server-Sent Events streaming.
+///
+/// **Important for Rust 2024:** You must add `+ use<>` to impl Trait return types
+/// to explicitly capture all generic parameters in scope. This is required by the
+/// Rust 2024 edition's stricter lifetime capture rules.
+///
+/// ```ignore
+/// use futures::stream::{self, Stream};
+///
+/// #[http]
+/// impl DataService {
+///     // Simple stream - emits values immediately
+///     // Note the `+ use<>` syntax for Rust 2024
+///     fn stream_numbers(&self, count: u32) -> impl Stream<Item = u32> + use<> {
+///         stream::iter(0..count)
+///     }
+///
+///     // Async stream with delays
+///     async fn stream_events(&self, n: u32) -> impl Stream<Item = Event> + use<> {
+///         stream::unfold(0, move |count| async move {
+///             if count >= n {
+///                 return None;
+///             }
+///             tokio::time::sleep(Duration::from_secs(1)).await;
+///             Some((Event { id: count }, count + 1))
+///         })
+///     }
+/// }
+/// ```
+///
+/// Clients receive data as SSE:
+/// ```text
+/// data: {"id": 0}
+///
+/// data: {"id": 1}
+///
+/// data: {"id": 2}
+/// ```
+///
+/// **Why `+ use<>`?**
+/// - Rust 2024 requires explicit capture of generic parameters in return position impl Trait
+/// - `+ use<>` captures all type parameters and lifetimes from the function context
+/// - Without it, you'll get compilation errors about uncaptured parameters
+/// - See: examples/streaming_service.rs for a complete working example
+///
 /// # Real-World Example
 ///
 /// ```ignore
