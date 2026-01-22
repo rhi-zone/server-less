@@ -24,6 +24,27 @@
 //! - `Vec<T>` → [T]
 //! - `Option<T>` → T (nullable)
 //!
+//! # Custom Scalars
+//!
+//! async-graphql provides built-in support for common custom scalars:
+//! - `chrono::DateTime<Utc>` → DateTime
+//! - `uuid::Uuid` → UUID
+//! - `url::Url` → Url
+//! - `serde_json::Value` → JSON
+//!
+//! These work automatically - just use them in your method signatures:
+//!
+//! ```ignore
+//! use chrono::{DateTime, Utc};
+//! use uuid::Uuid;
+//!
+//! #[graphql]
+//! impl UserService {
+//!     async fn get_user(&self, user_id: Uuid) -> Option<User> { /* ... */ }
+//!     async fn list_events(&self, since: DateTime<Utc>) -> Vec<Event> { /* ... */ }
+//! }
+//! ```
+//!
 //! # Generated Methods
 //!
 //! - `graphql_schema(self) -> async_graphql::dynamic::Schema` - Dynamic schema
@@ -485,7 +506,16 @@ fn infer_graphql_type_ref(ret: &server_less_parse::ReturnInfo) -> (TokenStream2,
 
         let is_list = type_str.contains("Vec");
 
-        let base_type = if type_str.contains("String") || type_str.contains("str") {
+        // Check for custom scalars first (async-graphql built-ins)
+        let base_type = if type_str.contains("DateTime") {
+            quote! { "DateTime" }
+        } else if type_str.contains("Uuid") {
+            quote! { "UUID" }
+        } else if type_str.contains("Url") {
+            quote! { "Url" }
+        } else if type_str.contains("serde_json :: Value") || type_str == "Value" {
+            quote! { "JSON" }
+        } else if type_str.contains("String") || type_str.contains("str") {
             quote! { TypeRef::STRING }
         } else if type_str.contains("i32")
             || type_str.contains("i64")
@@ -555,6 +585,20 @@ fn rust_type_to_graphql(ty: &syn::Type) -> &'static str {
         return extract_vec_inner_type(&type_str);
     }
 
+    // Check for custom scalars (async-graphql built-ins)
+    if type_str.contains("DateTime") {
+        return "DateTime";
+    }
+    if type_str.contains("Uuid") {
+        return "UUID";
+    }
+    if type_str.contains("Url") {
+        return "Url";
+    }
+    if type_str.contains("serde_json :: Value") || type_str == "Value" {
+        return "JSON";
+    }
+
     let json_type = server_less_rpc::infer_json_type(ty);
     match json_type {
         "integer" => "Int",
@@ -578,6 +622,21 @@ fn extract_vec_inner_type(type_str: &str) -> &'static str {
 }
 
 fn map_inner_type_to_graphql(inner: &str) -> &'static str {
+    // Check for custom scalars first
+    if inner.contains("DateTime") {
+        return "DateTime";
+    }
+    if inner.contains("Uuid") {
+        return "UUID";
+    }
+    if inner.contains("Url") {
+        return "Url";
+    }
+    if inner.contains("serde_json :: Value") || inner == "Value" {
+        return "JSON";
+    }
+
+    // Standard types
     if inner.contains("String") || inner.contains("str") {
         "String"
     } else if inner.contains("i32")

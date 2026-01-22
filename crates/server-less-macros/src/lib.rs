@@ -909,6 +909,33 @@ pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
+/// # Custom Scalars
+///
+/// Common custom scalar types are automatically supported:
+///
+/// ```ignore
+/// use chrono::{DateTime, Utc};
+/// use uuid::Uuid;
+///
+/// #[graphql]
+/// impl EventService {
+///     // UUID parameter
+///     async fn get_event(&self, event_id: Uuid) -> Option<Event> { /* ... */ }
+///
+///     // DateTime parameter
+///     async fn list_events(&self, since: DateTime<Utc>) -> Vec<Event> { /* ... */ }
+///
+///     // JSON parameter
+///     async fn search_events(&self, filter: serde_json::Value) -> Vec<Event> { /* ... */ }
+/// }
+/// ```
+///
+/// Supported custom scalars:
+/// - `chrono::DateTime<Utc>` → DateTime
+/// - `uuid::Uuid` → UUID
+/// - `url::Url` → Url
+/// - `serde_json::Value` → JSON
+///
 /// # Generated Methods
 /// - `graphql_schema() -> Schema` - async-graphql Schema
 /// - `graphql_router() -> axum::Router` - Router with /graphql endpoint
