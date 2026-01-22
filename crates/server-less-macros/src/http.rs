@@ -124,6 +124,62 @@ impl HttpMethodOverride {
     }
 }
 
+/// Per-method response customization
+#[derive(Default, Clone)]
+pub(crate) struct ResponseOverride {
+    pub status: Option<u16>,
+    pub content_type: Option<String>,
+    pub headers: Vec<(String, String)>,
+}
+
+impl ResponseOverride {
+    fn parse_from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
+        let mut result = Self::default();
+        let mut pending_header_name: Option<String> = None;
+
+        for attr in attrs {
+            if !attr.path().is_ident("response") {
+                continue;
+            }
+
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("status") {
+                    let value: syn::LitInt = meta.value()?.parse()?;
+                    result.status = Some(value.base10_parse()?);
+                    Ok(())
+                } else if meta.path.is_ident("content_type") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.content_type = Some(value.value());
+                    Ok(())
+                } else if meta.path.is_ident("header") {
+                    let name: syn::LitStr = meta.value()?.parse()?;
+                    pending_header_name = Some(name.value());
+                    Ok(())
+                } else if meta.path.is_ident("value") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    if let Some(name) = pending_header_name.take() {
+                        result.headers.push((name, value.value()));
+                    }
+                    Ok(())
+                } else {
+                    Err(meta.error(
+                        "unknown attribute\n\
+                         \n\
+                         Valid attributes: status, content_type, header, value\n\
+                         \n\
+                         Examples:\n\
+                         - #[response(status = 201)]\n\
+                         - #[response(content_type = \"application/octet-stream\")]\n\
+                         - #[response(header = \"X-Custom\", value = \"foo\")]",
+                    ))
+                }
+            })?;
+        }
+
+        Ok(result)
+    }
+}
+
 /// Arguments for the #[http] attribute
 #[derive(Default)]
 pub(crate) struct HttpArgs {
@@ -177,6 +233,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
     for method in &methods {
         let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
+        let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
         if overrides.skip {
             continue;
@@ -222,14 +279,18 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
         route_signatures.insert(route_sig, method.name.to_string());
 
-        let handler = generate_handler(&struct_name, method)?;
+        let handler = generate_handler(&struct_name, method, &response_overrides)?;
         handlers.push(handler);
 
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
         routes.push(route);
 
         if !overrides.hidden {
-            openapi_methods.push((method.clone(), overrides.clone()));
+            openapi_methods.push((
+                method.clone(),
+                overrides.clone(),
+                response_overrides.clone(),
+            ));
         }
     }
 
@@ -262,7 +323,11 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     })
 }
 
-fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream2> {
+fn generate_handler(
+    struct_name: &syn::Ident,
+    method: &MethodInfo,
+    response_overrides: &ResponseOverride,
+) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
@@ -275,7 +340,7 @@ fn generate_handler(struct_name: &syn::Ident, method: &MethodInfo) -> syn::Resul
         quote! { state.#method_name(#(#param_calls),*) }
     };
 
-    let response = generate_response_handling(method, &call)?;
+    let response = generate_response_handling(method, &call, response_overrides)?;
 
     let handler = quote! {
         async fn #handler_name(
@@ -363,60 +428,131 @@ fn generate_param_handling(
 fn generate_response_handling(
     method: &MethodInfo,
     call: &TokenStream2,
+    response_overrides: &ResponseOverride,
 ) -> syn::Result<TokenStream2> {
     let ret = &method.return_info;
 
-    if ret.is_unit {
-        Ok(quote! {
-            #call;
-            ::axum::http::StatusCode::NO_CONTENT
-        })
+    let base_response = if ret.is_unit {
+        quote! {
+            {
+                #call;
+                ::axum::http::StatusCode::NO_CONTENT
+            }
+        }
     } else if ret.is_result {
-        Ok(quote! {
-            use ::axum::response::IntoResponse;
-            match #call {
-                Ok(value) => ::axum::Json(value).into_response(),
-                Err(err) => {
-                    let code = ::server_less::ErrorCode::infer_from_name(&format!("{:?}", err));
-                    let status = ::axum::http::StatusCode::from_u16(code.http_status())
-                        .unwrap_or(::axum::http::StatusCode::INTERNAL_SERVER_ERROR);
-                    let body = ::server_less::serde_json::json!({
-                        "error": format!("{:?}", err),
-                        "message": format!("{}", err)
-                    });
-                    (status, ::axum::Json(body)).into_response()
+        quote! {
+            {
+                use ::axum::response::IntoResponse;
+                match #call {
+                    Ok(value) => ::axum::Json(value).into_response(),
+                    Err(err) => {
+                        let code = ::server_less::ErrorCode::infer_from_name(&format!("{:?}", err));
+                        let status = ::axum::http::StatusCode::from_u16(code.http_status())
+                            .unwrap_or(::axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+                        let body = ::server_less::serde_json::json!({
+                            "error": format!("{:?}", err),
+                            "message": format!("{}", err)
+                        });
+                        (status, ::axum::Json(body)).into_response()
+                    }
                 }
             }
-        })
+        }
     } else if ret.is_option {
-        Ok(quote! {
-            use ::axum::response::IntoResponse;
-            match #call {
-                Some(value) => ::axum::Json(value).into_response(),
-                None => ::axum::http::StatusCode::NOT_FOUND.into_response(),
+        quote! {
+            {
+                use ::axum::response::IntoResponse;
+                match #call {
+                    Some(value) => ::axum::Json(value).into_response(),
+                    None => ::axum::http::StatusCode::NOT_FOUND.into_response(),
+                }
+            }
+        }
+    } else if ret.is_stream {
+        quote! {
+            {
+                use ::server_less::futures::StreamExt;
+                let stream = #call;
+                let boxed_stream = Box::pin(stream);
+                ::axum::response::sse::Sse::new(
+                    boxed_stream.map(|item| {
+                        Ok::<_, std::convert::Infallible>(
+                            ::axum::response::sse::Event::default()
+                                .json_data(item)
+                                .unwrap()
+                        )
+                    })
+                )
+            }
+        }
+    } else {
+        quote! {
+            {
+                let result = #call;
+                ::axum::Json(result)
+            }
+        }
+    };
+
+    // Apply response overrides if any are specified
+    if response_overrides.status.is_some()
+        || response_overrides.content_type.is_some()
+        || !response_overrides.headers.is_empty()
+    {
+        apply_response_overrides(base_response, response_overrides)
+    } else {
+        Ok(base_response)
+    }
+}
+
+/// Apply response overrides (status, headers, content-type) to a base response
+fn apply_response_overrides(
+    base_response: TokenStream2,
+    overrides: &ResponseOverride,
+) -> syn::Result<TokenStream2> {
+    let status_code = if let Some(status) = overrides.status {
+        quote! {
+            ::axum::http::StatusCode::from_u16(#status)
+                .unwrap_or(::axum::http::StatusCode::OK)
+        }
+    } else {
+        quote! { ::axum::http::StatusCode::OK }
+    };
+
+    let header_insertions: Vec<TokenStream2> = overrides
+        .headers
+        .iter()
+        .map(|(name, value)| {
+            quote! {
+                headers.insert(
+                    ::axum::http::header::HeaderName::from_static(#name),
+                    ::axum::http::header::HeaderValue::from_static(#value)
+                );
             }
         })
-    } else if ret.is_stream {
-        Ok(quote! {
-            use ::server_less::futures::StreamExt;
-            let stream = #call;
-            let boxed_stream = Box::pin(stream);
-            ::axum::response::sse::Sse::new(
-                boxed_stream.map(|item| {
-                    Ok::<_, std::convert::Infallible>(
-                        ::axum::response::sse::Event::default()
-                            .json_data(item)
-                            .unwrap()
-                    )
-                })
-            )
-        })
+        .collect();
+
+    let content_type_insertion = if let Some(ref ct) = overrides.content_type {
+        quote! {
+            headers.insert(
+                ::axum::http::header::CONTENT_TYPE,
+                ::axum::http::header::HeaderValue::from_static(#ct)
+            );
+        }
     } else {
-        Ok(quote! {
-            let result = #call;
-            ::axum::Json(result)
-        })
-    }
+        quote! {}
+    };
+
+    Ok(quote! {
+        {
+            use ::axum::response::IntoResponse;
+            let base_response = #base_response;
+            let mut headers = ::axum::http::HeaderMap::new();
+            #(#header_insertions)*
+            #content_type_insertion
+            (#status_code, headers, base_response).into_response()
+        }
+    })
 }
 
 fn generate_route(
@@ -466,11 +602,11 @@ fn generate_route(
 fn generate_openapi_spec(
     struct_name: &syn::Ident,
     prefix: &str,
-    methods_with_overrides: &[(MethodInfo, HttpMethodOverride)],
+    methods_with_overrides: &[(MethodInfo, HttpMethodOverride, ResponseOverride)],
 ) -> syn::Result<TokenStream2> {
     let mut operation_data = Vec::new();
 
-    for (method, overrides) in methods_with_overrides {
+    for (method, overrides, response_overrides) in methods_with_overrides {
         let method_name = method.name.to_string();
 
         let http_method = if let Some(ref m) = overrides.method {
@@ -543,15 +679,34 @@ fn generate_openapi_spec(
         let has_body_props = !body_props.is_empty();
 
         let ret = &method.return_info;
-        let (success_code, error_responses) = if ret.is_result {
-            ("200", true)
-        } else if ret.is_option {
-            ("200", false)
-        } else if ret.is_unit {
-            ("204", false)
-        } else {
-            ("200", false)
-        };
+
+        // Determine success code - use override if provided, otherwise infer
+        let inferred_code = if ret.is_unit { "204" } else { "200" };
+        let success_code = response_overrides
+            .status
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| inferred_code.to_string());
+
+        let error_responses = ret.is_result;
+
+        // Build custom response metadata at macro expansion time
+        let has_content_type = response_overrides.content_type.is_some();
+        let content_type_value = response_overrides.content_type.as_deref().unwrap_or("");
+        let header_insertions: Vec<TokenStream2> = response_overrides
+            .headers
+            .iter()
+            .map(|(name, _)| {
+                quote! {
+                    headers_obj.insert(#name.to_string(), ::server_less::serde_json::json!({
+                        "description": format!("Custom header: {}", #name),
+                        "schema": {
+                            "type": "string"
+                        }
+                    }));
+                }
+            })
+            .collect();
+        let has_custom_headers = !response_overrides.headers.is_empty();
 
         operation_data.push(quote! {
             {
@@ -618,9 +773,35 @@ fn generate_openapi_spec(
                 };
 
                 let mut responses = ::server_less::serde_json::Map::new();
-                responses.insert(success_code.to_string(), ::server_less::serde_json::json!({
+
+                // Build success response with optional content type and headers
+                let mut success_response = ::server_less::serde_json::json!({
                     "description": "Successful response"
-                }));
+                });
+
+                // Add content type if specified
+                if #has_content_type {
+                    let content_obj = ::server_less::serde_json::json!({
+                        #content_type_value: {
+                            "schema": {
+                                "type": "string"
+                            }
+                        }
+                    });
+                    success_response.as_object_mut().unwrap()
+                        .insert("content".to_string(), content_obj);
+                }
+
+                // Add custom headers if specified
+                if #has_custom_headers {
+                    let mut headers_obj = ::server_less::serde_json::Map::new();
+                    #(#header_insertions)*
+                    success_response.as_object_mut().unwrap()
+                        .insert("headers".to_string(), ::server_less::serde_json::Value::Object(headers_obj));
+                }
+
+                responses.insert(success_code.to_string(), success_response);
+
                 if has_error_responses {
                     responses.insert("400".to_string(), ::server_less::serde_json::json!({
                         "description": "Bad request"

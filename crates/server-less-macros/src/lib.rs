@@ -722,6 +722,36 @@ pub fn route(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
 
+/// Helper attribute for method-level HTTP response customization.
+///
+/// This attribute is used within `#[http]` impl blocks to customize
+/// individual method responses. It is a no-op on its own.
+///
+/// # Example
+///
+/// ```ignore
+/// #[http(prefix = "/api")]
+/// impl MyService {
+///     #[response(status = 201)]
+///     fn create_item(&self, name: String) -> Item { /* ... */ }
+///
+///     #[response(status = 204)]
+///     fn delete_item(&self, id: String) { /* ... */ }
+///
+///     #[response(content_type = "application/octet-stream")]
+///     fn download(&self, id: String) -> Vec<u8> { /* ... */ }
+///
+///     #[response(header = "X-Custom", value = "foo")]
+///     fn with_header(&self) -> String { /* ... */ }
+/// }
+/// ```
+#[cfg(feature = "http")]
+#[proc_macro_attribute]
+pub fn response(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Pass through unchanged - the #[http] macro parses these attributes
+    item
+}
+
 /// Derive macro for error types that implement `IntoErrorCode`.
 ///
 /// # Example

@@ -133,6 +133,9 @@ pub use server_less_macros::http;
 pub use server_less_macros::route;
 
 #[cfg(feature = "http")]
+pub use server_less_macros::response;
+
+#[cfg(feature = "http")]
 pub use server_less_macros::serve;
 
 #[cfg(feature = "cli")]
@@ -207,6 +210,8 @@ pub mod prelude {
     pub use super::jsonrpc;
     #[cfg(feature = "mcp")]
     pub use super::mcp;
+    #[cfg(feature = "http")]
+    pub use super::response;
     #[cfg(feature = "http")]
     pub use super::route;
     #[cfg(feature = "http")]

@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use server_less::{http, route};
+use server_less::{http, response, route};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -368,5 +368,195 @@ fn test_openapi_error_responses() {
     assert!(
         responses.contains_key("500"),
         "Expected 500 response for Result"
+    );
+}
+
+// ============================================================================
+// Response Customization Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct ResponseService;
+
+#[http(prefix = "/api")]
+impl ResponseService {
+    /// Create resource with 201 Created
+    #[response(status = 201)]
+    pub fn create_resource(&self, name: String) -> Item {
+        Item {
+            id: "1".to_string(),
+            name,
+        }
+    }
+
+    /// Delete with 204 No Content
+    #[response(status = 204)]
+    pub fn delete_resource(&self, id: String) {
+        // Deletion logic
+    }
+
+    /// Download file with custom content type
+    #[response(content_type = "application/octet-stream")]
+    pub fn download_file(&self, id: String) -> Vec<u8> {
+        vec![1, 2, 3]
+    }
+
+    /// Response with custom header
+    #[response(header = "X-Custom-Header", value = "custom-value")]
+    pub fn get_with_header(&self, id: String) -> String {
+        "data".to_string()
+    }
+
+    /// Combined: status + content type + multiple headers
+    #[response(status = 201)]
+    #[response(content_type = "application/vnd.api+json")]
+    #[response(header = "X-Resource-Id", value = "123")]
+    #[response(header = "X-Version", value = "1.0")]
+    pub fn create_with_all(&self, data: String) -> String {
+        data
+    }
+
+    /// Normal method without response overrides
+    pub fn get_normal(&self, id: String) -> String {
+        "normal".to_string()
+    }
+}
+
+#[test]
+fn test_response_service_router_created() {
+    let service = ResponseService;
+    let _router = service.http_router();
+}
+
+#[test]
+fn test_response_status_override_in_openapi() {
+    let spec = ResponseService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // create_resource should have 201 status in OpenAPI
+    let create_path = paths.get("/api/resources").unwrap();
+    let post_op = create_path.get("post").unwrap();
+    let responses = post_op.get("responses").unwrap().as_object().unwrap();
+
+    assert!(
+        responses.contains_key("201"),
+        "Expected 201 Created response, got: {:?}",
+        responses.keys().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_response_no_content_in_openapi() {
+    let spec = ResponseService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // delete_resource should have 204 No Content
+    let delete_path = paths.get("/api/resources/{id}").unwrap();
+    let delete_op = delete_path.get("delete").unwrap();
+    let responses = delete_op.get("responses").unwrap().as_object().unwrap();
+
+    assert!(
+        responses.contains_key("204"),
+        "Expected 204 No Content response"
+    );
+}
+
+#[test]
+fn test_response_content_type_in_openapi() {
+    let spec = ResponseService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // download_file should have application/octet-stream content type
+    // Method name "download_file" doesn't match standard patterns, so it becomes POST
+    let download_path = paths.get("/api/download-files").unwrap();
+    let post_op = download_path.get("post").unwrap();
+    let responses = post_op.get("responses").unwrap();
+    let ok_response = responses.get("200").unwrap();
+
+    if let Some(content) = ok_response.get("content") {
+        let content_obj = content.as_object().unwrap();
+        assert!(
+            content_obj.contains_key("application/octet-stream"),
+            "Expected application/octet-stream content type, got: {:?}",
+            content_obj.keys().collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn test_response_custom_headers_in_openapi() {
+    let spec = ResponseService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // get_with_header should document custom header
+    let get_path = paths.get("/api/with-headers/{id}").unwrap();
+    let get_op = get_path.get("get").unwrap();
+    let responses = get_op.get("responses").unwrap();
+    let ok_response = responses.get("200").unwrap();
+
+    if let Some(headers) = ok_response.get("headers") {
+        let headers_obj = headers.as_object().unwrap();
+        assert!(
+            headers_obj.contains_key("X-Custom-Header"),
+            "Expected X-Custom-Header in response headers"
+        );
+    }
+}
+
+#[test]
+fn test_response_combined_overrides_in_openapi() {
+    let spec = ResponseService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // create_with_all should have all customizations
+    // Method name "create_with_all" becomes POST /api/with-alls
+    let create_path = paths.get("/api/with-alls").unwrap();
+    let post_op = create_path.get("post").unwrap();
+    let responses = post_op.get("responses").unwrap().as_object().unwrap();
+
+    // Check status code
+    assert!(
+        responses.contains_key("201"),
+        "Expected 201 status for combined override"
+    );
+
+    let created_response = responses.get("201").unwrap();
+
+    // Check content type
+    if let Some(content) = created_response.get("content") {
+        let content_obj = content.as_object().unwrap();
+        assert!(
+            content_obj.contains_key("application/vnd.api+json"),
+            "Expected custom content type"
+        );
+    }
+
+    // Check headers
+    if let Some(headers) = created_response.get("headers") {
+        let headers_obj = headers.as_object().unwrap();
+        assert!(
+            headers_obj.contains_key("X-Resource-Id"),
+            "Expected X-Resource-Id header"
+        );
+        assert!(
+            headers_obj.contains_key("X-Version"),
+            "Expected X-Version header"
+        );
+    }
+}
+
+#[test]
+fn test_response_normal_method_unchanged() {
+    let spec = ResponseService::openapi_spec();
+    let paths = spec.get("paths").unwrap();
+
+    // get_normal should have default 200 response
+    let normal_path = paths.get("/api/normals/{id}").unwrap();
+    let get_op = normal_path.get("get").unwrap();
+    let responses = get_op.get("responses").unwrap().as_object().unwrap();
+
+    assert!(
+        responses.contains_key("200"),
+        "Expected default 200 response for normal method"
     );
 }
