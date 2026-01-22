@@ -11,7 +11,7 @@ hero:
       link: /design/impl-first
     - theme: alt
       text: View on GitHub
-      link: https://github.com/rhizome-lab/trellis
+      link: https://github.com/rhizome-lab/server-less
 
 features:
   - icon: 🏗️
@@ -42,7 +42,7 @@ features:
 ## Quick Example
 
 ```rust
-use rhizome_trellis::prelude::*;
+use server_less::prelude::*;
 
 struct UserService { /* ... */ }
 
@@ -113,7 +113,7 @@ Generate API documentation:
 - Better error handling
 - Improved documentation
 
-See [ROADMAP.md](https://github.com/rhizome-lab/trellis/blob/master/ROADMAP.md) for details.
+See [ROADMAP.md](https://github.com/rhizome-lab/server-less/blob/master/ROADMAP.md) for details.
 
 ## Design Philosophy
 
@@ -147,16 +147,16 @@ Related projects:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis" }
+server-less = { git = "https://github.com/rhizome-lab/server-less" }
 
 # Or select specific features
-rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { git = "https://github.com/rhizome-lab/server-less", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ## Contributing
 
-Contributions welcome! See [CLAUDE.md](https://github.com/rhizome-lab/trellis/blob/master/CLAUDE.md) for development guidelines.
+Contributions welcome! See [CLAUDE.md](https://github.com/rhizome-lab/server-less/blob/master/CLAUDE.md) for development guidelines.
 
 ## License
 
-MIT License - see [LICENSE](https://github.com/rhizome-lab/trellis/blob/master/LICENSE) for details.
+MIT License - see [LICENSE](https://github.com/rhizome-lab/server-less/blob/master/LICENSE) for details.

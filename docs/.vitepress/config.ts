@@ -31,7 +31,7 @@ export default withMermaid(
       },
 
       socialLinks: [
-        { icon: 'github', link: 'https://github.com/rhizome-lab/trellis' }
+        { icon: 'github', link: 'https://github.com/rhizome-lab/server-less' }
       ],
 
       search: {

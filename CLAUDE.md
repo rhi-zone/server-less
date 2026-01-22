@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-Behavioral rules for Claude Code in the trellis repository.
+Behavioral rules for Claude Code in the server-less repository.
 
 ## Project Overview
 
-Trellis is a collection of composable derive macros for common Rust patterns. The name comes from garden trellises - lattice structures that support climbing plants, providing structure while remaining flexible.
+**server-less** is a collection of composable derive macros for Rust. The name is literal: write less server code. It's about minimizing boilerplate while keeping full control.
 
-**Origin story:** While building Lotus (an object store), we wanted derive macros for server setup - websocket servers, JSON-RPC, Cap'n Proto, etc. Rather than building one-off solutions, we decided to create a repo for "random derive macros for the silliest stuff ever" - but designed properly for composability.
+**Origin story:** While building Lotus (an object store), we wanted derive macros for server setup - websocket servers, JSON-RPC, Cap'n Proto, etc. Rather than building one-off solutions, we decided to create a repo for "random derive macros for the silliest stuff ever" - but designed properly for composability. The name "server-less" emphasizes the pragmatic goal: write less code to build servers.
 
 ## Philosophy
 

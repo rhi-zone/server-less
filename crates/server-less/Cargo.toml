@@ -1,0 +1,79 @@
+[package]
+name = "server-less"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Composable derive macros for common Rust patterns"
+
+[dependencies]
+server-less-core = { path = "../server-less-core" }
+server-less-macros = { path = "../server-less-macros", default-features = false }
+
+# Re-export common dependencies users will need
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Optional dependencies for generated code
+[dependencies.axum]
+version = "0.8"
+features = ["ws"]
+optional = true
+
+[dependencies.clap]
+version = "4"
+optional = true
+
+[dependencies.futures]
+version = "0.3"
+optional = true
+
+[dependencies.async-graphql]
+version = "7"
+optional = true
+
+[dependencies.async-graphql-axum]
+version = "7"
+optional = true
+
+[features]
+default = ["full"]
+
+# Runtime protocols (require external deps)
+mcp = ["server-less-macros/mcp"]
+http = ["server-less-macros/http", "axum"]
+cli = ["server-less-macros/cli", "clap"]
+ws = ["server-less-macros/ws", "axum", "futures"]
+graphql = ["server-less-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
+jsonrpc = ["server-less-macros/jsonrpc", "axum"]
+
+# Schema generators (no runtime deps, just string generation)
+grpc = ["server-less-macros/grpc"]
+capnp = ["server-less-macros/capnp"]
+thrift = ["server-less-macros/thrift"]
+connect = ["server-less-macros/connect"]
+smithy = ["server-less-macros/smithy"]
+
+# Specification generators (no runtime deps)
+openrpc = ["server-less-macros/openrpc"]
+asyncapi = ["server-less-macros/asyncapi"]
+jsonschema = ["server-less-macros/jsonschema"]
+
+# Documentation generators (no runtime deps)
+markdown = ["server-less-macros/markdown"]
+
+# All features
+full = [
+    "mcp", "http", "cli", "ws", "graphql", "jsonrpc",
+    "grpc", "capnp", "thrift", "connect", "smithy",
+    "openrpc", "asyncapi", "jsonschema",
+    "markdown"
+]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+trybuild = "1"
+axum = { version = "0.8", features = ["ws"] }
+clap = "4"
+futures = "0.3"
+async-graphql = "7"
+async-graphql-axum = "7"

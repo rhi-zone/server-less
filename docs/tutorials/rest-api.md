@@ -17,7 +17,7 @@ Add Trellis to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis" }
+server-less = { git = "https://github.com/rhizome-lab/server-less" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 ```
@@ -54,7 +54,7 @@ pub struct UpdatePostRequest {
 ## Step 2: Create Your Service
 
 ```rust
-use rhizome_trellis::http;
+use server_less::http;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -223,7 +223,7 @@ impl BlogService {
 Use Trellis error types for proper HTTP status codes:
 
 ```rust
-use rhizome_trellis::TrellisError;
+use server_less::TrellisError;
 
 #[derive(Debug, TrellisError)]
 pub enum BlogError {

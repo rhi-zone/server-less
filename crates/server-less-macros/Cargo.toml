@@ -1,0 +1,41 @@
+[package]
+name = "server-less-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Proc macros for server-less"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Shared parsing and RPC utilities
+server-less-parse = { path = "../server-less-parse" }
+server-less-rpc = { path = "../server-less-rpc" }
+
+# Proc macro essentials
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"
+
+# For case conversion (create_user -> CreateUser, create-user, etc.)
+heck = "0.5"
+
+[features]
+default = ["full"]
+mcp = []
+http = []
+cli = []
+ws = []
+graphql = []
+jsonrpc = []
+grpc = []
+capnp = []
+thrift = []
+connect = []
+smithy = []
+openrpc = []
+asyncapi = []
+jsonschema = []
+markdown = []
+full = ["mcp", "http", "cli", "ws", "graphql", "jsonrpc", "grpc", "capnp", "thrift", "connect", "smithy", "openrpc", "asyncapi", "jsonschema", "markdown"]

@@ -38,7 +38,7 @@ Write business logic once, expose it everywhere:
 Want to jump right in? Here's a minimal example:
 
 ```rust
-use rhizome_trellis::http;
+use server_less::http;
 
 #[derive(Clone)]
 struct HelloService;
@@ -142,7 +142,7 @@ impl Service {
 ### Error Handling
 
 ```rust
-use rhizome_trellis::TrellisError;
+use server_less::TrellisError;
 
 #[derive(Debug, TrellisError)]
 enum MyError {
@@ -180,15 +180,15 @@ impl Service {
 
 ## Need Help?
 
-- **Issues**: [GitHub Issues](https://github.com/rhizome-lab/trellis/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/rhizome-lab/trellis/discussions)
+- **Issues**: [GitHub Issues](https://github.com/rhizome-lab/server-less/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/rhizome-lab/server-less/discussions)
 - **Examples**: See `/examples` in the repository
 
 ## Contributing
 
 Found an issue in a tutorial? Have a tutorial idea?
 
-Open an issue or PR at [github.com/rhizome-lab/trellis](https://github.com/rhizome-lab/trellis)
+Open an issue or PR at [github.com/rhizome-lab/server-less](https://github.com/rhizome-lab/server-less)
 
 ---
 

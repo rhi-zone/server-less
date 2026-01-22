@@ -26,7 +26,7 @@ Becomes available as:
 
 ```toml
 [dependencies]
-rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis", features = ["full"] }
+server-less = { git = "https://github.com/rhizome-lab/server-less", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 ```
@@ -118,7 +118,7 @@ Now the magic happens - add derive macros to expose your service:
 ### HTTP REST API
 
 ```rust
-use rhizome_trellis::http;
+use server_less::http;
 
 #[http(prefix = "/api")]
 impl TaskService {
@@ -129,7 +129,7 @@ impl TaskService {
 ### WebSocket
 
 ```rust
-use rhizome_trellis::ws;
+use server_less::ws;
 
 #[ws(path = "/ws")]
 impl TaskService {
@@ -140,7 +140,7 @@ impl TaskService {
 ### JSON-RPC
 
 ```rust
-use rhizome_trellis::jsonrpc;
+use server_less::jsonrpc;
 
 #[jsonrpc(path = "/rpc")]
 impl TaskService {
@@ -151,7 +151,7 @@ impl TaskService {
 ### GraphQL
 
 ```rust
-use rhizome_trellis::graphql;
+use server_less::graphql;
 
 #[graphql]
 impl TaskService {
@@ -164,7 +164,7 @@ impl TaskService {
 ### CLI Application
 
 ```rust
-use rhizome_trellis::cli;
+use server_less::cli;
 
 #[cli(name = "tasks", version = "1.0.0")]
 impl TaskService {
@@ -176,7 +176,7 @@ impl TaskService {
 ### MCP Tools (for LLMs)
 
 ```rust
-use rhizome_trellis::mcp;
+use server_less::mcp;
 
 #[mcp(namespace = "tasks")]
 impl TaskService {
@@ -190,7 +190,7 @@ impl TaskService {
 The `#[serve]` macro combines all protocols into one server:
 
 ```rust
-use rhizome_trellis::{serve, http, ws, jsonrpc, graphql};
+use server_less::{serve, http, ws, jsonrpc, graphql};
 
 #[derive(Clone)]
 pub struct TaskService {
@@ -298,7 +298,7 @@ Build a CLI binary:
 
 ```rust
 // src/bin/tasks-cli.rs
-use rhizome_trellis::cli;
+use server_less::cli;
 
 #[cli(name = "tasks", version = "1.0.0")]
 impl TaskService { /* ... */ }
@@ -325,7 +325,7 @@ cargo build --bin tasks-cli
 Expose your service to Claude:
 
 ```rust
-use rhizome_trellis::mcp;
+use server_less::mcp;
 
 #[mcp(namespace = "tasks")]
 impl TaskService { /* ... */ }
@@ -355,7 +355,7 @@ Generate schemas for all protocols:
 
 ```rust
 // Protocol Buffers
-use rhizome_trellis::grpc;
+use server_less::grpc;
 #[grpc(package = "tasks.v1")]
 impl TaskService { /* ... */ }
 let proto = TaskService::proto_schema();
@@ -385,7 +385,7 @@ pub fn create_task(&self, req: HttpRequest) -> HttpResponse { }
 ### 2. Use Result Types for Errors
 
 ```rust
-use rhizome_trellis::TrellisError;
+use server_less::TrellisError;
 
 #[derive(Debug, TrellisError)]
 enum TaskError {

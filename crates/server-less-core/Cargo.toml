@@ -1,0 +1,20 @@
+[package]
+name = "server-less-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core traits and types for server-less derive macros"
+
+[dependencies]
+# Async runtime agnostic
+futures-core = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP types (framework agnostic)
+http = "1"
+
+# Error handling
+thiserror = "2"

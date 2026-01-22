@@ -1,27 +1,26 @@
-# Trellis
+# server-less
 
-[![Tests](https://img.shields.io/badge/tests-171%20passing-brightgreen)](https://github.com/rhizome-lab/trellis)
+[![Tests](https://img.shields.io/badge/tests-187%20passing-brightgreen)](https://github.com/rhizome-lab/server-less)
 [![Rust](https://img.shields.io/badge/rust-2024%20edition-blue)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Composable derive macros for Rust. Write your implementation once, project it into multiple protocols.
+**Write less server code.** Composable derive macros for Rust. Write your implementation once, project it into multiple protocols.
 
-## Why "Trellis"?
+## Philosophy
 
-A **trellis** is a lattice structure that gardeners use to support climbing plants. It gives vines and creepers structure to grow upward while remaining flexible enough to adapt to any shape.
+Server-less is about minimizing boilerplate while maximizing flexibility:
 
-This library does the same for Rust code:
-
-- **Support structure** - Derive macros provide scaffolding for common patterns
-- **Composability** - Stack multiple macros on the same impl block
-- **Flexibility** - Configure exactly what you need, nothing more
+- **Convention over configuration** - Sensible defaults that just work
+- **Composable** - Stack multiple macros on the same impl block
+- **Progressive disclosure** - Simple by default, powerful when needed
+- **Escape hatches** - Drop to manual code whenever you want
 
 ## Quick Start
 
 Write your business logic once, expose it through multiple protocols:
 
 ```rust
-use rhizome_trellis::prelude::*;
+use server_less::prelude::*;
 
 struct UserService { /* ... */ }
 
@@ -129,10 +128,10 @@ Generate API documentation and contracts:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis" }
+server-less = { git = "https://github.com/rhizome-lab/server-less" }
 
 # Or select specific features
-rhizome-trellis = { git = "https://github.com/rhizome-lab/trellis", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { git = "https://github.com/rhizome-lab/server-less", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ### Available Features

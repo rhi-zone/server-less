@@ -1,0 +1,15 @@
+[package]
+name = "server-less-rpc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared RPC dispatch utilities for server-less proc macros"
+
+[lib]
+proc-macro = false
+
+[dependencies]
+server-less-parse = { path = "../server-less-parse" }
+syn = { version = "2", features = ["full", "parsing"] }
+quote = "1"
+proc-macro2 = "1"
