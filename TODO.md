@@ -141,21 +141,13 @@ impl UserService {
 - Update `generate_response_handling()` in `crates/trellis-macros/src/http.rs`
 - Update OpenAPI generation with correct status codes
 
-### Error Derive Macro
-```rust
-#[derive(TrellisError)]
-enum MyError {
-    #[error(code = 404)]
-    NotFound,
-    #[error(code = 401)]
-    Unauthorized,
-}
-```
-
 ### Streaming Support
-- SSE for HTTP (already partially there)
+**Status:** Partially implemented
+
+- ✅ SSE for HTTP (implemented - see `examples/streaming_service.rs`)
 - Streaming responses for MCP
-- WebSocket already handles bidirectional, but could support server-push patterns
+- Server-push patterns for WebSocket (blocked by bidirectional patterns above)
+- Document Rust 2024 `+ use<>` requirement for streaming
 
 ### Extract OpenAPI as Standalone Macro
 **Status:** Architecture decision needed

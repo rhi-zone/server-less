@@ -147,34 +147,68 @@ server-less = { git = "https://github.com/rhizome-lab/server-less", default-feat
 
 ## Examples
 
-Check out [examples/](crates/trellis/examples/) for working code:
+Check out [examples/](crates/server-less/examples/) for working code:
 
-- **[http_service.rs](crates/trellis/examples/http_service.rs)** - REST API with Axum + OpenAPI
-- **[cli_service.rs](crates/trellis/examples/cli_service.rs)** - CLI application with Clap
-- **[user_service.rs](crates/trellis/examples/user_service.rs)** - Multi-protocol (HTTP + CLI + MCP + WS)
-- **[ws_service.rs](crates/trellis/examples/ws_service.rs)** - WebSocket JSON-RPC server
-- **[streaming_service.rs](crates/trellis/examples/streaming_service.rs)** - SSE streaming over HTTP
+- **[http_service.rs](crates/server-less/examples/http_service.rs)** - REST API with Axum + OpenAPI
+- **[cli_service.rs](crates/server-less/examples/cli_service.rs)** - CLI application with Clap
+- **[user_service.rs](crates/server-less/examples/user_service.rs)** - Multi-protocol (HTTP + CLI + MCP + WS)
+- **[ws_service.rs](crates/server-less/examples/ws_service.rs)** - WebSocket JSON-RPC server
+- **[streaming_service.rs](crates/server-less/examples/streaming_service.rs)** - SSE streaming over HTTP
+
+## Server-Sent Events (SSE) Streaming
+
+Server-less supports SSE streaming by returning `impl Stream<Item = T>`:
+
+```rust
+use futures::stream::{self, Stream};
+
+#[http]
+impl Service {
+    /// Stream events to the client
+    pub fn stream_events(&self, count: u64) -> impl Stream<Item = Event> + use<> {
+        stream::iter((0..count).map(|i| Event { id: i }))
+    }
+}
+```
+
+**Important:** The `+ use<>` syntax is **required** for Rust 2024 edition when using `impl Trait` in return position with streaming. This tells the compiler to capture all generic parameters in scope. Without it, you'll get compilation errors about lifetime capture.
+
+```rust
+// ✅ Correct - Rust 2024
+pub fn stream(&self) -> impl Stream<Item = T> + use<> { ... }
+
+// ❌ Error - Missing use<> in Rust 2024
+pub fn stream(&self) -> impl Stream<Item = T> { ... }
+```
+
+The generated code automatically wraps your stream in SSE format with proper event handling.
 
 ## Roadmap
 
 ### Current - Foundation ✅
-- [x] Core runtime protocols (HTTP, CLI, MCP, WebSocket, JSON-RPC)
+- [x] Core runtime protocols (HTTP, CLI, MCP, WebSocket, JSON-RPC, GraphQL)
 - [x] Schema generators (gRPC, Cap'n Proto, Thrift, Smithy, Connect)
 - [x] Specification generators (OpenRPC, AsyncAPI, JSON Schema, Markdown)
-- [x] GraphQL support (schema + resolvers)
 - [x] Error derive macro with HTTP status mapping
 - [x] Serve macro for multi-protocol composition
-- [x] 171 passing integration tests
-- [x] Complete design documentation
+- [x] **187 passing integration tests** ✨
+- [x] Complete design documentation and tutorials
 - [x] Working examples for all major protocols
 
-### Next - Polish & Refinement
-- [ ] **GraphQL improvements**: Fix array/object type mapping
-- [ ] **Error handling**: Replace panics with proper Result types in schema validation
-- [ ] **Streaming enhancements**: Better SSE + bidirectional WebSocket patterns
-- [ ] **Documentation**: Inline docs for all macros with examples
-- [ ] **Attribute customization**: `#[route(method="POST", path="/custom")]`
-- [ ] **OpenAPI separation**: Extract OpenAPI as standalone macro (not just HTTP)
+### Recently Completed - Polish & Refinement ✅
+- [x] **GraphQL improvements**: Array/object type mapping fixed
+- [x] **Error handling**: Proper Result types in schema validation
+- [x] **SSE streaming**: Server-Sent Events support
+- [x] **Documentation**: Inline docs for all macros with examples
+- [x] **Attribute customization**: `#[route(method="POST", path="/custom", skip, hidden)]`
+- [x] **Helpful error messages**: All macros provide actionable hints
+- [x] **Compile-time validation**: HTTP path validation, duplicate route detection
+
+### Next - Advanced Features
+- [ ] **Response customization**: `#[response(status = 201)]`
+- [ ] **Parameter customization**: `#[param(query, name = "q")]`
+- [ ] **WebSocket bidirectional**: Server-push patterns
+- [ ] **OpenAPI separation**: Extract as standalone macro
 
 ### Medium Term - Developer Experience
 - [ ] Improved error messages with better span information
