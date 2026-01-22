@@ -102,45 +102,6 @@ impl SearchService {
 - Parse `#[param(...)]` attributes from function parameters
 - Update OpenAPI generation to reflect custom names
 
-### Response Customization
-**Feature:** `#[response(status = 201)]` and related attributes
-
-Currently response handling is inferred from return types. Users should be able to customize:
-- HTTP status codes (201 Created, 202 Accepted, 204 No Content, etc.)
-- Response headers
-- Content-Type overrides
-
-**Desired usage:**
-```rust
-#[http]
-impl UserService {
-    /// Create a new user (returns 201 Created)
-    #[response(status = 201)]
-    async fn create_user(&self, user: User) -> User {
-        // ...
-    }
-
-    /// Delete user (returns 204 No Content)
-    #[response(status = 204)]
-    async fn delete_user(&self, id: String) {
-        // ...
-    }
-
-    /// Download file
-    #[response(content_type = "application/octet-stream")]
-    #[response(header = "Content-Disposition", value = "attachment")]
-    async fn download(&self, id: String) -> Vec<u8> {
-        // ...
-    }
-}
-```
-
-**Technical considerations:**
-- Parse `#[response(...)]` attributes from methods
-- Extend `MethodInfo` or create `ResponseOverride` in trellis-parse
-- Update `generate_response_handling()` in `crates/trellis-macros/src/http.rs`
-- Update OpenAPI generation with correct status codes
-
 ### Streaming Support
 **Status:** Partially implemented
 

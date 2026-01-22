@@ -36,6 +36,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `#[route(skip)]` - exclude from routing
   - `#[route(hidden)]` - exclude from OpenAPI
 
+#### Response Customization
+- **Response override implementation**: Full support for `#[response(...)]` attribute
+  - `#[response(status = 201)]` - custom HTTP status code
+  - `#[response(content_type = "application/octet-stream")]` - custom content type
+  - `#[response(header = "X-Custom", value = "foo")]` - custom headers
+  - Multiple `#[response(...)]` attributes can be combined
+  - OpenAPI spec generation reflects custom status codes, content types, and headers
+  - Added 8 comprehensive tests covering all response customization scenarios
+
 #### Documentation
 - **Module-level documentation**: Added comprehensive docs to all 17 macro modules
 - **Tutorial creation**: Created REST API and Multi-Protocol tutorials (1000+ lines total)
