@@ -36,6 +36,21 @@ pub struct ParamInfo {
     pub is_optional: bool,
     /// Whether this looks like an ID (ends with _id or is named id)
     pub is_id: bool,
+    /// Custom wire name (from #[param(name = "...")])
+    pub wire_name: Option<String>,
+    /// Parameter location override (from #[param(query/path/body/header)])
+    pub location: Option<ParamLocation>,
+    /// Default value as a string (from #[param(default = ...)])
+    pub default_value: Option<String>,
+}
+
+/// Parameter location for HTTP requests
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParamLocation {
+    Query,
+    Path,
+    Body,
+    Header,
 }
 
 /// Parsed return type information
@@ -123,6 +138,77 @@ pub fn extract_docs(attrs: &[syn::Attribute]) -> Option<String> {
     }
 }
 
+/// Parse #[param(...)] attributes from a parameter
+pub fn parse_param_attrs(
+    attrs: &[syn::Attribute],
+) -> syn::Result<(Option<String>, Option<ParamLocation>, Option<String>)> {
+    let mut wire_name = None;
+    let mut location = None;
+    let mut default_value = None;
+
+    for attr in attrs {
+        if !attr.path().is_ident("param") {
+            continue;
+        }
+
+        attr.parse_nested_meta(|meta| {
+            // #[param(name = "...")]
+            if meta.path.is_ident("name") {
+                let value: syn::LitStr = meta.value()?.parse()?;
+                wire_name = Some(value.value());
+                Ok(())
+            }
+            // #[param(default = ...)]
+            else if meta.path.is_ident("default") {
+                // Accept various literal types
+                let value = meta.value()?;
+                let lookahead = value.lookahead1();
+                if lookahead.peek(syn::LitStr) {
+                    let lit: syn::LitStr = value.parse()?;
+                    default_value = Some(format!("\"{}\"", lit.value()));
+                } else if lookahead.peek(syn::LitInt) {
+                    let lit: syn::LitInt = value.parse()?;
+                    default_value = Some(lit.to_string());
+                } else if lookahead.peek(syn::LitBool) {
+                    let lit: syn::LitBool = value.parse()?;
+                    default_value = Some(lit.value.to_string());
+                } else {
+                    return Err(lookahead.error());
+                }
+                Ok(())
+            }
+            // #[param(query)] or #[param(path)] etc.
+            else if meta.path.is_ident("query") {
+                location = Some(ParamLocation::Query);
+                Ok(())
+            } else if meta.path.is_ident("path") {
+                location = Some(ParamLocation::Path);
+                Ok(())
+            } else if meta.path.is_ident("body") {
+                location = Some(ParamLocation::Body);
+                Ok(())
+            } else if meta.path.is_ident("header") {
+                location = Some(ParamLocation::Header);
+                Ok(())
+            } else {
+                Err(meta.error(
+                    "unknown attribute\n\
+                     \n\
+                     Valid attributes: name, default, query, path, body, header\n\
+                     \n\
+                     Examples:\n\
+                     - #[param(name = \"q\")]\n\
+                     - #[param(default = 10)]\n\
+                     - #[param(query)]\n\
+                     - #[param(header, name = \"X-API-Key\")]",
+                ))
+            }
+        })?;
+    }
+
+    Ok((wire_name, location, default_value))
+}
+
 /// Parse function parameters (excluding self)
 pub fn parse_params(
     inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>,
@@ -151,11 +237,17 @@ pub fn parse_params(
                 let is_optional = is_option_type(&ty);
                 let is_id = is_id_param(&name);
 
+                // Parse #[param(...)] attributes
+                let (wire_name, location, default_value) = parse_param_attrs(&pat_type.attrs)?;
+
                 params.push(ParamInfo {
                     name,
                     ty,
                     is_optional,
                     is_id,
+                    wire_name,
+                    location,
+                    default_value,
                 });
             }
         }

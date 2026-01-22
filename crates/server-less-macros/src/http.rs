@@ -387,7 +387,11 @@ fn generate_param_handling(
             });
 
             for param in &other_params {
-                let name_str = param.name.to_string();
+                // Use wire_name if provided, otherwise use the parameter name
+                let name_str = param
+                    .wire_name
+                    .clone()
+                    .unwrap_or_else(|| param.name.to_string());
                 let ty = &param.ty;
                 if param.is_optional {
                     let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
@@ -406,12 +410,26 @@ fn generate_param_handling(
             });
 
             for param in &other_params {
-                let name_str = param.name.to_string();
+                // Use wire_name if provided, otherwise use the parameter name
+                let name_str = param
+                    .wire_name
+                    .clone()
+                    .unwrap_or_else(|| param.name.to_string());
                 let ty = &param.ty;
+
+                // Handle default values
                 if param.is_optional {
                     let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
                     calls.push(quote! {
                         query_extractor.0.get(#name_str).and_then(|v| v.parse::<#inner_ty>().ok())
+                    });
+                } else if let Some(ref default_val) = param.default_value {
+                    // Parse the default value at compile time
+                    let default_expr: proc_macro2::TokenStream = default_val.parse().unwrap();
+                    calls.push(quote! {
+                        query_extractor.0.get(#name_str)
+                            .and_then(|v| v.parse::<#ty>().ok())
+                            .unwrap_or(#default_expr)
                     });
                 } else {
                     calls.push(quote! {
@@ -643,7 +661,8 @@ fn generate_openapi_spec(
         let path_param_specs: Vec<_> = id_params
             .iter()
             .map(|p| {
-                let name = p.name.to_string();
+                // Use wire_name if provided, otherwise use the parameter name
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 quote! { (#name, "path", #json_type, true) }
             })
@@ -653,9 +672,10 @@ fn generate_openapi_spec(
             other_params
                 .iter()
                 .map(|p| {
-                    let name = p.name.to_string();
+                    // Use wire_name if provided, otherwise use the parameter name
+                    let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
                     let json_type = server_less_rpc::infer_json_type(&p.ty);
-                    let required = !p.is_optional;
+                    let required = !p.is_optional && p.default_value.is_none();
                     quote! { (#name, "query", #json_type, #required) }
                 })
                 .collect()
@@ -667,9 +687,10 @@ fn generate_openapi_spec(
             other_params
                 .iter()
                 .map(|p| {
-                    let name = p.name.to_string();
+                    // Use wire_name if provided, otherwise use the parameter name
+                    let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
                     let json_type = server_less_rpc::infer_json_type(&p.ty);
-                    let required = !p.is_optional;
+                    let required = !p.is_optional && p.default_value.is_none();
                     quote! { (#name, #json_type, #required) }
                 })
                 .collect()
