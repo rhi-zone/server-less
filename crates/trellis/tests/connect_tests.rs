@@ -1,5 +1,8 @@
 //! Integration tests for the Connect protocol schema generation macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::connect;
 
 #[derive(Clone)]
@@ -206,7 +209,7 @@ impl TypeService {
     }
 
     pub fn get_float(&self) -> f64 {
-        3.14
+        3.5
     }
 
     pub fn get_bool(&self) -> bool {

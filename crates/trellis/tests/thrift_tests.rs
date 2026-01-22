@@ -1,5 +1,8 @@
 //! Integration tests for the Thrift schema generation macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::thrift;
 
 #[derive(Clone)]
@@ -143,7 +146,7 @@ impl TypeService {
     }
 
     pub fn get_double(&self) -> f64 {
-        3.14
+        3.5
     }
 
     pub fn get_bool(&self) -> bool {

@@ -1,5 +1,8 @@
 //! Integration tests for the Markdown documentation generation macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::markdown;
 
 #[derive(Clone)]

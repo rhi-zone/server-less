@@ -40,6 +40,12 @@ pub struct UserService {
     users: std::sync::Arc<std::sync::Mutex<Vec<User>>>,
 }
 
+impl Default for UserService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UserService {
     pub fn new() -> Self {
         Self {

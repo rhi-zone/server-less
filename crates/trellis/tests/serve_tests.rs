@@ -1,5 +1,8 @@
 //! Integration tests for the serve coordination macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::{http, jsonrpc, serve, ws};
 
 #[derive(Clone)]

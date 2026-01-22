@@ -22,6 +22,12 @@ pub struct EchoService {
     message_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
+impl Default for EchoService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EchoService {
     pub fn new() -> Self {
         Self {

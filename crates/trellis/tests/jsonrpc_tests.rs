@@ -1,5 +1,8 @@
 //! Integration tests for the JSON-RPC over HTTP macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use serde_json::json;
 use trellis::jsonrpc;
 

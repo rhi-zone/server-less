@@ -1,4 +1,7 @@
 //! End-to-end tests that verify generated code works correctly.
+
+#![allow(dead_code)]
+#![allow(unused_variables)]
 //!
 //! These tests define a service with known behavior (the "reference implementation"),
 //! apply macros to generate protocol handlers, and verify the results match.

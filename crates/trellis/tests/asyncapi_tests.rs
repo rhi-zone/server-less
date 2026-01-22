@@ -1,5 +1,8 @@
 //! Integration tests for the AsyncAPI specification generation macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::asyncapi;
 
 #[derive(Clone)]

@@ -1,7 +1,9 @@
 //! Integration tests for the MCP macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use serde::{Deserialize, Serialize};
-use tokio;
 use trellis::mcp;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

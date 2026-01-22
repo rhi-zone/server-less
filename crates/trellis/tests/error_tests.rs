@@ -1,5 +1,8 @@
 //! Tests for the TrellisError derive macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::{ErrorCode, IntoErrorCode, TrellisError};
 
 // Test basic derive with code inference

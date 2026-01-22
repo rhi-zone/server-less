@@ -1,5 +1,8 @@
 //! Integration tests for the CLI macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use serde::{Deserialize, Serialize};
 use trellis::cli;
 

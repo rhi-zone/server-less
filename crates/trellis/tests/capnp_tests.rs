@@ -1,5 +1,8 @@
 //! Integration tests for the Cap'n Proto schema generation macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::capnp;
 
 #[derive(Clone)]
@@ -154,7 +157,7 @@ impl TypeService {
     }
 
     pub fn get_float(&self) -> f64 {
-        3.14
+        3.5
     }
 
     pub fn get_bool(&self) -> bool {

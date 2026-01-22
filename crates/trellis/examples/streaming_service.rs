@@ -16,6 +16,12 @@ pub struct Event {
 #[derive(Clone)]
 pub struct StreamService;
 
+impl Default for StreamService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StreamService {
     pub fn new() -> Self {
         Self

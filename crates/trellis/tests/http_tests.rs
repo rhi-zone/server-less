@@ -1,5 +1,8 @@
 //! Integration tests for the HTTP macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use serde::{Deserialize, Serialize};
 use trellis::{http, route};
 

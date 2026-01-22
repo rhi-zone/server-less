@@ -1,5 +1,8 @@
 //! Integration tests for the OpenRPC specification generation macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::openrpc;
 
 #[derive(Clone)]

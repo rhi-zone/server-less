@@ -1,5 +1,8 @@
 //! Integration tests for the GraphQL macro.
 
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use trellis::graphql;
 
 #[derive(Clone)]
