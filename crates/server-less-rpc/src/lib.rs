@@ -104,6 +104,16 @@ pub fn generate_json_response(method: &MethodInfo) -> TokenStream {
         quote! {
             Ok(::server_less::serde_json::json!({"success": true}))
         }
+    } else if ret.is_stream {
+        // Automatically collect streams into Vec for JSON serialization
+        quote! {
+            {
+                use ::server_less::futures::StreamExt;
+                let collected: Vec<_> = result.collect().await;
+                Ok(::server_less::serde_json::to_value(collected)
+                    .map_err(|e| format!("Serialization error: {}", e))?)
+            }
+        }
     } else if ret.is_result {
         quote! {
             match result {
@@ -141,11 +151,14 @@ pub fn generate_dispatch_arm(
         .map(String::from)
         .unwrap_or_else(|| method.name.to_string());
 
-    // For async methods with Error handling, return early without generating unreachable code
-    if method.is_async && matches!(async_handling, AsyncHandling::Error) {
+    // Methods that are async OR return streams require async context
+    let requires_async = method.is_async || method.return_info.is_stream;
+
+    // For methods requiring async with Error handling, return early
+    if requires_async && matches!(async_handling, AsyncHandling::Error) {
         return quote! {
             #method_name_str => {
-                return Err("Async methods not supported in sync context".to_string());
+                return Err("Async methods and streaming methods not supported in sync context".to_string());
             }
         };
     }

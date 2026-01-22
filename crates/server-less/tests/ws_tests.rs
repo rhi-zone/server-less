@@ -240,7 +240,7 @@ fn test_ws_async_method_with_sync_handler_returns_error() {
         json["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("Async methods not supported")
+            .contains("not supported in sync context")
     );
 }
 

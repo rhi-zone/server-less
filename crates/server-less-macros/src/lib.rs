@@ -307,9 +307,32 @@ pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
+/// # Streaming Support
+///
+/// Methods returning `impl Stream<Item = T>` are automatically collected into arrays:
+///
+/// ```ignore
+/// use futures::stream::{self, Stream};
+///
+/// #[mcp]
+/// impl DataService {
+///     // Returns JSON array: [0, 1, 2, 3, 4]
+///     fn stream_numbers(&self, count: u32) -> impl Stream<Item = u32> + use<> {
+///         stream::iter(0..count)
+///     }
+/// }
+///
+/// // Call with:
+/// service.mcp_call_async("stream_numbers", json!({"count": 5})).await
+/// // Returns: [0, 1, 2, 3, 4]
+/// ```
+///
+/// **Note:** Streaming methods require `mcp_call_async`, not `mcp_call`.
+///
 /// # Generated Methods
 /// - `mcp_tools() -> Vec<serde_json::Value>` - Tool definitions
-/// - `mcp_call(&self, name, args) -> Result<Value, String>` - Execute tool
+/// - `mcp_call(&self, name, args) -> Result<Value, String>` - Execute tool (sync only)
+/// - `mcp_call_async(&self, name, args).await` - Execute tool (supports async & streams)
 #[cfg(feature = "mcp")]
 #[proc_macro_attribute]
 pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {

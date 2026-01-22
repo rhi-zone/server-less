@@ -21,6 +21,25 @@
 //! - `bool` → boolean
 //! - `Option<T>` → optional parameter
 //!
+//! # Streaming Support
+//!
+//! Methods that return `impl Stream<Item = T>` are automatically supported.
+//! Streams are collected into arrays before returning to the LLM.
+//!
+//! **Note:** Requires async context. Use `mcp_call_async` for streaming methods.
+//!
+//! ```ignore
+//! use futures::stream::{self, Stream};
+//!
+//! #[mcp]
+//! impl DataService {
+//!     // Returns collected array: [1, 2, 3, 4, 5]
+//!     fn stream_numbers(&self, count: u32) -> impl Stream<Item = u32> + use<> {
+//!         stream::iter(0..count)
+//!     }
+//! }
+//! ```
+//!
 //! # Generated Methods
 //!
 //! - `mcp_tools() -> Vec<serde_json::Value>` - Tool definitions for MCP

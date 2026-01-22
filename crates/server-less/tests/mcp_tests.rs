@@ -226,7 +226,11 @@ fn test_mcp_async_method_with_sync_call_returns_error() {
     // Async method should return error with sync call
     let result = service.mcp_call("async_async_fetch", serde_json::json!({"id": "123"}));
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("Async methods not supported"));
+    assert!(
+        result
+            .unwrap_err()
+            .contains("not supported in sync context")
+    );
 }
 
 #[tokio::test]
@@ -262,4 +266,69 @@ async fn test_mcp_async_compute() {
         .await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), serde_json::json!(42));
+}
+
+// Test streaming support
+use futures::stream::{self, Stream};
+
+#[derive(Clone)]
+struct StreamService;
+
+#[mcp(namespace = "stream")]
+impl StreamService {
+    /// Stream a sequence of numbers
+    fn stream_numbers(&self, count: u32) -> impl Stream<Item = u32> + use<> {
+        stream::iter(0..count)
+    }
+
+    /// Stream items with async
+    async fn stream_items(&self, prefix: String, count: u32) -> impl Stream<Item = String> + use<> {
+        stream::iter((0..count).map(move |i| format!("{}{}", prefix, i)))
+    }
+}
+
+#[tokio::test]
+async fn test_mcp_stream_numbers() {
+    let service = StreamService;
+
+    // Streaming method requires async call
+    let result = service
+        .mcp_call_async("stream_stream_numbers", serde_json::json!({"count": 5}))
+        .await;
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!([0, 1, 2, 3, 4]));
+}
+
+#[tokio::test]
+async fn test_mcp_stream_items() {
+    let service = StreamService;
+
+    let result = service
+        .mcp_call_async(
+            "stream_stream_items",
+            serde_json::json!({"prefix": "item-", "count": 3}),
+        )
+        .await;
+
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap(),
+        serde_json::json!(["item-0", "item-1", "item-2"])
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_stream_with_sync_call_fails() {
+    let service = StreamService;
+
+    // Streaming methods should error with sync call
+    let result = service.mcp_call("stream_stream_numbers", serde_json::json!({"count": 5}));
+
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .contains("not supported in sync context")
+    );
 }
