@@ -1,4 +1,4 @@
-//! Proc macros for trellis.
+//! Proc macros for server-less.
 //!
 //! This crate provides attribute macros that transform impl blocks into protocol handlers,
 //! and derive macros for common patterns.
@@ -14,6 +14,7 @@ mod capnp;
 mod cli;
 #[cfg(feature = "connect")]
 mod connect;
+mod context;
 mod error;
 #[cfg(feature = "graphql")]
 mod graphql;
@@ -1159,9 +1160,9 @@ pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// use server_less::TrellisError;
+/// use server_less::ServerlessError;
 ///
-/// #[derive(TrellisError)]
+/// #[derive(ServerlessError)]
 /// enum MyError {
 ///     #[error(code = NotFound, message = "User not found")]
 ///     UserNotFound,
@@ -1183,11 +1184,11 @@ pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `#[error(message = "...")]` - Set custom message
 ///
 /// Without attributes, the error code is inferred from the variant name.
-#[proc_macro_derive(TrellisError, attributes(error))]
-pub fn trellis_error(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(ServerlessError, attributes(error))]
+pub fn serverless_error(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    match error::expand_trellis_error(input) {
+    match error::expand_serverless_error(input) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

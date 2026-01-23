@@ -4,11 +4,45 @@ use std::collections::HashMap;
 
 /// Protocol-agnostic request context.
 ///
-/// This provides access to protocol-specific metadata in a unified way:
-/// - HTTP: headers, query params, cookies
-/// - gRPC: metadata
-/// - CLI: environment variables, config
-/// - MCP: conversation context
+/// Provides unified access to protocol-specific metadata like headers, user info, and trace IDs.
+///
+/// # Automatic Injection
+///
+/// When using protocol macros (`#[http]`, `#[ws]`, etc.), methods can receive a `Context`
+/// parameter that is automatically populated with request metadata:
+///
+/// ```ignore
+/// use server_less::{http, Context};
+///
+/// #[http]
+/// impl UserService {
+///     async fn create_user(&self, ctx: Context, name: String) -> Result<User> {
+///         // Access request metadata
+///         let user_id = ctx.user_id()?;        // Authenticated user
+///         let request_id = ctx.request_id()?;  // Request trace ID
+///         let auth = ctx.authorization();      // Authorization header
+///
+///         // Create user with context...
+///     }
+/// }
+/// ```
+///
+/// # Protocol-Specific Metadata
+///
+/// Different protocols populate Context with relevant data:
+/// - **HTTP**: All headers via `header()`, request ID from `x-request-id`
+/// - **gRPC**: Metadata fields (not yet implemented)
+/// - **CLI**: Environment variables via `env()` (not yet implemented)
+/// - **MCP**: Conversation context (not yet implemented)
+///
+/// # Name Collision
+///
+/// If you have your own `Context` type, qualify the server-less version:
+/// ```ignore
+/// fn handler(&self, ctx: server_less::Context) { }
+/// ```
+///
+/// See the `#[http]` macro documentation for details on collision handling.
 #[derive(Debug, Clone, Default)]
 pub struct Context {
     /// Key-value metadata (headers, env vars, etc.)

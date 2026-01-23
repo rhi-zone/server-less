@@ -1,7 +1,7 @@
 //! Error derive macro for generating IntoErrorCode implementations.
 //!
 //! ```ignore
-//! #[derive(TrellisError)]
+//! #[derive(ServerlessError)]
 //! enum MyError {
 //!     #[error(code = NotFound, message = "User not found")]
 //!     UserNotFound,
@@ -97,18 +97,18 @@ impl Parse for ErrorVariantArgs {
     }
 }
 
-/// Expand the TrellisError derive macro
-pub fn expand_trellis_error(input: DeriveInput) -> syn::Result<TokenStream> {
+/// Expand the ServerlessError derive macro
+pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
     let name = &input.ident;
 
     let Data::Enum(data_enum) = &input.data else {
         return Err(syn::Error::new_spanned(
             &input,
-            "TrellisError can only be derived for enums\n\
+            "ServerlessError can only be derived for enums\n\
              \n\
              Hint: Define your errors as an enum:\n\
              \n\
-             #[derive(Debug, TrellisError)]\n\
+             #[derive(Debug, ServerlessError)]\n\
              enum MyError {{\n\
                  #[error(code = NotFound)]\n\
                  NotFound,\n\

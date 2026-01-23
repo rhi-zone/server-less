@@ -1,10 +1,10 @@
-# Trellis Tutorials
+# Server-less Tutorials
 
-Learn Trellis by building real applications.
+Learn Server-less by building real applications.
 
 ## Getting Started
 
-New to Trellis? Start here:
+New to Server-less? Start here:
 
 ### [Building a REST API](./rest-api.md)
 Learn the fundamentals by building a blog API:
@@ -73,7 +73,7 @@ curl http://localhost:3000/hello?name=World
 
 ### Convention Over Configuration
 
-Trellis uses method name prefixes to infer HTTP methods:
+Server-less uses method name prefixes to infer HTTP methods:
 
 ```rust
 // GET /users
@@ -142,9 +142,9 @@ impl Service {
 ### Error Handling
 
 ```rust
-use server_less::TrellisError;
+use server_less::Server-lessError;
 
-#[derive(Debug, TrellisError)]
+#[derive(Debug, Server-lessError)]
 enum MyError {
     #[error(code = NotFound, message = "User not found")]
     UserNotFound,

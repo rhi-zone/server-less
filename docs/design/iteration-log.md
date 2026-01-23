@@ -1,6 +1,6 @@
 # Iteration Log
 
-Living document tracking the evolution of trellis macros.
+Living document tracking the evolution of server-less macros.
 
 ## Current State (2025-01-20)
 
@@ -302,7 +302,7 @@ All errors use `syn::Error::new_spanned()` to point to the exact problematic cod
 
 ## Iteration 9: Error Derive Macro
 
-**Goal:** Add `#[derive(TrellisError)]` for error types with protocol-agnostic codes.
+**Goal:** Add `#[derive(ServerlessError)]` for error types with protocol-agnostic codes.
 
 **Features:**
 - Implements `IntoErrorCode`, `Display`, and `std::error::Error`
@@ -314,7 +314,7 @@ All errors use `syn::Error::new_spanned()` to point to the exact problematic cod
 
 **Example:**
 ```rust
-#[derive(TrellisError)]
+#[derive(ServerlessError)]
 enum MyError {
     #[error(code = NotFound, message = "User not found")]
     UserNotFound,
@@ -878,7 +878,7 @@ let spec = Calculator::openrpc_json();
 
 ### Schema-based Protocols (Design Challenge)
 
-Cap'n Proto and Protobuf/gRPC are **schema-first** protocols, which inverts trellis's impl-first approach:
+Cap'n Proto and Protobuf/gRPC are **schema-first** protocols, which inverts server-less's impl-first approach:
 
 | Approach | Impl-first (current) | Schema-first |
 |----------|---------------------|--------------|
@@ -918,7 +918,7 @@ struct MyService;
 - Progressive: start impl-first, export schema, switch to schema-first when stabilized
 
 **Philosophy: We're not here to judge, just to help.**
-Users have their own workflows, constraints, and preferences. Trellis supports them, not the other way around.
+Users have their own workflows, constraints, and preferences. Server-less supports them, not the other way around.
 
 **Protocols to explore:**
 - gRPC (protobuf) - streaming, error codes, widely used

@@ -1,8 +1,8 @@
-# Building Multi-Protocol Services with Trellis
+# Building Multi-Protocol Services with Server-less
 
 This tutorial shows how to expose the same service over multiple protocols simultaneously: HTTP, WebSocket, JSON-RPC, GraphQL, CLI, and MCP.
 
-## The Power of Trellis
+## The Power of Server-less
 
 Write your business logic **once**, expose it **everywhere**:
 
@@ -385,9 +385,9 @@ pub fn create_task(&self, req: HttpRequest) -> HttpResponse { }
 ### 2. Use Result Types for Errors
 
 ```rust
-use server_less::TrellisError;
+use server_less::Server-lessError;
 
-#[derive(Debug, TrellisError)]
+#[derive(Debug, Server-lessError)]
 enum TaskError {
     #[error(code = NotFound)]
     TaskNotFound,
@@ -509,8 +509,8 @@ axum::serve(listener, app).await?;
 
 ## Complete Example
 
-See `examples/multi-protocol/` in the Trellis repository for the full code.
+See `examples/multi-protocol/` in the Server-less repository for the full code.
 
 ---
 
-**The beauty of Trellis**: Your business logic stays clean and protocol-agnostic. Add new protocols by adding a single derive macro!
+**The beauty of Server-less**: Your business logic stays clean and protocol-agnostic. Add new protocols by adding a single derive macro!

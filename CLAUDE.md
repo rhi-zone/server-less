@@ -49,7 +49,7 @@ You discover options when you need them, not before.
 
 Like gradual typing: start with the simple version, incrementally add control as requirements evolve. You shouldn't have to rewrite everything when you need one custom behavior.
 
-Don't like how trellis does auth? Don't use `#[derive(Auth)]`, write your own Tower layer - it still composes with `#[derive(Server)]`. The escape hatch is granular, not all-or-nothing.
+Don't like how server-less does auth? Don't use `#[derive(Auth)]`, write your own Tower layer - it still composes with `#[derive(Server)]`. The escape hatch is granular, not all-or-nothing.
 
 ### Two-Tier Design: Blessed Presets vs À La Carte
 
@@ -82,11 +82,11 @@ This gives progressive disclosure:
 
 Extensions are separate derives that compose with core:
 ```rust
-#[derive(ServerCore, OpenApi, Anubis, Serve)]  // Anubis from trellis-anubis crate
+#[derive(ServerCore, OpenApi, Anubis, Serve)]  // Anubis from server-less-anubis crate
 struct MyServer;
 ```
 
-The ecosystem has great solutions (rate limiting, auth, observability, bot protection). Trellis should make them accessible via derives, not reinvent them. Popular extensions can graduate to "blessed" status over time.
+The ecosystem has great solutions (rate limiting, auth, observability, bot protection). Server-less should make them accessible via derives, not reinvent them. Popular extensions can graduate to "blessed" status over time.
 
 ### "Silly but Proper"
 
@@ -98,7 +98,7 @@ The macros might be for simple things, but the implementation should be solid:
 
 ### Not Here to Judge
 
-We're not here to judge, just to help. Users have their own workflows, constraints, and preferences. Trellis supports them, not the other way around.
+We're not here to judge, just to help. Users have their own workflows, constraints, and preferences. Server-less supports them, not the other way around.
 
 - Impl-first or schema-first? Support both.
 - Tokio or async-std? Don't force the choice.
@@ -111,13 +111,13 @@ The goal is to meet users where they are, not prescribe how they should work.
 ## Structure
 
 ```
-trellis/
+server-less/
 ├── crates/
-│   ├── trellis/              # Main crate (re-exports all macros)
-│   ├── trellis-derive/       # Proc macro implementations
-│   ├── trellis-server/       # Server-related macros
-│   └── trellis-*/            # Other macro categories
-└── docs/                     # VitePress documentation
+│   ├── server-less/              # Main crate (re-exports all macros)
+│   ├── server-less-macros/       # Proc macro implementations
+│   ├── server-less-core/         # Core traits & error types
+│   └── server-less-*/            # Other supporting crates
+└── docs/                         # VitePress documentation
 ```
 
 ## Design Documents
@@ -137,8 +137,8 @@ cargo expand       # Inspect macro expansion
 
 ## Part of Rhizome
 
-Trellis is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem. Related projects:
-- **Lotus** - Object store (uses trellis for server setup)
+Server-less is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem. Related projects:
+- **Lotus** - Object store (uses server-less for server setup)
 - **Spore** - Lua runtime with LLM integration
 - **Hypha** - Async runtime primitives
 
@@ -150,10 +150,10 @@ The default is `full` (all features enabled) - intentionally batteries-included 
 
 ```toml
 # Default: get everything (recommended for getting started)
-trellis = "0.1"
+server-less = "0.1"
 
 # Explicit about what you're using (opt-out of defaults)
-trellis = { version = "0.1", default-features = false, features = ["http", "grpc", "markdown"] }
+server-less = { version = "0.1", default-features = false, features = ["http", "grpc", "markdown"] }
 ```
 
 **Why gate everything, even "free" macros?**
@@ -171,7 +171,7 @@ trellis = { version = "0.1", default-features = false, features = ["http", "grpc
 | Doc generators | `markdown` | No |
 | Type stubs | `typescript`, `python` | No |
 
-**Always available:** `TrellisError` derive (commonly needed, zero deps).
+**Always available:** `ServerlessError` derive (commonly needed, zero deps).
 
 ## Commit Convention
 

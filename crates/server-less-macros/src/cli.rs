@@ -61,6 +61,11 @@ use quote::quote;
 use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
 
+// Import Context helpers
+use crate::context::{
+    generate_cli_context_extraction, has_qualified_context, partition_context_params,
+};
+
 /// Arguments for the #[cli] attribute
 #[derive(Default)]
 pub(crate) struct CliArgs {
@@ -117,17 +122,23 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
+    // PASS 1: Scan for qualified server_less::Context usage
+    let has_qualified = has_qualified_context(&methods);
+
     let app_name = args
         .name
         .unwrap_or_else(|| struct_name.to_string().to_kebab_case());
     let version = args.version.unwrap_or_else(|| "0.1.0".to_string());
     let about = args.about.unwrap_or_default();
 
-    let subcommands: Vec<_> = methods.iter().map(generate_subcommand).collect();
+    let subcommands: Vec<_> = methods
+        .iter()
+        .map(|m| generate_subcommand(m, has_qualified))
+        .collect::<syn::Result<Vec<_>>>()?;
 
     let match_arms: Vec<_> = methods
         .iter()
-        .map(|m| generate_match_arm(&struct_name, m))
+        .map(|m| generate_match_arm(&struct_name, m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
     Ok(quote! {
@@ -175,17 +186,19 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     })
 }
 
-fn generate_subcommand(method: &MethodInfo) -> TokenStream2 {
+fn generate_subcommand(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
 
-    let args: Vec<_> = method.params.iter().map(generate_arg).collect();
+    // Filter out Context parameters - they're injected, not CLI args
+    let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let args: Vec<_> = regular_params.iter().map(|p| generate_arg(p)).collect();
 
-    quote! {
+    Ok(quote! {
         ::clap::Command::new(#name)
             .about(#about)
             #(.arg(#args))*
-    }
+    })
 }
 
 fn generate_arg(param: &ParamInfo) -> TokenStream2 {
@@ -217,37 +230,52 @@ fn generate_arg(param: &ParamInfo) -> TokenStream2 {
     }
 }
 
-fn generate_match_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> syn::Result<TokenStream2> {
+fn generate_match_arm(
+    _struct_name: &syn::Ident,
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
 
-    let arg_extractions: Vec<_> = method
-        .params
-        .iter()
-        .map(|p| {
-            let name = &p.name;
-            let name_str = p.name.to_string().to_kebab_case();
-            let ty = &p.ty;
+    // Partition Context vs regular parameters
+    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
 
-            if p.is_optional {
-                quote! {
-                    let #name: #ty = sub_matches
-                        .get_one::<String>(#name_str)
-                        .and_then(|s| s.parse().ok());
-                }
-            } else {
-                quote! {
-                    let #name: #ty = sub_matches
-                        .get_one::<String>(#name_str)
-                        .map(|s| s.parse())
-                        .transpose()?
-                        .ok_or_else(|| format!("Missing required argument: {}", #name_str))?;
-                }
-            }
-        })
-        .collect();
+    let mut arg_extractions = Vec::new();
+    let mut arg_names = Vec::new();
 
-    let arg_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
+    // Generate Context extraction if needed
+    if context_param.is_some() {
+        let (_extraction, call) = generate_cli_context_extraction();
+        arg_extractions.push(quote! {
+            let __ctx = #call;
+        });
+        arg_names.push(quote! { __ctx });
+    }
+
+    // Generate regular parameter extractions
+    for p in regular_params {
+        let name = &p.name;
+        let name_str = p.name.to_string().to_kebab_case();
+        let ty = &p.ty;
+
+        if p.is_optional {
+            arg_extractions.push(quote! {
+                let #name: #ty = sub_matches
+                    .get_one::<String>(#name_str)
+                    .and_then(|s| s.parse().ok());
+            });
+        } else {
+            arg_extractions.push(quote! {
+                let #name: #ty = sub_matches
+                    .get_one::<String>(#name_str)
+                    .map(|s| s.parse())
+                    .transpose()?
+                    .ok_or_else(|| format!("Missing required argument: {}", #name_str))?;
+            });
+        }
+        arg_names.push(quote! { #name });
+    }
 
     let call = if method.return_info.is_unit {
         if method.is_async {

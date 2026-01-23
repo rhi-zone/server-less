@@ -121,7 +121,7 @@ impl Parse for McpArgs {
 /// # Example
 ///
 /// ```ignore
-/// use trellis::mcp;
+/// use server_less::mcp;
 ///
 /// struct MyService;
 ///

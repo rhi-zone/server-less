@@ -25,6 +25,68 @@
 //! - GET: Path parameters (`:id`) and query parameters (`?name=value`)
 //! - POST/PUT/PATCH: JSON request body
 //!
+//! # Context Injection
+//!
+//! Methods can receive a `Context` parameter to access request metadata:
+//!
+//! ```ignore
+//! use server_less::{http, Context};
+//!
+//! #[http]
+//! impl UserService {
+//!     async fn create_user(&self, ctx: Context, name: String) -> Result<User> {
+//!         // Access request metadata
+//!         let user_id = ctx.user_id()?;           // Authenticated user
+//!         let request_id = ctx.request_id()?;     // Request trace ID
+//!         let auth_header = ctx.authorization();   // Authorization header
+//!
+//!         // Create user...
+//!     }
+//! }
+//! ```
+//!
+//! **Context is automatically injected and populated from HTTP headers:**
+//! - All headers are available via `ctx.header("name")`
+//! - `x-request-id` header → `ctx.request_id()`
+//! - Custom headers can be accessed via `ctx.get("key")`
+//!
+//! **Context does NOT appear in the OpenAPI spec** - it's injected by the framework,
+//! not provided by API consumers.
+//!
+//! ## Name Collision Handling
+//!
+//! If you have your own `Context` type, use one of these strategies:
+//!
+//! **Strategy 1: Qualify the server-less Context (recommended)**
+//! ```ignore
+//! struct Context { /* your type */ }
+//!
+//! #[http]
+//! impl MyService {
+//!     // Uses server-less Context (injected)
+//!     fn api_endpoint(&self, ctx: server_less::Context) { }
+//!
+//!     // Uses your Context (not injected, treated as body param)
+//!     fn internal(&self, ctx: Context) { }
+//! }
+//! ```
+//!
+//! **Strategy 2: Rename your Context type**
+//! ```ignore
+//! struct AppContext { /* your type */ }
+//!
+//! #[http]
+//! impl MyService {
+//!     fn handler(&self, ctx: Context) { }  // ✅ server-less Context injected
+//! }
+//! ```
+//!
+//! **Detection Logic:**
+//! - If ANY method uses `server_less::Context`, bare `Context` is assumed to be YOUR type
+//! - If NO method uses qualified form, bare `Context` is assumed to be server-less
+//!
+//! This gives you explicit control without needing configuration flags.
+//!
 //! # Streaming Support (SSE)
 //!
 //! Return `impl Stream<Item = T>` to enable Server-Sent Events:
@@ -88,6 +150,12 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
+
+// Import Context helpers
+use crate::context::{
+    generate_http_context_extraction, has_qualified_context, partition_context_params,
+    should_inject_context,
+};
 
 /// Extract the inner type T from Option<T>
 fn extract_option_inner(ty: &Type) -> Option<Type> {
@@ -245,6 +313,10 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
+    // PASS 1: Scan for qualified server_less::Context usage
+    // This determines collision detection behavior
+    let has_qualified = has_qualified_context(&methods);
+
     let prefix = args.prefix.unwrap_or_default();
 
     let mut handlers = Vec::new();
@@ -300,7 +372,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
         route_signatures.insert(route_sig, method.name.to_string());
 
-        let handler = generate_handler(&struct_name, method, &response_overrides)?;
+        let handler = generate_handler(&struct_name, method, &response_overrides, has_qualified)?;
         handlers.push(handler);
 
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
@@ -315,7 +387,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
     }
 
-    let openapi_fn = generate_openapi_spec(&struct_name, &prefix, &openapi_methods)?;
+    let openapi_fn = generate_openapi_spec(&struct_name, &prefix, &openapi_methods, has_qualified)?;
 
     Ok(quote! {
         #impl_block
@@ -348,12 +420,13 @@ fn generate_handler(
     struct_name: &syn::Ident,
     method: &MethodInfo,
     response_overrides: &ResponseOverride,
+    has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
 
-    let (param_extractions, param_calls) = generate_param_handling(method)?;
+    let (param_extractions, param_calls) = generate_param_handling(method, has_qualified)?;
 
     let call = if method.is_async {
         quote! { state.#method_name(#(#param_calls),*).await }
@@ -378,6 +451,7 @@ fn generate_handler(
 
 fn generate_param_handling(
     method: &MethodInfo,
+    has_qualified: bool,
 ) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>)> {
     use server_less_parse::ParamLocation;
 
@@ -390,13 +464,23 @@ fn generate_param_handling(
         HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
     );
 
-    // Group parameters by their actual location (respecting overrides)
+    // Partition Context vs regular parameters
+    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+
+    // Generate Context extraction (if needed)
+    if context_param.is_some() {
+        let (extraction, call) = generate_http_context_extraction();
+        extractions.push(extraction);
+        calls.push(call);
+    }
+
+    // Group regular parameters by their actual location (respecting overrides)
     let mut path_params = Vec::new();
     let mut query_params = Vec::new();
     let mut body_params = Vec::new();
     let mut header_params = Vec::new();
 
-    for param in &method.params {
+    for param in regular_params {
         match param.location.as_ref() {
             Some(ParamLocation::Path) => path_params.push(param),
             Some(ParamLocation::Query) => query_params.push(param),
@@ -701,6 +785,7 @@ fn generate_openapi_spec(
     struct_name: &syn::Ident,
     prefix: &str,
     methods_with_overrides: &[(MethodInfo, HttpMethodOverride, ResponseOverride)],
+    has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
     let mut operation_data = Vec::new();
 
@@ -737,6 +822,7 @@ fn generate_openapi_spec(
         );
 
         // Group parameters by their actual location (respecting overrides)
+        // Filter out Context parameters - they're injected and not part of the API contract
         use server_less_parse::ParamLocation;
         let mut path_params = Vec::new();
         let mut query_params = Vec::new();
@@ -744,6 +830,11 @@ fn generate_openapi_spec(
         let mut header_params = Vec::new();
 
         for param in &method.params {
+            // Skip Context parameters - they're injected by the framework
+            if should_inject_context(&param.ty, has_qualified) {
+                continue;
+            }
+
             match param.location.as_ref() {
                 Some(ParamLocation::Path) => path_params.push(param),
                 Some(ParamLocation::Query) => query_params.push(param),

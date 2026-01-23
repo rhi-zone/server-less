@@ -1,4 +1,4 @@
-//! Shared parsing utilities for trellis proc macros.
+//! Shared parsing utilities for server-less proc macros.
 //!
 //! This crate provides common types and functions for extracting
 //! method information from impl blocks.
@@ -226,7 +226,7 @@ pub fn parse_params(
                             other,
                             "unsupported parameter pattern\n\
                              \n\
-                             Trellis macros require simple parameter names.\n\
+                             Server-less macros require simple parameter names.\n\
                              Use: name: String\n\
                              Not: (name, _): (String, i32) or &name: &String",
                         ));

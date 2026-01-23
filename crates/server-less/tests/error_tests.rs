@@ -1,12 +1,12 @@
-//! Tests for the TrellisError derive macro.
+//! Tests for the ServerlessError derive macro.
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use server_less::{ErrorCode, IntoErrorCode, TrellisError};
+use server_less::{ErrorCode, IntoErrorCode, ServerlessError};
 
 // Test basic derive with code inference
-#[derive(Debug, TrellisError)]
+#[derive(Debug, ServerlessError)]
 enum BasicError {
     NotFound,
     InvalidInput,
@@ -40,7 +40,7 @@ fn test_basic_error_display() {
 }
 
 // Test explicit code attribute
-#[derive(Debug, TrellisError)]
+#[derive(Debug, ServerlessError)]
 enum ExplicitCodeError {
     #[error(code = NotFound)]
     Missing,
@@ -64,7 +64,7 @@ fn test_explicit_error_codes() {
 }
 
 // Test custom messages
-#[derive(Debug, TrellisError)]
+#[derive(Debug, ServerlessError)]
 enum CustomMessageError {
     #[error(code = NotFound, message = "The requested resource was not found")]
     ResourceNotFound,
@@ -85,7 +85,7 @@ fn test_custom_messages() {
 }
 
 // Test with tuple variants
-#[derive(Debug, TrellisError)]
+#[derive(Debug, ServerlessError)]
 enum TupleVariantError {
     #[error(code = InvalidInput)]
     ValidationFailed(String),
@@ -109,7 +109,7 @@ fn test_tuple_variant_display() {
 }
 
 // Test with struct variants
-#[derive(Debug, TrellisError)]
+#[derive(Debug, ServerlessError)]
 enum StructVariantError {
     #[error(code = InvalidInput, message = "Validation failed")]
     ValidationError { field: String, reason: String },
@@ -133,7 +133,7 @@ fn test_std_error_impl() {
 }
 
 // Test HTTP status code mapping
-#[derive(Debug, TrellisError)]
+#[derive(Debug, ServerlessError)]
 enum HttpStatusError {
     #[error(code = 400)]
     BadRequest,

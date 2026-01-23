@@ -1,4 +1,4 @@
-//! Example user service demonstrating trellis macros.
+//! Example user service demonstrating server-less macros.
 //!
 //! This example shows how to use the #[mcp] macro to generate MCP tools.
 

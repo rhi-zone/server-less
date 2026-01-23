@@ -1,6 +1,6 @@
 # Extension Coordination
 
-How trellis derives coordinate with each other.
+How server-less derives coordinate with each other.
 
 ## The Problem
 

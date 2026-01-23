@@ -4,7 +4,9 @@ Prioritized backlog of pending features, improvements, and ideas.
 
 > **Note:** For completed items, see [CHANGELOG.md](./CHANGELOG.md)
 
-**Current Status:** 187 tests passing, all clippy checks clean
+**Current Status:** 167+ tests passing (30 test suites), all clippy checks clean
+
+**Recent:** Context injection implemented for HTTP, CLI, JSON-RPC, and WebSocket protocols.
 
 ---
 
@@ -169,6 +171,29 @@ Still needed (see "Parameter Customization" and "Response Customization" above):
 
 ## Ideas / Research
 
+### Context System Review
+**Status:** Deferred design decisions documented
+
+Review deferred Context design decisions for MCP and GraphQL protocols. See [CONTEXT_DECISIONS.md](./CONTEXT_DECISIONS.md) for full analysis.
+
+**Key questions to revisit:**
+1. **MCP Context:** Should MCP support conversation context tracking?
+   - Currently: Tools get data from LLM arguments only (stateless)
+   - Alternative: Track conversation ID, turn number, user across calls
+   - When to reconsider: If users request it or MCP gets HTTP transport
+
+2. **GraphQL Context Bridge:** Should we auto-bridge server_less::Context into async-graphql?
+   - Currently: async-graphql uses its own ResolverContext
+   - Alternative: Auto-extract headers into server_less::Context, insert into async-graphql context
+   - Benefit: Consistent header extraction across all HTTP protocols
+
+3. **Extensible Context:** How should users add custom data to Context?
+   - Use cases: Auth data (user ID, roles), multi-tenancy, tracing, feature flags
+   - Options: Generic Context<T>, with_data(), middleware injection
+   - Challenge: Type safety vs flexibility, zero-cost abstractions
+
+**Trigger for review:** User feedback, new use cases, or completion of middleware system
+
 ### Hot Reloading
 Could macros generate code that supports hot reloading for development?
 
@@ -181,6 +206,8 @@ MCP, OpenAPI, GraphQL all need schemas. Could share a common schema representati
 #[middleware(auth, logging)]
 impl Service { }
 ```
+
+**Note:** Extensible Context (see above) may integrate with middleware system.
 
 ### Versioning
 API versioning support across protocols.

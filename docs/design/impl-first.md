@@ -1,6 +1,6 @@
 # Impl-First Design
 
-Trellis takes an **impl-first** approach: write your Rust methods, derive macros project them into protocols.
+Server-less takes an **impl-first** approach: write your Rust methods, derive macros project them into protocols.
 
 ```rust
 impl MyService {

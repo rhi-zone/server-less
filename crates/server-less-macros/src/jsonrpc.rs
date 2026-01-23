@@ -61,6 +61,9 @@ use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
 use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
+// Import Context helpers
+use crate::context::{has_qualified_context, partition_context_params};
+
 /// Arguments for the #[jsonrpc] attribute
 #[derive(Default)]
 pub(crate) struct JsonRpcArgs {
@@ -101,17 +104,96 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
+    // PASS 1: Scan for qualified server_less::Context usage
+    let has_qualified = has_qualified_context(&methods);
+
     let path = args.path.unwrap_or_else(|| "/rpc".to_string());
 
     let dispatch_arms_async: Vec<_> = methods
         .iter()
-        .map(generate_dispatch_arm)
+        .map(|m| generate_dispatch_arm(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
     let method_names: Vec<_> = methods.iter().map(|m| m.name.to_string()).collect();
 
+    // Check if any method uses Context
+    let uses_context = methods.iter().any(|m| {
+        partition_context_params(&m.params, has_qualified)
+            .map(|(ctx, _)| ctx.is_some())
+            .unwrap_or(false)
+    });
+
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_jsonrpc_handler_{}", struct_name_snake);
+
+    // Generate dispatch signature and public API based on Context usage
+    let (
+        dispatch_sig,
+        dispatch_call,
+        handle_sig,
+        handle_single_sig,
+        handle_single_call_batch,
+        handle_single_call,
+        handler_call,
+        ctx_creation,
+    ) = if uses_context {
+        (
+            quote! {
+                async fn jsonrpc_dispatch(
+                    &self,
+                    __ctx: ::server_less::Context,
+                    method: &str,
+                    args: ::server_less::serde_json::Value,
+                ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+            },
+            quote! { self.jsonrpc_dispatch(__ctx, method, params).await },
+            quote! {
+                pub async fn jsonrpc_handle(
+                    &self,
+                    __ctx: ::server_less::Context,
+                    request: ::server_less::serde_json::Value,
+                ) -> ::server_less::serde_json::Value
+            },
+            quote! {
+                async fn jsonrpc_handle_single(
+                    &self,
+                    __ctx: ::server_less::Context,
+                    request: ::server_less::serde_json::Value,
+                ) -> Option<::server_less::serde_json::Value>
+            },
+            quote! { self.jsonrpc_handle_single(__ctx.clone(), req.clone()).await },
+            quote! { self.jsonrpc_handle_single(__ctx, request).await },
+            quote! { state.jsonrpc_handle(__ctx, request).await },
+            quote! {},
+        )
+    } else {
+        (
+            quote! {
+                async fn jsonrpc_dispatch(
+                    &self,
+                    method: &str,
+                    args: ::server_less::serde_json::Value,
+                ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+            },
+            quote! { self.jsonrpc_dispatch(method, params).await },
+            quote! {
+                pub async fn jsonrpc_handle(
+                    &self,
+                    request: ::server_less::serde_json::Value,
+                ) -> ::server_less::serde_json::Value
+            },
+            quote! {
+                async fn jsonrpc_handle_single(
+                    &self,
+                    request: ::server_less::serde_json::Value,
+                ) -> Option<::server_less::serde_json::Value>
+            },
+            quote! { self.jsonrpc_handle_single(req.clone()).await },
+            quote! { self.jsonrpc_handle_single(request).await },
+            quote! { state.jsonrpc_handle(request).await },
+            quote! { let __ctx = ::server_less::Context::new(); },
+        )
+    };
 
     Ok(quote! {
         #impl_block
@@ -123,14 +205,12 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             }
 
             /// Handle a JSON-RPC 2.0 request
-            pub async fn jsonrpc_handle(
-                &self,
-                request: ::server_less::serde_json::Value,
-            ) -> ::server_less::serde_json::Value {
+            #handle_sig {
+                #ctx_creation
                 if let Some(arr) = request.as_array() {
                     let mut responses = Vec::new();
                     for req in arr {
-                        if let Some(resp) = self.jsonrpc_handle_single(req.clone()).await {
+                        if let Some(resp) = #handle_single_call_batch {
                             responses.push(resp);
                         }
                     }
@@ -140,15 +220,12 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                         ::server_less::serde_json::Value::Array(responses)
                     }
                 } else {
-                    self.jsonrpc_handle_single(request).await
+                    #handle_single_call
                         .unwrap_or(::server_less::serde_json::Value::Null)
                 }
             }
 
-            async fn jsonrpc_handle_single(
-                &self,
-                request: ::server_less::serde_json::Value,
-            ) -> Option<::server_less::serde_json::Value> {
+            #handle_single_sig {
                 let id = request.get("id").cloned();
                 let is_notification = id.is_none();
 
@@ -174,7 +251,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                     .cloned()
                     .unwrap_or(::server_less::serde_json::json!({}));
 
-                let result = self.jsonrpc_dispatch(method, params).await;
+                let result = #dispatch_call;
 
                 if is_notification {
                     return None;
@@ -207,11 +284,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                 })
             }
 
-            async fn jsonrpc_dispatch(
-                &self,
-                method: &str,
-                args: ::server_less::serde_json::Value,
-            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+            #dispatch_sig {
                 match method {
                     #(#dispatch_arms_async)*
                     _ => Err(format!("Method not found: {}", method)),
@@ -232,10 +305,25 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
         async fn #handler_name(
             ::axum::extract::State(state): ::axum::extract::State<::std::sync::Arc<#struct_name>>,
+            __context_headers: ::axum::http::HeaderMap,
             ::axum::Json(request): ::axum::Json<::server_less::serde_json::Value>,
         ) -> impl ::axum::response::IntoResponse {
             use ::axum::response::IntoResponse;
-            let response = state.jsonrpc_handle(request).await;
+
+            // Extract Context from headers
+            let mut __ctx = ::server_less::Context::new();
+            for (name, value) in __context_headers.iter() {
+                if let Ok(value_str) = value.to_str() {
+                    __ctx.set(name.as_str(), value_str);
+                }
+            }
+            if let Some(request_id) = __context_headers.get("x-request-id")
+                .and_then(|v| v.to_str().ok())
+            {
+                __ctx.set_request_id(request_id);
+            }
+
+            let response = #handler_call;
             if response.is_null() {
                 ::axum::http::StatusCode::NO_CONTENT.into_response()
             } else {
@@ -245,10 +333,44 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     })
 }
 
-fn generate_dispatch_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    Ok(server_less_rpc::generate_dispatch_arm(
-        method,
-        None,
-        AsyncHandling::Await,
-    ))
+fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
+    let method_name_str = method.name.to_string();
+
+    // Partition Context vs regular parameters
+    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+
+    // If no Context, use default RPC dispatch
+    if context_param.is_none() {
+        return Ok(server_less_rpc::generate_dispatch_arm(
+            method,
+            None,
+            AsyncHandling::Await,
+        ));
+    }
+
+    // Generate extractions only for regular params (Context is already in scope as __ctx)
+    let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
+
+    // Build argument list: Context first (if present), then regular params in order
+    let mut arg_exprs = Vec::new();
+    for param in &method.params {
+        if crate::context::should_inject_context(&param.ty, has_qualified) {
+            arg_exprs.push(quote! { __ctx.clone() });
+        } else {
+            let name = &param.name;
+            arg_exprs.push(quote! { #name });
+        }
+    }
+
+    let call =
+        server_less_rpc::generate_method_call_with_args(method, arg_exprs, AsyncHandling::Await);
+    let response = server_less_rpc::generate_json_response(method);
+
+    Ok(quote! {
+        #method_name_str => {
+            #(#param_extractions)*
+            #call
+            #response
+        }
+    })
 }

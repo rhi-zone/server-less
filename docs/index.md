@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: Trellis
+  name: Server-less
   text: Composable Derive Macros for Rust
   tagline: Write your implementation once, project it into multiple protocols
   actions:
@@ -96,7 +96,7 @@ Generate API documentation:
 - `#[markdown]` - Human-readable API docs
 
 ### Utilities (3)
-- `#[derive(TrellisError)]` - Error code inference + HTTP status mapping
+- `#[derive(Server-lessError)]` - Error code inference + HTTP status mapping
 - `#[serve]` - Compose multiple protocol routers
 - `#[route]` - Per-method attribute overrides
 
@@ -117,7 +117,7 @@ See [ROADMAP.md](https://github.com/rhizome-lab/server-less/blob/master/ROADMAP.
 
 ## Design Philosophy
 
-Trellis follows four core principles:
+Server-less follows four core principles:
 
 1. **Minimize Barrier to Entry** - The simple case should be trivial: `#[derive(Server)]`
 2. **Progressive Disclosure** - Complexity appears only when you need it
@@ -128,10 +128,10 @@ Read more: [Impl-First Design](/design/impl-first)
 
 ## Part of Rhizome
 
-Trellis is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem - tools for building composable systems.
+Server-less is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem - tools for building composable systems.
 
 Related projects:
-- **Lotus** - Object store (uses Trellis for server setup)
+- **Lotus** - Object store (uses Server-less for server setup)
 - **Spore** - Lua runtime with LLM integration
 - **Hypha** - Async runtime primitives
 

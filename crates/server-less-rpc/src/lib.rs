@@ -45,6 +45,17 @@ pub fn generate_all_param_extractions(method: &MethodInfo) -> Vec<TokenStream> {
         .collect()
 }
 
+/// Generate param extractions for specific parameters only.
+///
+/// This allows filtering out framework-injected params (like Context)
+/// that shouldn't be extracted from JSON.
+pub fn generate_param_extractions_for(params: &[&ParamInfo]) -> Vec<TokenStream> {
+    params
+        .iter()
+        .map(|p| generate_param_extraction(p))
+        .collect()
+}
+
 /// Generate the method call expression.
 ///
 /// Returns tokens for calling `self.method_name(arg1, arg2, ...)`.
@@ -74,6 +85,43 @@ pub fn generate_method_call(method: &MethodInfo, handle_async: AsyncHandling) ->
         (false, _) => {
             quote! {
                 let result = self.#method_name(#(#arg_names),*);
+            }
+        }
+    }
+}
+
+/// Generate method call with custom argument expressions.
+///
+/// This allows mixing framework-injected args (like `__ctx`) with
+/// params extracted from JSON.
+pub fn generate_method_call_with_args(
+    method: &MethodInfo,
+    arg_exprs: Vec<TokenStream>,
+    handle_async: AsyncHandling,
+) -> TokenStream {
+    let method_name = &method.name;
+
+    match (method.is_async, handle_async) {
+        (true, AsyncHandling::Error) => {
+            quote! {
+                return Err("Async methods not supported in sync context".to_string());
+            }
+        }
+        (true, AsyncHandling::Await) => {
+            quote! {
+                let result = self.#method_name(#(#arg_exprs),*).await;
+            }
+        }
+        (true, AsyncHandling::BlockOn) => {
+            quote! {
+                let result = ::tokio::runtime::Runtime::new()
+                    .expect("Failed to create Tokio runtime")
+                    .block_on(self.#method_name(#(#arg_exprs),*));
+            }
+        }
+        (false, _) => {
+            quote! {
+                let result = self.#method_name(#(#arg_exprs),*);
             }
         }
     }
@@ -207,6 +255,30 @@ pub fn infer_json_type(ty: &syn::Type) -> &'static str {
 
 /// Generate JSON schema properties for method parameters.
 pub fn generate_param_schema(params: &[ParamInfo]) -> (Vec<TokenStream>, Vec<String>) {
+    let properties: Vec<_> = params
+        .iter()
+        .map(|p| {
+            let param_name = p.name.to_string();
+            let param_type = infer_json_type(&p.ty);
+            let description = format!("Parameter: {}", param_name);
+
+            quote! {
+                (#param_name, #param_type, #description)
+            }
+        })
+        .collect();
+
+    let required: Vec<_> = params
+        .iter()
+        .filter(|p| !p.is_optional)
+        .map(|p| p.name.to_string())
+        .collect();
+
+    (properties, required)
+}
+
+/// Generate JSON schema properties for specific parameters (e.g., excluding Context).
+pub fn generate_param_schema_for(params: &[&ParamInfo]) -> (Vec<TokenStream>, Vec<String>) {
     let properties: Vec<_> = params
         .iter()
         .map(|p| {

@@ -1,6 +1,6 @@
-//! Trellis - Composable derive macros for Rust
+//! Server-less - Composable derive macros for Rust
 //!
-//! Trellis takes an **impl-first** approach: write your Rust methods,
+//! Server-less takes an **impl-first** approach: write your Rust methods,
 //! and derive macros project them into various protocols (HTTP, CLI, MCP, WebSocket).
 //!
 //! # Quick Start
@@ -112,7 +112,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! trellis = { version = "0.1", default-features = false, features = ["http", "cli"] }
+//! server-less = { version = "0.1", default-features = false, features = ["http", "cli"] }
 //! ```
 //!
 //! Available features:
@@ -178,7 +178,7 @@ pub use server_less_macros::jsonschema;
 pub use server_less_macros::asyncapi;
 
 // Error derive macro (always available - no deps, commonly needed)
-pub use server_less_macros::TrellisError;
+pub use server_less_macros::ServerlessError;
 
 // Re-export futures for generated WebSocket code
 #[cfg(feature = "ws")]
@@ -244,6 +244,6 @@ pub mod prelude {
     pub use super::markdown;
 
     // Always available
-    pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, TrellisError};
+    pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, ServerlessError};
     pub use serde::{Deserialize, Serialize};
 }

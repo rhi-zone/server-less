@@ -99,7 +99,7 @@ Generate API documentation and contracts:
 
 | Macro | Purpose | Status |
 |-------|---------|--------|
-| `#[derive(TrellisError)]` | Error code inference + HTTP status mapping | ✅ Working |
+| `#[derive(ServerlessError)]` | Error code inference + HTTP status mapping | ✅ Working |
 
 ### Coordination
 
@@ -143,7 +143,7 @@ server-less = { git = "https://github.com/rhizome-lab/server-less", default-feat
 | **Spec generators** | `openrpc`, `asyncapi`, `jsonschema`, `markdown` |
 | **Convenience** | `full` (all features, default) |
 
-**Note:** `TrellisError` derive is always available (zero deps).
+**Note:** `ServerlessError` derive is always available (zero deps).
 
 ## Examples
 
@@ -235,7 +235,7 @@ The generated code automatically wraps your stream in SSE format with proper eve
 
 ## Philosophy
 
-Trellis follows an **impl-first design** approach:
+Server-less follows an **impl-first design** approach:
 
 1. **Write your implementation** - Focus on business logic
 2. **Add protocol macros** - Derive handlers from methods
@@ -265,13 +265,13 @@ cargo expand       # Inspect macro expansion
 ### Project Structure
 
 ```
-trellis/
+server-less/
 ├── crates/
-│   ├── trellis/          # Main crate (re-exports)
-│   ├── trellis-macros/   # Proc macro implementations (18 macros, 5,142 LOC)
-│   ├── trellis-core/     # Core traits & error types
-│   ├── trellis-parse/    # Shared parsing utilities
-│   └── trellis-rpc/      # RPC dispatch utilities
+│   ├── server-less/          # Main crate (re-exports)
+│   ├── server-less-macros/   # Proc macro implementations (18 macros, 5,142 LOC)
+│   ├── server-less-core/     # Core traits & error types
+│   ├── server-less-parse/    # Shared parsing utilities
+│   └── server-less-rpc/      # RPC dispatch utilities
 └── docs/
     ├── design/           # Design documents
     └── .vitepress/       # Documentation site
@@ -287,10 +287,10 @@ trellis/
 
 ## Part of Rhizome
 
-Trellis is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem - tools for building composable systems.
+Server-less is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem - tools for building composable systems.
 
 Related projects:
-- **Lotus** - Object store (uses Trellis for server setup)
+- **Lotus** - Object store (uses server-less for server setup)
 - **Spore** - Lua runtime with LLM integration
 - **Hypha** - Async runtime primitives
 

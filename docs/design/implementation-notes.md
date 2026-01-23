@@ -1,6 +1,6 @@
 # Implementation Notes
 
-Notes from implementing the first set of trellis macros.
+Notes from implementing the first set of server-less macros.
 
 ## What Works (2025-01-20)
 
@@ -179,5 +179,5 @@ May want to add stricter validation modes later.
 1. **OpenAPI**: Currently inline in HTTP macro, should be separate and more complete
 2. **Streaming**: SSE for HTTP, streaming for MCP
 3. **Tests**: trybuild tests for compile-fail cases
-4. **Error derive**: `#[derive(TrellisError)]` for error code mapping
+4. **Error derive**: `#[derive(ServerlessError)]` for error code mapping
 5. **Attribute customization**: Allow overriding inferred HTTP methods, paths, etc.

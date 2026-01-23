@@ -1,6 +1,6 @@
-# Building a REST API with Trellis
+# Building a REST API with Server-less
 
-This tutorial walks through building a complete REST API for a blog application using Trellis.
+This tutorial walks through building a complete REST API for a blog application using Server-less.
 
 ## What We're Building
 
@@ -13,7 +13,7 @@ A blog API with:
 
 ## Setup
 
-Add Trellis to your `Cargo.toml`:
+Add Server-less to your `Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -73,7 +73,7 @@ impl BlogService {
 
 ## Step 3: Add HTTP Handlers
 
-Trellis uses **convention over configuration**. Method names determine HTTP methods and paths:
+Server-less uses **convention over configuration**. Method names determine HTTP methods and paths:
 
 ```rust
 #[http(prefix = "/api/v1")]
@@ -140,7 +140,7 @@ impl BlogService {
 
 ## Generated Routes
 
-Trellis automatically generates these routes:
+Server-less automatically generates these routes:
 
 | Method | Path | Handler |
 |--------|------|---------|
@@ -220,12 +220,12 @@ impl BlogService {
 
 ## Step 7: Add Error Handling
 
-Use Trellis error types for proper HTTP status codes:
+Use Server-less error types for proper HTTP status codes:
 
 ```rust
-use server_less::TrellisError;
+use server_less::Server-lessError;
 
-#[derive(Debug, TrellisError)]
+#[derive(Debug, Server-lessError)]
 pub enum BlogError {
     #[error(code = NotFound, message = "Post not found")]
     PostNotFound,
@@ -251,7 +251,7 @@ pub async fn get_post(&self, id: String) -> Result<Post, BlogError> {
 
 ## Step 8: Access OpenAPI Documentation
 
-Trellis automatically generates OpenAPI specs:
+Server-less automatically generates OpenAPI specs:
 
 ```rust
 // Get the OpenAPI JSON
@@ -281,7 +281,7 @@ let app = service.http_router()
 
 ## Complete Example
 
-See the full example in `examples/blog-api/` in the Trellis repository.
+See the full example in `examples/blog-api/` in the Server-less repository.
 
 ## What You Learned
 

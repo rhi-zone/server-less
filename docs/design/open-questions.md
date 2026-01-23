@@ -108,11 +108,11 @@ fn create_user(&self, name: String) -> User
 
 ## Error Type Unification
 
-Should there be a trellis error trait, or just conventions?
+Should there be a server-less error trait, or just conventions?
 
 ```rust
 // Option A: Trait with protocol mappings
-#[derive(TrellisError)]
+#[derive(ServerlessError)]
 enum MyError {
     #[error(http = 404, grpc = "NOT_FOUND", cli_exit = 1)]
     NotFound,
@@ -145,7 +145,7 @@ When composing multiple extensions, does order matter? How to control it?
 
 ## Testing Generated Code
 
-How should users test code that uses trellis derives?
+How should users test code that uses server-less derives?
 
 - Mock the generated server?
 - Test the impl directly?

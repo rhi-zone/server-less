@@ -60,6 +60,9 @@ use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
 use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
+// Import Context helpers
+use crate::context::{has_qualified_context, partition_context_params};
+
 /// Arguments for the #[ws] attribute
 #[derive(Default)]
 pub(crate) struct WsArgs {
@@ -101,25 +104,128 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
+    // PASS 1: Scan for qualified server_less::Context usage
+    let has_qualified = has_qualified_context(&methods);
+
     let path = args.path.unwrap_or_else(|| "/ws".to_string());
 
     // Generate dispatch match arms (sync and async versions)
     let dispatch_arms_sync: Vec<_> = methods
         .iter()
-        .map(generate_dispatch_arm_sync)
+        .map(|m| generate_dispatch_arm_sync(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
     let dispatch_arms_async: Vec<_> = methods
         .iter()
-        .map(generate_dispatch_arm_async)
+        .map(|m| generate_dispatch_arm_async(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Method names for documentation
     let method_names: Vec<_> = methods.iter().map(|m| m.name.to_string()).collect();
 
+    // Check if any method uses Context
+    let uses_context = methods.iter().any(|m| {
+        partition_context_params(&m.params, has_qualified)
+            .map(|(ctx, _)| ctx.is_some())
+            .unwrap_or(false)
+    });
+
+    // Generate dispatch signatures and calls based on Context usage
+    let (dispatch_sig_sync, dispatch_sig_async, dispatch_call_sync, dispatch_call_async) =
+        if uses_context {
+            (
+                quote! {
+                    fn ws_dispatch(
+                        &self,
+                        __ctx: ::server_less::Context,
+                        method: &str,
+                        args: ::server_less::serde_json::Value,
+                    ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+                },
+                quote! {
+                    async fn ws_dispatch_async(
+                        &self,
+                        __ctx: ::server_less::Context,
+                        method: &str,
+                        args: ::server_less::serde_json::Value,
+                    ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+                },
+                quote! { self.ws_dispatch(__ctx, method, params) },
+                quote! { self.ws_dispatch_async(__ctx, method, params).await },
+            )
+        } else {
+            (
+                quote! {
+                    fn ws_dispatch(
+                        &self,
+                        method: &str,
+                        args: ::server_less::serde_json::Value,
+                    ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+                },
+                quote! {
+                    async fn ws_dispatch_async(
+                        &self,
+                        method: &str,
+                        args: ::server_less::serde_json::Value,
+                    ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+                },
+                quote! { self.ws_dispatch(method, params) },
+                quote! { self.ws_dispatch_async(method, params).await },
+            )
+        };
+
+    // Generate message handler call based on Context usage
+    let message_handler_call = if uses_context {
+        quote! { state.ws_handle_message_async(__ctx.clone(), &text).await }
+    } else {
+        quote! { state.ws_handle_message_async(&text).await }
+    };
+
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_ws_handler_{}", struct_name_snake);
     let connection_fn_name = format_ident!("__trellis_ws_connection_{}", struct_name_snake);
+
+    // Generate method signatures based on Context usage
+    let (handle_sig_sync, handle_sig_async) = if uses_context {
+        (
+            quote! {
+                pub fn ws_handle_message(
+                    &self,
+                    __ctx: ::server_less::Context,
+                    message: &str,
+                ) -> ::std::result::Result<String, String>
+            },
+            quote! {
+                pub async fn ws_handle_message_async(
+                    &self,
+                    __ctx: ::server_less::Context,
+                    message: &str,
+                ) -> ::std::result::Result<String, String>
+            },
+        )
+    } else {
+        (
+            quote! {
+                pub fn ws_handle_message(
+                    &self,
+                    message: &str,
+                ) -> ::std::result::Result<String, String>
+            },
+            quote! {
+                pub async fn ws_handle_message_async(
+                    &self,
+                    message: &str,
+                ) -> ::std::result::Result<String, String>
+            },
+        )
+    };
+
+    // Generate Context creation code if not provided
+    let ctx_creation = if uses_context {
+        quote! {}
+    } else {
+        quote! { let __ctx = ::server_less::Context::new(); }
+    };
 
     Ok(quote! {
         #impl_block
@@ -133,10 +239,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             /// Handle an incoming WebSocket JSON-RPC message (sync version)
             ///
             /// Note: Async methods will return an error. Use `ws_handle_message_async` for async methods.
-            pub fn ws_handle_message(
-                &self,
-                message: &str,
-            ) -> ::std::result::Result<String, String> {
+            #handle_sig_sync {
+                #ctx_creation
                 // Parse the incoming message as JSON-RPC
                 let parsed: ::server_less::serde_json::Value = ::server_less::serde_json::from_str(message)
                     .map_err(|e| format!("Invalid JSON: {}", e))?;
@@ -152,7 +256,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 let id = parsed.get("id").cloned();
 
                 // Dispatch to the appropriate method
-                let result = self.ws_dispatch(method, params);
+                let result = #dispatch_call_sync;
 
                 // Format response
                 Self::__format_ws_response(result, id)
@@ -161,10 +265,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             /// Handle an incoming WebSocket JSON-RPC message (async version)
             ///
             /// Supports both sync and async methods. Async methods are awaited properly.
-            pub async fn ws_handle_message_async(
-                &self,
-                message: &str,
-            ) -> ::std::result::Result<String, String> {
+            #handle_sig_async {
+                #ctx_creation
                 // Parse the incoming message as JSON-RPC
                 let parsed: ::server_less::serde_json::Value = ::server_less::serde_json::from_str(message)
                     .map_err(|e| format!("Invalid JSON: {}", e))?;
@@ -180,7 +282,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 let id = parsed.get("id").cloned();
 
                 // Dispatch to the appropriate method (async)
-                let result = self.ws_dispatch_async(method, params).await;
+                let result = #dispatch_call_async;
 
                 // Format response
                 Self::__format_ws_response(result, id)
@@ -219,11 +321,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             }
 
             /// Dispatch a method call (sync version)
-            fn ws_dispatch(
-                &self,
-                method: &str,
-                args: ::server_less::serde_json::Value,
-            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+            #dispatch_sig_sync {
                 match method {
                     #(#dispatch_arms_sync)*
                     _ => Err(format!("Unknown method: {}", method)),
@@ -231,11 +329,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             }
 
             /// Dispatch a method call (async version)
-            async fn ws_dispatch_async(
-                &self,
-                method: &str,
-                args: ::server_less::serde_json::Value,
-            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+            #dispatch_sig_async {
                 match method {
                     #(#dispatch_arms_async)*
                     _ => Err(format!("Unknown method: {}", method)),
@@ -258,10 +352,27 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         async fn #handler_name(
             ws: ::axum::extract::WebSocketUpgrade,
             state_extractor: ::axum::extract::State<::std::sync::Arc<#struct_name>>,
+            __context_headers: ::axum::http::HeaderMap,
         ) -> impl ::axum::response::IntoResponse {
             let state = state_extractor.0;
+
+            // Extract Context from HTTP upgrade headers
+            let mut __ctx = ::server_less::Context::new();
+            if #uses_context {
+                for (name, value) in __context_headers.iter() {
+                    if let Ok(value_str) = value.to_str() {
+                        __ctx.set(name.as_str(), value_str);
+                    }
+                }
+                if let Some(request_id) = __context_headers.get("x-request-id")
+                    .and_then(|v| v.to_str().ok())
+                {
+                    __ctx.set_request_id(request_id);
+                }
+            }
+
             ws.on_upgrade(move |socket| async move {
-                #connection_fn_name(socket, state).await
+                #connection_fn_name(socket, state, __ctx).await
             })
         }
 
@@ -269,6 +380,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         async fn #connection_fn_name(
             socket: ::axum::extract::ws::WebSocket,
             state: ::std::sync::Arc<#struct_name>,
+            __ctx: ::server_less::Context,
         ) {
             use ::futures::stream::StreamExt;
             use ::futures::sink::SinkExt;
@@ -279,7 +391,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 match msg {
                     Ok(::axum::extract::ws::Message::Text(text)) => {
                         // Use async handler to support async methods
-                        let response = state.ws_handle_message_async(&text).await;
+                        let response = #message_handler_call;
                         let reply = match response {
                             Ok(json) => json,
                             Err(err) => ::server_less::serde_json::json!({
@@ -300,21 +412,78 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 }
 
 /// Generate a dispatch match arm for a method (sync version)
-fn generate_dispatch_arm_sync(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    // Use shared RPC dispatch generation
-    Ok(server_less_rpc::generate_dispatch_arm(
-        method,
-        None,
-        AsyncHandling::Error,
-    ))
+fn generate_dispatch_arm_sync(
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> syn::Result<TokenStream2> {
+    generate_dispatch_arm_with_context(method, has_qualified, AsyncHandling::Error)
 }
 
 /// Generate a dispatch match arm for a method (async version)
-fn generate_dispatch_arm_async(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    // Use shared RPC dispatch generation with await support
-    Ok(server_less_rpc::generate_dispatch_arm(
-        method,
-        None,
-        AsyncHandling::Await,
-    ))
+fn generate_dispatch_arm_async(
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> syn::Result<TokenStream2> {
+    generate_dispatch_arm_with_context(method, has_qualified, AsyncHandling::Await)
+}
+
+/// Generate dispatch arm with Context support
+fn generate_dispatch_arm_with_context(
+    method: &MethodInfo,
+    has_qualified: bool,
+    async_handling: AsyncHandling,
+) -> syn::Result<TokenStream2> {
+    let method_name_str = method.name.to_string();
+
+    // Partition Context vs regular parameters
+    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+
+    // If no Context, use default RPC dispatch
+    if context_param.is_none() {
+        return Ok(server_less_rpc::generate_dispatch_arm(
+            method,
+            None,
+            async_handling,
+        ));
+    }
+
+    // Check if this will error out early (async method in sync context)
+    let requires_async = method.is_async || method.return_info.is_stream;
+    if requires_async && matches!(async_handling, AsyncHandling::Error) {
+        // For async methods in sync context with Context params,
+        // we need to extract params but then error immediately
+        let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
+
+        return Ok(quote! {
+            #method_name_str => {
+                #(#param_extractions)*
+                return Err("Async methods and streaming methods not supported in sync context".to_string());
+            }
+        });
+    }
+
+    // Generate extractions only for regular params (Context is already in scope as __ctx)
+    let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
+
+    // Build argument list: Context first (if present), then regular params in order
+    let mut arg_exprs = Vec::new();
+    for param in &method.params {
+        if crate::context::should_inject_context(&param.ty, has_qualified) {
+            arg_exprs.push(quote! { __ctx.clone() });
+        } else {
+            let name = &param.name;
+            arg_exprs.push(quote! { #name });
+        }
+    }
+
+    let call = server_less_rpc::generate_method_call_with_args(method, arg_exprs, async_handling);
+    let response = server_less_rpc::generate_json_response(method);
+
+    Ok(quote! {
+        #method_name_str => {
+            #(#param_extractions)*
+            #call
+            #response
+        }
+    })
 }

@@ -1,6 +1,6 @@
-//! Core traits and types for trellis.
+//! Core traits and types for server-less.
 //!
-//! This crate provides the foundational types that trellis macros generate code against.
+//! This crate provides the foundational types that server-less macros generate code against.
 
 pub mod error;
 pub mod extract;
