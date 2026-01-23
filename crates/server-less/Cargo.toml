@@ -6,7 +6,7 @@ license.workspace = true
 description = "Composable derive macros for common Rust patterns"
 
 [dependencies]
-server-less-core = { path = "../server-less-core" }
+server-less-core = { path = "../server-less-core", default-features = false }
 server-less-macros = { path = "../server-less-macros", default-features = false }
 
 # Re-export common dependencies users will need
@@ -42,7 +42,7 @@ default = ["full"]
 mcp = ["server-less-macros/mcp"]
 http = ["server-less-macros/http", "axum"]
 cli = ["server-less-macros/cli", "clap"]
-ws = ["server-less-macros/ws", "axum", "futures"]
+ws = ["server-less-macros/ws", "server-less-core/ws", "axum", "futures"]
 graphql = ["server-less-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
 jsonrpc = ["server-less-macros/jsonrpc", "axum"]
 

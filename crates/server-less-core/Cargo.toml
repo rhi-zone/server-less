@@ -8,6 +8,7 @@ description = "Core traits and types for server-less derive macros"
 [dependencies]
 # Async runtime agnostic
 futures-core = "0.3"
+futures = { version = "0.3", optional = true }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -18,3 +19,10 @@ http = "1"
 
 # Error handling
 thiserror = "2"
+
+# WebSocket support (optional)
+tokio = { version = "1", features = ["sync"], optional = true }
+axum = { version = "0.8", default-features = false, features = ["ws"], optional = true }
+
+[features]
+ws = ["futures", "tokio", "axum"]

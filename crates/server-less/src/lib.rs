@@ -246,4 +246,8 @@ pub mod prelude {
     // Always available
     pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, ServerlessError};
     pub use serde::{Deserialize, Serialize};
+
+    // WebSocket sender (when ws feature enabled)
+    #[cfg(feature = "ws")]
+    pub use super::WsSender;
 }

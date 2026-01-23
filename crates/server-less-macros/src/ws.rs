@@ -56,12 +56,110 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
 use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
 // Import Context helpers
-use crate::context::{has_qualified_context, partition_context_params};
+use crate::context::has_qualified_context;
+
+/// Check if a type is server_less::WsSender (fully qualified)
+fn is_qualified_ws_sender(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        let path = &type_path.path;
+        let segments: Vec<_> = path.segments.iter().collect();
+
+        if segments.len() >= 2 {
+            // Look for server_less::WsSender pattern
+            for i in 0..segments.len() - 1 {
+                if segments[i].ident == "server_less" && segments[i + 1].ident == "WsSender" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Check if a type is bare `WsSender` (unqualified)
+fn is_bare_ws_sender(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty
+        && type_path.path.segments.len() == 1
+    {
+        return type_path.path.segments[0].ident == "WsSender";
+    }
+    false
+}
+
+/// Check if this type should be treated as server_less::WsSender for injection
+fn should_inject_ws_sender(ty: &syn::Type, has_qualified: bool) -> bool {
+    if is_qualified_ws_sender(ty) {
+        true
+    } else if is_bare_ws_sender(ty) {
+        // Only inject bare WsSender if no qualified version exists in the impl block
+        !has_qualified
+    } else {
+        false
+    }
+}
+
+/// Scan all methods to detect if any use qualified server_less::WsSender
+fn has_qualified_ws_sender(methods: &[MethodInfo]) -> bool {
+    methods.iter().any(|method| {
+        method
+            .params
+            .iter()
+            .any(|param| is_qualified_ws_sender(&param.ty))
+    })
+}
+
+/// Partition parameters into Context, WsSender, and regular groups
+///
+/// Returns `(context_param, ws_sender_param, other_params)` where:
+/// - `context_param` is `Some(param)` if a Context parameter was found
+/// - `ws_sender_param` is `Some(param)` if a WsSender parameter was found
+/// - `other_params` contains all regular parameters
+///
+/// Returns an error if multiple Context or WsSender parameters are found.
+fn partition_ws_params(
+    params: &[ParamInfo],
+    has_qualified_ctx: bool,
+    has_qualified_sender: bool,
+) -> syn::Result<(Option<&ParamInfo>, Option<&ParamInfo>, Vec<&ParamInfo>)> {
+    let mut context_param: Option<&ParamInfo> = None;
+    let mut sender_param: Option<&ParamInfo> = None;
+    let mut other_params = Vec::new();
+
+    for param in params {
+        if crate::context::should_inject_context(&param.ty, has_qualified_ctx) {
+            if context_param.is_some() {
+                return Err(syn::Error::new_spanned(
+                    &param.ty,
+                    "only one Context parameter allowed per method\n\
+                     \n\
+                     Hint: server_less::Context is automatically injected from request metadata.\n\
+                     Remove the duplicate Context parameter.",
+                ));
+            }
+            context_param = Some(param);
+        } else if should_inject_ws_sender(&param.ty, has_qualified_sender) {
+            if sender_param.is_some() {
+                return Err(syn::Error::new_spanned(
+                    &param.ty,
+                    "only one WsSender parameter allowed per method\n\
+                     \n\
+                     Hint: server_less::WsSender is automatically injected for each WebSocket connection.\n\
+                     Remove the duplicate WsSender parameter.",
+                ));
+            }
+            sender_param = Some(param);
+        } else {
+            other_params.push(param);
+        }
+    }
+
+    Ok((context_param, sender_param, other_params))
+}
 
 /// Arguments for the #[ws] attribute
 #[derive(Default)]
@@ -104,40 +202,42 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
-    // PASS 1: Scan for qualified server_less::Context usage
-    let has_qualified = has_qualified_context(&methods);
+    // PASS 1: Scan for qualified server_less::Context and server_less::WsSender usage
+    let has_qualified_ctx = has_qualified_context(&methods);
+    let has_qualified_sender = has_qualified_ws_sender(&methods);
 
     let path = args.path.unwrap_or_else(|| "/ws".to_string());
 
     // Generate dispatch match arms (sync and async versions)
     let dispatch_arms_sync: Vec<_> = methods
         .iter()
-        .map(|m| generate_dispatch_arm_sync(m, has_qualified))
+        .map(|m| generate_dispatch_arm_sync(m, has_qualified_ctx, has_qualified_sender))
         .collect::<syn::Result<Vec<_>>>()?;
 
     let dispatch_arms_async: Vec<_> = methods
         .iter()
-        .map(|m| generate_dispatch_arm_async(m, has_qualified))
+        .map(|m| generate_dispatch_arm_async(m, has_qualified_ctx, has_qualified_sender))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Method names for documentation
     let method_names: Vec<_> = methods.iter().map(|m| m.name.to_string()).collect();
 
-    // Check if any method uses Context
-    let uses_context = methods.iter().any(|m| {
-        partition_context_params(&m.params, has_qualified)
-            .map(|(ctx, _)| ctx.is_some())
+    // Check if any method uses Context or WsSender
+    let uses_injected_params = methods.iter().any(|m| {
+        partition_ws_params(&m.params, has_qualified_ctx, has_qualified_sender)
+            .map(|(ctx, sender, _)| ctx.is_some() || sender.is_some())
             .unwrap_or(false)
     });
 
-    // Generate dispatch signatures and calls based on Context usage
+    // Generate dispatch signatures and calls based on Context and WsSender usage
     let (dispatch_sig_sync, dispatch_sig_async, dispatch_call_sync, dispatch_call_async) =
-        if uses_context {
+        if uses_injected_params {
             (
                 quote! {
                     fn ws_dispatch(
                         &self,
                         __ctx: ::server_less::Context,
+                        __sender: ::server_less::WsSender,
                         method: &str,
                         args: ::server_less::serde_json::Value,
                     ) -> ::std::result::Result<::server_less::serde_json::Value, String>
@@ -146,12 +246,13 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                     async fn ws_dispatch_async(
                         &self,
                         __ctx: ::server_less::Context,
+                        __sender: ::server_less::WsSender,
                         method: &str,
                         args: ::server_less::serde_json::Value,
                     ) -> ::std::result::Result<::server_less::serde_json::Value, String>
                 },
-                quote! { self.ws_dispatch(__ctx, method, params) },
-                quote! { self.ws_dispatch_async(__ctx, method, params).await },
+                quote! { self.ws_dispatch(__ctx, __sender, method, params) },
+                quote! { self.ws_dispatch_async(__ctx, __sender, method, params).await },
             )
         } else {
             (
@@ -174,9 +275,9 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             )
         };
 
-    // Generate message handler call based on Context usage
-    let message_handler_call = if uses_context {
-        quote! { state.ws_handle_message_async(__ctx.clone(), &text).await }
+    // Generate message handler call based on injected params usage
+    let message_handler_call = if uses_injected_params {
+        quote! { state.ws_handle_message_async(__ctx.clone(), __sender.clone(), &text).await }
     } else {
         quote! { state.ws_handle_message_async(&text).await }
     };
@@ -185,13 +286,14 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
     let handler_name = format_ident!("__trellis_ws_handler_{}", struct_name_snake);
     let connection_fn_name = format_ident!("__trellis_ws_connection_{}", struct_name_snake);
 
-    // Generate method signatures based on Context usage
-    let (handle_sig_sync, handle_sig_async) = if uses_context {
+    // Generate method signatures based on injected params usage
+    let (handle_sig_sync, handle_sig_async) = if uses_injected_params {
         (
             quote! {
                 pub fn ws_handle_message(
                     &self,
                     __ctx: ::server_less::Context,
+                    __sender: ::server_less::WsSender,
                     message: &str,
                 ) -> ::std::result::Result<String, String>
             },
@@ -199,6 +301,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 pub async fn ws_handle_message_async(
                     &self,
                     __ctx: ::server_less::Context,
+                    __sender: ::server_less::WsSender,
                     message: &str,
                 ) -> ::std::result::Result<String, String>
             },
@@ -220,8 +323,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         )
     };
 
-    // Generate Context creation code if not provided
-    let ctx_creation = if uses_context {
+    // Generate Context creation code if not injected
+    let ctx_creation = if uses_injected_params {
         quote! {}
     } else {
         quote! { let __ctx = ::server_less::Context::new(); }
@@ -358,7 +461,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
             // Extract Context from HTTP upgrade headers
             let mut __ctx = ::server_less::Context::new();
-            if #uses_context {
+            if #uses_injected_params {
                 for (name, value) in __context_headers.iter() {
                     if let Ok(value_str) = value.to_str() {
                         __ctx.set(name.as_str(), value_str);
@@ -385,7 +488,10 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             use ::futures::stream::StreamExt;
             use ::futures::sink::SinkExt;
 
-            let (mut sender, mut receiver) = socket.split();
+            let (sender, mut receiver) = socket.split();
+
+            // Wrap sender in WsSender for sharing with methods
+            let __sender = ::server_less::WsSender::new(sender);
 
             while let Some(msg) = receiver.next().await {
                 match msg {
@@ -398,7 +504,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                                 "error": {"message": err}
                             }).to_string(),
                         };
-                        if sender.send(::axum::extract::ws::Message::Text(reply.into())).await.is_err() {
+                        // Send response using the sender through WsSender
+                        if __sender.send(reply).await.is_err() {
                             break;
                         }
                     }
@@ -414,32 +521,46 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 /// Generate a dispatch match arm for a method (sync version)
 fn generate_dispatch_arm_sync(
     method: &MethodInfo,
-    has_qualified: bool,
+    has_qualified_ctx: bool,
+    has_qualified_sender: bool,
 ) -> syn::Result<TokenStream2> {
-    generate_dispatch_arm_with_context(method, has_qualified, AsyncHandling::Error)
+    generate_dispatch_arm_with_injected_params(
+        method,
+        has_qualified_ctx,
+        has_qualified_sender,
+        AsyncHandling::Error,
+    )
 }
 
 /// Generate a dispatch match arm for a method (async version)
 fn generate_dispatch_arm_async(
     method: &MethodInfo,
-    has_qualified: bool,
+    has_qualified_ctx: bool,
+    has_qualified_sender: bool,
 ) -> syn::Result<TokenStream2> {
-    generate_dispatch_arm_with_context(method, has_qualified, AsyncHandling::Await)
+    generate_dispatch_arm_with_injected_params(
+        method,
+        has_qualified_ctx,
+        has_qualified_sender,
+        AsyncHandling::Await,
+    )
 }
 
-/// Generate dispatch arm with Context support
-fn generate_dispatch_arm_with_context(
+/// Generate dispatch arm with Context and WsSender support
+fn generate_dispatch_arm_with_injected_params(
     method: &MethodInfo,
-    has_qualified: bool,
+    has_qualified_ctx: bool,
+    has_qualified_sender: bool,
     async_handling: AsyncHandling,
 ) -> syn::Result<TokenStream2> {
     let method_name_str = method.name.to_string();
 
-    // Partition Context vs regular parameters
-    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    // Partition Context, WsSender, and regular parameters
+    let (context_param, sender_param, regular_params) =
+        partition_ws_params(&method.params, has_qualified_ctx, has_qualified_sender)?;
 
-    // If no Context, use default RPC dispatch
-    if context_param.is_none() {
+    // If no injected params, use default RPC dispatch
+    if context_param.is_none() && sender_param.is_none() {
         return Ok(server_less_rpc::generate_dispatch_arm(
             method,
             None,
@@ -450,7 +571,7 @@ fn generate_dispatch_arm_with_context(
     // Check if this will error out early (async method in sync context)
     let requires_async = method.is_async || method.return_info.is_stream;
     if requires_async && matches!(async_handling, AsyncHandling::Error) {
-        // For async methods in sync context with Context params,
+        // For async methods in sync context with injected params,
         // we need to extract params but then error immediately
         let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
 
@@ -462,14 +583,16 @@ fn generate_dispatch_arm_with_context(
         });
     }
 
-    // Generate extractions only for regular params (Context is already in scope as __ctx)
+    // Generate extractions only for regular params (Context and WsSender already in scope)
     let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
 
-    // Build argument list: Context first (if present), then regular params in order
+    // Build argument list: injected params first, then regular params in their original order
     let mut arg_exprs = Vec::new();
     for param in &method.params {
-        if crate::context::should_inject_context(&param.ty, has_qualified) {
+        if crate::context::should_inject_context(&param.ty, has_qualified_ctx) {
             arg_exprs.push(quote! { __ctx.clone() });
+        } else if should_inject_ws_sender(&param.ty, has_qualified_sender) {
+            arg_exprs.push(quote! { __sender.clone() });
         } else {
             let name = &param.name;
             arg_exprs.push(quote! { #name });

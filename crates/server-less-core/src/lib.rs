@@ -8,6 +8,9 @@ pub mod extract;
 pub use error::{ErrorCode, ErrorResponse, IntoErrorCode, SchemaValidationError};
 pub use extract::Context;
 
+#[cfg(feature = "ws")]
+pub use extract::WsSender;
+
 /// Method metadata extracted from an impl block.
 /// Used internally by macros but exposed for advanced use cases.
 #[derive(Debug, Clone)]
