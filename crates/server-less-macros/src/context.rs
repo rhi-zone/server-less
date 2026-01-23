@@ -104,7 +104,10 @@ pub fn partition_context_params(
             if context_param.is_some() {
                 return Err(syn::Error::new_spanned(
                     &param.ty,
-                    "only one Context parameter allowed per method",
+                    "only one Context parameter allowed per method\n\
+                     \n\
+                     Hint: server_less::Context is automatically injected from request metadata.\n\
+                     Remove the duplicate Context parameter.",
                 ));
             }
             context_param = Some(param);

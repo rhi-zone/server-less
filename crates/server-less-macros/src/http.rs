@@ -322,7 +322,9 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
     let mut openapi_methods = Vec::new();
-    let mut route_signatures = std::collections::HashMap::new();
+    // Maps normalized route signature (e.g., "GET /users/{*}") to (method_name, original_path)
+    let mut route_signatures: std::collections::HashMap<String, (String, String)> =
+        std::collections::HashMap::new();
 
     for method in &methods {
         let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
@@ -352,11 +354,34 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
             infer_path(&method.name.to_string(), &http_method_enum, &method.params)
         };
         let full_path = format!("{}{}", prefix, path);
-        let route_sig = format!("{} {}", http_method_enum.as_str(), full_path);
 
-        if let Some(existing_method) = route_signatures.get(&route_sig) {
-            return Err(syn::Error::new_spanned(
-                &method.method.sig,
+        // Normalize path for duplicate detection (e.g., /users/{id} and /users/{user_id} are the same)
+        let normalized_path = normalize_path_for_duplicate_check(&full_path);
+        let route_sig = format!("{} {}", http_method_enum.as_str(), normalized_path);
+
+        if let Some((existing_method, existing_path)) = route_signatures.get(&route_sig) {
+            let hint_msg = if existing_path != &full_path {
+                format!(
+                    "Duplicate route: {} {} is structurally identical to {} defined by method '{}'\n\
+                     \n\
+                     Note: These paths have the same structure (different parameter names don't matter):\n\
+                     - Method '{}': {}\n\
+                     - Method '{}': {}\n\
+                     \n\
+                     Hint: You can either:\n\
+                     1. Use #[route(skip)] to exclude one method from HTTP routing\n\
+                     2. Use #[route(path = \"/custom\")] to use a completely different path\n\
+                     3. Use #[route(method = \"PATCH\")] to use a different HTTP method",
+                    http_method_enum.as_str(),
+                    full_path,
+                    existing_path,
+                    existing_method,
+                    existing_method,
+                    existing_path,
+                    method.name,
+                    full_path
+                )
+            } else {
                 format!(
                     "Duplicate route: {} {} is already defined by method '{}'\n\
                      \n\
@@ -367,10 +392,12 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                     http_method_enum.as_str(),
                     full_path,
                     existing_method
-                ),
-            ));
+                )
+            };
+
+            return Err(syn::Error::new_spanned(&method.method.sig, hint_msg));
         }
-        route_signatures.insert(route_sig, method.name.to_string());
+        route_signatures.insert(route_sig, (method.name.to_string(), full_path.clone()));
 
         let handler = generate_handler(&struct_name, method, &response_overrides, has_qualified)?;
         handlers.push(handler);
@@ -1132,6 +1159,23 @@ fn infer_http_method(name: &str) -> HttpMethod {
     }
 }
 
+/// Normalize a path for duplicate detection by replacing all path parameters with a placeholder
+///
+/// This ensures that paths like `/users/{id}` and `/users/{user_id}` are detected as duplicates,
+/// since they have the same routing structure even though parameter names differ.
+fn normalize_path_for_duplicate_check(path: &str) -> String {
+    path.split('/')
+        .map(|segment| {
+            if segment.starts_with('{') && segment.ends_with('}') {
+                "{*}"
+            } else {
+                segment
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo]) -> String {
     let resource = method_name
         .strip_prefix("get_")
@@ -1191,13 +1235,45 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
         ));
     }
 
+    // Check for multiple consecutive slashes
+    if path.contains("//") {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "HTTP path contains consecutive slashes. Path: '{}'\n\
+                 \n\
+                 Hint: Use single slashes to separate path segments, e.g., /users/posts",
+                path
+            ),
+        ));
+    }
+
+    // Warn about trailing slashes (can cause routing issues)
+    if path.len() > 1 && path.ends_with('/') {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "HTTP path has trailing slash. Path: '{}'\n\
+                 \n\
+                 Hint: Remove trailing slash: '{}'\n\
+                 Trailing slashes can cause routing inconsistencies.",
+                path,
+                path.trim_end_matches('/')
+            ),
+        ));
+    }
+
     // Check for invalid characters
-    let invalid_chars = ['<', '>', '"', '`', ' ', '\t', '\n'];
+    let invalid_chars = ['<', '>', '"', '`', ' ', '\t', '\n', '?', '#'];
     if let Some(ch) = invalid_chars.iter().find(|&&c| path.contains(c)) {
         let hint = if *ch == '<' || *ch == '>' {
             "\n\nHint: Use curly braces for path parameters, e.g., /users/{id}"
         } else if *ch == ' ' {
             "\n\nHint: Use hyphens or underscores instead of spaces, e.g., /my-resource"
+        } else if *ch == '?' {
+            "\n\nHint: Query parameters are added automatically from method parameters"
+        } else if *ch == '#' {
+            "\n\nHint: Fragment identifiers are not supported in server routes"
         } else {
             ""
         };
@@ -1226,16 +1302,64 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
         ));
     }
 
-    // Check that path parameters have names
-    for segment in path.split('/') {
-        if segment == "{}" || segment == "{" || segment == "}" {
+    // Extract and validate path parameter names
+    let mut param_names = std::collections::HashSet::new();
+    for (idx, part) in path.split('/').enumerate() {
+        if part.starts_with('{') && part.ends_with('}') {
+            let param_name = &part[1..part.len() - 1];
+
+            // Check for empty parameter name
+            if param_name.is_empty() {
+                return Err(syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    format!(
+                        "HTTP path has empty path parameter at segment {}. Path: '{}'\n\
+                         \n\
+                         Hint: Path parameters need names, e.g., /users/{{id}} or /posts/{{post_id}}",
+                        idx, path
+                    ),
+                ));
+            }
+
+            // Check for valid parameter name (alphanumeric, underscore, hyphen)
+            if !param_name
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+            {
+                return Err(syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    format!(
+                        "HTTP path parameter '{}' contains invalid characters. Path: '{}'\n\
+                         \n\
+                         Hint: Parameter names should only contain alphanumeric characters, underscores, and hyphens",
+                        param_name, path
+                    ),
+                ));
+            }
+
+            // Check for duplicate parameter names
+            if !param_names.insert(param_name.to_string()) {
+                return Err(syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    format!(
+                        "HTTP path has duplicate parameter '{{{}}}'. Path: '{}'\n\
+                         \n\
+                         Hint: Each path parameter must have a unique name\n\
+                         Consider using names like {{user_id}} and {{post_id}} instead of multiple {{id}}",
+                        param_name, path
+                    ),
+                ));
+            }
+        } else if part.contains('{') || part.contains('}') {
+            // Malformed segment with partial braces
             return Err(syn::Error::new(
                 proc_macro2::Span::call_site(),
                 format!(
-                    "HTTP path has empty or malformed path parameter. Path: '{}'\n\
+                    "HTTP path has malformed path parameter at segment {}. Path: '{}'\n\
                      \n\
-                     Hint: Path parameters need names, e.g., /users/{{id}} or /posts/{{post_id}}",
-                    path
+                     Hint: Path parameters must be complete segments, e.g., /users/{{id}}/posts\n\
+                     Not: /users/user-{{id}}/posts",
+                    idx, path
                 ),
             ));
         }
