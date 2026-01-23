@@ -4,13 +4,16 @@
 //!
 //! # What is MCP?
 //!
-//! Model Context Protocol (MCP) is a standard for exposing tools to language models.
-//! Each method becomes a callable tool with JSON schema for parameters.
+//! [Model Context Protocol](https://modelcontextprotocol.io) is an open standard for exposing
+//! tools and context to language models. Each method becomes a callable tool with JSON schema
+//! for parameters and return values.
 //!
 //! # Tool Naming
 //!
-//! - Methods are exposed with their original names
+//! - Methods are exposed with their original names (e.g., `read_file`)
 //! - Optional namespace prefix: `#[mcp(namespace = "myapp")]` → `myapp_create_user`
+//! - Tool names must be valid identifiers (alphanumeric + underscore)
+//! - Namespace is added as prefix with underscore separator
 //!
 //! # Parameter Schema
 //!
@@ -19,26 +22,92 @@
 //! - `i32`, `u64`, etc. → integer
 //! - `f32`, `f64` → number
 //! - `bool` → boolean
-//! - `Option<T>` → optional parameter
+//! - `Vec<T>`, `[T]` → array
+//! - Custom structs → object (requires Serialize/Deserialize)
+//! - `Option<T>` → optional parameter (nullable)
+//!
+//! # Return Types
+//!
+//! Return values are automatically converted to JSON:
+//!
+//! - `()` → `{"success": true}`
+//! - `T` → serialized value
+//! - `Result<T, E>` → `T` on success, error string on failure
+//! - `Option<T>` → `T` or `null`
+//! - `Vec<T>` → JSON array
+//! - `impl Stream<Item = T>` → collected into JSON array
+//!
+//! ```ignore
+//! #[mcp]
+//! impl Tools {
+//!     // Returns: {"success": true}
+//!     fn do_thing(&self) { }
+//!
+//!     // Returns: "hello"
+//!     fn get_message(&self) -> String { "hello".into() }
+//!
+//!     // Returns: value or error string
+//!     fn try_parse(&self, s: String) -> Result<i32, String> {
+//!         s.parse().map_err(|e| format!("Parse error: {}", e))
+//!     }
+//!
+//!     // Returns: value or null
+//!     fn find_user(&self, id: i32) -> Option<User> { ... }
+//! }
+//! ```
+//!
+//! # Error Handling
+//!
+//! MCP tools handle errors gracefully:
+//!
+//! - **Parse errors**: Invalid JSON or missing parameters return error response
+//! - **Type errors**: Parameter type mismatches return descriptive error
+//! - **Result errors**: `Result<T, E>` failures return `Err(format!("{:?}", e))`
+//! - **Panics**: Not caught - use `Result` for error handling
+//!
+//! Error responses are returned as JSON strings to the LLM:
+//! ```json
+//! {
+//!   "error": "Missing required parameter: path",
+//!   "tool": "file_read_file"
+//! }
+//! ```
 //!
 //! # Streaming Support
 //!
 //! Methods that return `impl Stream<Item = T>` are automatically supported.
 //! Streams are collected into arrays before returning to the LLM.
 //!
-//! **Note:** Requires async context. Use `mcp_call_async` for streaming methods.
+//! **Requirements:**
+//! - Rust 2024 edition (for `+ use<>` bound)
+//! - Async context: Use `mcp_call_async` for streaming methods
+//! - `mcp_call` (sync) will return error for streaming methods
 //!
 //! ```ignore
 //! use futures::stream::{self, Stream};
 //!
 //! #[mcp]
 //! impl DataService {
-//!     // Returns collected array: [1, 2, 3, 4, 5]
+//!     // Sync method - works with both mcp_call and mcp_call_async
+//!     fn get_status(&self) -> String {
+//!         "ready".into()
+//!     }
+//!
+//!     // Streaming method - ONLY works with mcp_call_async
+//!     // Returns collected array: [0, 1, 2, 3, 4]
 //!     fn stream_numbers(&self, count: u32) -> impl Stream<Item = u32> + use<> {
 //!         stream::iter(0..count)
 //!     }
+//!
+//!     // Async method - ONLY works with mcp_call_async
+//!     async fn fetch_data(&self, url: String) -> Result<String, String> {
+//!         // ... HTTP request ...
+//!     }
 //! }
 //! ```
+//!
+//! **Note:** The `+ use<>` bound is required in Rust 2024 for `impl Trait` returns
+//! in traits/methods. See Rust 2024 edition guide for details.
 //!
 //! # Generated Methods
 //!
@@ -72,6 +141,63 @@
 //! let definitions = FileTools::mcp_tools();  // For MCP server
 //! let result = tools.mcp_call("file_read_file", json!({"path": "/tmp/test.txt"}));
 //! ```
+//!
+//! # Multiple Tools Example
+//!
+//! MCP tools can be composed by creating multiple impl blocks and combining their tools:
+//!
+//! ```ignore
+//! use server_less::mcp;
+//!
+//! struct FileTools;
+//! struct MathTools;
+//! struct WebTools;
+//!
+//! #[mcp(namespace = "file")]
+//! impl FileTools {
+//!     fn read_file(&self, path: String) -> Result<String, String> { /* ... */ }
+//!     fn write_file(&self, path: String, content: String) -> Result<(), String> { /* ... */ }
+//! }
+//!
+//! #[mcp(namespace = "math")]
+//! impl MathTools {
+//!     fn add(&self, a: i32, b: i32) -> i32 { a + b }
+//!     fn factorial(&self, n: u32) -> u64 { /* ... */ }
+//! }
+//!
+//! #[mcp(namespace = "web")]
+//! impl WebTools {
+//!     async fn fetch(&self, url: String) -> Result<String, String> { /* ... */ }
+//!     async fn post(&self, url: String, body: String) -> Result<String, String> { /* ... */ }
+//! }
+//!
+//! // Combine all tools:
+//! let mut all_tools = Vec::new();
+//! all_tools.extend(FileTools::mcp_tools());
+//! all_tools.extend(MathTools::mcp_tools());
+//! all_tools.extend(WebTools::mcp_tools());
+//!
+//! // Call tools by namespace:
+//! let file_tools = FileTools;
+//! let math_tools = MathTools;
+//! let web_tools = WebTools;
+//!
+//! // file_read_file, file_write_file
+//! file_tools.mcp_call("file_read_file", json!({"path": "config.toml"}))?;
+//!
+//! // math_add, math_factorial
+//! math_tools.mcp_call("math_add", json!({"a": 5, "b": 3}))?;
+//!
+//! // web_fetch, web_post (async)
+//! web_tools.mcp_call_async("web_fetch", json!({"url": "https://api.example.com"})).await?;
+//! ```
+//!
+//! # See Also
+//!
+//! - [Model Context Protocol Specification](https://modelcontextprotocol.io)
+//! - [`#[http]`](crate::http) - HTTP REST endpoints
+//! - [`#[jsonrpc]`](crate::jsonrpc) - JSON-RPC over HTTP
+//! - [`#[serve]`](crate::serve) - Multi-protocol composition
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
