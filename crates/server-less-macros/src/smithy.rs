@@ -100,6 +100,20 @@ pub(crate) fn expand_smithy(args: SmithyArgs, impl_block: ItemImpl) -> syn::Resu
         .unwrap_or_else(|| format!("com.example.{}", struct_name_str.to_snake_case()));
     let version = args.version.unwrap_or_else(|| "2024-01-01".to_string());
 
+    // Check for schema attribute to enable validation
+    let schema_path = impl_block.attrs.iter().find_map(|attr| {
+        if attr.path().is_ident("schema")
+            && let syn::Meta::NameValue(nv) = &attr.meta
+            && let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) = &nv.value
+        {
+            return Some(s.value());
+        }
+        None
+    });
+
     // Generate operation definitions
     let operations: Vec<String> = methods.iter().map(generate_operation).collect();
 
@@ -136,6 +150,64 @@ service {service_name} {{
         structures = structures.join("\n\n")
     );
 
+    // Generate validation method if schema path provided
+    let validation_method = if let Some(path) = schema_path {
+        quote! {
+            /// Validate that the generated schema matches the expected schema file.
+            ///
+            /// Returns Ok(()) if schemas match, Err with details if they differ.
+            pub fn validate_schema() -> ::std::result::Result<(), ::server_less::SchemaValidationError> {
+                let expected = include_str!(#path);
+                let generated = Self::smithy_schema();
+
+                // Normalize for comparison (trim, split lines, filter empty)
+                let expected_lines: ::std::collections::HashSet<String> = expected
+                    .lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty())
+                    .collect();
+
+                let generated_lines: ::std::collections::HashSet<String> = generated
+                    .lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty())
+                    .collect();
+
+                let mut error = ::server_less::SchemaValidationError::new("Smithy");
+
+                for line in &expected_lines {
+                    if !generated_lines.contains(line) {
+                        error.add_missing(line.clone());
+                    }
+                }
+
+                for line in &generated_lines {
+                    if !expected_lines.contains(line) {
+                        error.add_extra(line.clone());
+                    }
+                }
+
+                if error.has_differences() {
+                    Err(error)
+                } else {
+                    Ok(())
+                }
+            }
+
+            /// Assert that the schema matches.
+            ///
+            /// Panics with detailed diff if schemas don't match.
+            /// Use `validate_schema()` for programmatic error handling.
+            pub fn assert_schema_matches() {
+                if let Err(err) = Self::validate_schema() {
+                    panic!("{}", err);
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         #impl_block
 
@@ -149,6 +221,8 @@ service {service_name} {{
             pub fn write_smithy(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
                 std::fs::write(path, Self::smithy_schema())
             }
+
+            #validation_method
         }
     })
 }

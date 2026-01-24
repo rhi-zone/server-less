@@ -232,6 +232,37 @@ impl fmt::Display for SchemaValidationError {
             }
         }
 
+        // Add helpful hints
+        writeln!(f)?;
+        writeln!(f, "Hints:")?;
+
+        if !self.missing_lines.is_empty() && !self.extra_lines.is_empty() {
+            writeln!(
+                f,
+                "  - Method signature or type may have changed. Check parameter names and types."
+            )?;
+        }
+
+        if !self.missing_lines.is_empty() {
+            writeln!(
+                f,
+                "  - Missing items may indicate removed or renamed methods in Rust code."
+            )?;
+        }
+
+        if !self.extra_lines.is_empty() {
+            writeln!(
+                f,
+                "  - Extra items may indicate new methods added. Update the schema file."
+            )?;
+        }
+
+        writeln!(
+            f,
+            "  - Run `write_{schema}()` to regenerate the schema file.",
+            schema = self.schema_type.to_lowercase()
+        )?;
+
         Ok(())
     }
 }

@@ -44,12 +44,11 @@ Prioritized backlog of pending features and improvements.
 
 ### Error Handling
 
-- [ ] Replace `panic!()` with `Result` in `#[grpc]` schema validation
-- [ ] Replace `panic!()` with `Result` in `#[capnp]` schema validation
-- [ ] Replace `panic!()` with `Result` in `#[thrift]` schema validation
-- [ ] Replace `panic!()` with `Result` in `#[smithy]` schema validation
+- [x] Schema validation returns `Result<(), SchemaValidationError>` ✅
+  - `validate_schema()` returns Result (grpc, capnp, thrift, smithy)
+  - `assert_schema_matches()` panics for test convenience (intentional)
+- [x] Add "help" hints to `SchemaValidationError` ✅
 - [ ] Add span information to schema generator errors
-- [ ] Add "help" hints for common schema errors
 
 ### Streaming
 
