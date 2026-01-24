@@ -330,6 +330,16 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
     }
 
+    // Generate OpenAPI paths method (always available for composition)
+    let openapi_paths_fn =
+        crate::openapi_gen::generate_openapi_paths(&prefix, &openapi_methods, has_qualified)?;
+    let openapi_paths_method = quote! {
+        /// Get OpenAPI paths for this service (for composition with OpenApiBuilder)
+        pub fn http_openapi_paths() -> ::std::vec::Vec<::server_less::OpenApiPath> {
+            #openapi_paths_fn
+        }
+    };
+
     // Conditionally generate OpenAPI spec method
     let openapi_method = if generate_openapi {
         let openapi_fn =
@@ -360,6 +370,8 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                     #(#routes)*
                     .with_state(state)
             }
+
+            #openapi_paths_method
 
             #openapi_method
         }

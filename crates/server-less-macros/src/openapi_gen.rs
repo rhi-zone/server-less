@@ -213,6 +213,187 @@ pub fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamIn
     }
 }
 
+/// Generate typed OpenAPI paths (Vec<OpenApiPath>)
+///
+/// Used by protocols to return structured path data for composition.
+pub fn generate_openapi_paths(
+    prefix: &str,
+    methods_with_overrides: &[(MethodInfo, RouteOverride, ResponseOverride)],
+    has_qualified: bool,
+) -> syn::Result<TokenStream2> {
+    let mut path_constructors = Vec::new();
+
+    for (method, overrides, response_overrides) in methods_with_overrides {
+        let method_name = method.name.to_string();
+
+        let http_method = if let Some(ref m) = overrides.method {
+            HttpMethod::from_str(m).unwrap_or_else(|| infer_http_method(&method_name))
+        } else {
+            infer_http_method(&method_name)
+        };
+
+        let path = if let Some(ref p) = overrides.path {
+            p.clone()
+        } else {
+            infer_path(&method_name, &http_method, &method.params)
+        };
+        let full_path = format!("{}{}", prefix, path);
+        let http_method_str = http_method.as_str().to_lowercase();
+
+        let summary = method.docs.clone().unwrap_or_else(|| method_name.clone());
+        let operation_id = method_name.clone();
+
+        let default_has_body = matches!(
+            http_method,
+            HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
+        );
+
+        // Collect parameters
+        let mut param_constructors = Vec::new();
+
+        for param in &method.params {
+            // Skip Context parameters
+            if should_inject_context(&param.ty, has_qualified) {
+                continue;
+            }
+
+            let location = match param.location.as_ref() {
+                Some(ParamLocation::Path) => "path",
+                Some(ParamLocation::Query) => "query",
+                Some(ParamLocation::Body) => continue, // Body params handled separately
+                Some(ParamLocation::Header) => "header",
+                None => {
+                    if param.is_id {
+                        "path"
+                    } else if default_has_body {
+                        continue; // Body params
+                    } else {
+                        "query"
+                    }
+                }
+            };
+
+            let name = param
+                .wire_name
+                .clone()
+                .unwrap_or_else(|| param.name.to_string());
+            let json_type = server_less_rpc::infer_json_type(&param.ty);
+            let required =
+                location == "path" || (!param.is_optional && param.default_value.is_none());
+
+            param_constructors.push(quote! {
+                ::server_less::OpenApiParameter {
+                    name: #name.to_string(),
+                    location: #location.to_string(),
+                    required: #required,
+                    schema: ::server_less::serde_json::json!({"type": #json_type}),
+                    description: None,
+                    extra: ::server_less::serde_json::Map::new(),
+                }
+            });
+        }
+
+        // Build request body if needed
+        let mut body_props = Vec::new();
+        for param in &method.params {
+            if should_inject_context(&param.ty, has_qualified) {
+                continue;
+            }
+
+            let is_body = match param.location.as_ref() {
+                Some(ParamLocation::Body) => true,
+                None if default_has_body && !param.is_id => true,
+                _ => false,
+            };
+
+            if is_body {
+                let name = param
+                    .wire_name
+                    .clone()
+                    .unwrap_or_else(|| param.name.to_string());
+                let json_type = server_less_rpc::infer_json_type(&param.ty);
+                body_props.push((name, json_type));
+            }
+        }
+
+        let request_body = if !body_props.is_empty() {
+            let prop_insertions: Vec<_> = body_props.iter().map(|(name, ty)| {
+                quote! {
+                    props.insert(#name.to_string(), ::server_less::serde_json::json!({"type": #ty}));
+                }
+            }).collect();
+
+            quote! {
+                Some({
+                    let mut props = ::server_less::serde_json::Map::new();
+                    #(#prop_insertions)*
+                    ::server_less::serde_json::json!({
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": props
+                                }
+                            }
+                        }
+                    })
+                })
+            }
+        } else {
+            quote! { None }
+        };
+
+        // Build responses
+        let ret = &method.return_info;
+        let inferred_code = if ret.is_unit { "204" } else { "200" };
+        let success_code = response_overrides
+            .status
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| inferred_code.to_string());
+        let has_error = ret.is_result;
+
+        let responses = if has_error {
+            quote! {
+                {
+                    let mut r = ::server_less::serde_json::Map::new();
+                    r.insert(#success_code.to_string(), ::server_less::serde_json::json!({"description": "Successful response"}));
+                    r.insert("400".to_string(), ::server_less::serde_json::json!({"description": "Bad request"}));
+                    r.insert("500".to_string(), ::server_less::serde_json::json!({"description": "Internal server error"}));
+                    r
+                }
+            }
+        } else {
+            quote! {
+                {
+                    let mut r = ::server_less::serde_json::Map::new();
+                    r.insert(#success_code.to_string(), ::server_less::serde_json::json!({"description": "Successful response"}));
+                    r
+                }
+            }
+        };
+
+        path_constructors.push(quote! {
+            ::server_less::OpenApiPath {
+                path: #full_path.to_string(),
+                method: #http_method_str.to_string(),
+                operation: ::server_less::OpenApiOperation {
+                    summary: Some(#summary.to_string()),
+                    operation_id: Some(#operation_id.to_string()),
+                    parameters: vec![#(#param_constructors),*],
+                    request_body: #request_body,
+                    responses: #responses,
+                    extra: ::server_less::serde_json::Map::new(),
+                },
+            }
+        });
+    }
+
+    Ok(quote! {
+        vec![#(#path_constructors),*]
+    })
+}
+
 /// Generate OpenAPI 3.0 specification
 pub fn generate_openapi_spec(
     struct_name: &syn::Ident,

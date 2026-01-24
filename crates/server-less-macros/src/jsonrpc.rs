@@ -301,6 +301,87 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                     .route(#path, ::axum::routing::post(#handler_name))
                     .with_state(state)
             }
+
+            /// Get OpenAPI paths for this JSON-RPC service (for composition with OpenApiBuilder)
+            ///
+            /// Returns a single POST endpoint for the JSON-RPC interface.
+            pub fn jsonrpc_openapi_paths() -> ::std::vec::Vec<::server_less::OpenApiPath> {
+                let methods: Vec<&str> = vec![#(#method_names),*];
+                let methods_desc = methods.join(", ");
+
+                vec![
+                    ::server_less::OpenApiPath {
+                        path: #path.to_string(),
+                        method: "post".to_string(),
+                        operation: ::server_less::OpenApiOperation {
+                            summary: Some(format!("JSON-RPC 2.0 endpoint (methods: {})", methods_desc)),
+                            operation_id: Some("jsonrpc".to_string()),
+                            parameters: vec![],
+                            request_body: Some(::server_less::serde_json::json!({
+                                "required": true,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "required": ["jsonrpc", "method"],
+                                            "properties": {
+                                                "jsonrpc": {
+                                                    "type": "string",
+                                                    "enum": ["2.0"]
+                                                },
+                                                "method": {
+                                                    "type": "string",
+                                                    "enum": methods
+                                                },
+                                                "params": {
+                                                    "type": "object"
+                                                },
+                                                "id": {
+                                                    "oneOf": [
+                                                        {"type": "string"},
+                                                        {"type": "integer"},
+                                                        {"type": "null"}
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            })),
+                            responses: {
+                                let mut r = ::server_less::serde_json::Map::new();
+                                r.insert("200".to_string(), ::server_less::serde_json::json!({
+                                    "description": "JSON-RPC response",
+                                    "content": {
+                                        "application/json": {
+                                            "schema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "jsonrpc": {"type": "string"},
+                                                    "result": {},
+                                                    "error": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "code": {"type": "integer"},
+                                                            "message": {"type": "string"}
+                                                        }
+                                                    },
+                                                    "id": {}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }));
+                                r.insert("204".to_string(), ::server_less::serde_json::json!({
+                                    "description": "Notification (no response)"
+                                }));
+                                r
+                            },
+                            extra: ::server_less::serde_json::Map::new(),
+                        },
+                    }
+                ]
+            }
         }
 
         async fn #handler_name(

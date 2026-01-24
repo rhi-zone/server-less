@@ -10,11 +10,11 @@ Prioritized backlog of pending features and improvements.
 
 ### OpenAPI Composition
 
-- [ ] **Phase 2: Per-protocol OpenAPI methods**
-  - [ ] Add `http_openapi_paths() -> Vec<OpenApiPath>` to `#[http]`
-  - [ ] Add `jsonrpc_openapi_paths() -> Vec<OpenApiPath>` to `#[jsonrpc]`
-  - [ ] Add `graphql_openapi_paths() -> Vec<OpenApiPath>` to `#[graphql]`
-  - [ ] Add `ws_openapi_paths() -> Vec<OpenApiPath>` to `#[ws]`
+- [x] **Phase 2: Per-protocol OpenAPI methods** ✅
+  - [x] Add `http_openapi_paths() -> Vec<OpenApiPath>` to `#[http]`
+  - [x] Add `jsonrpc_openapi_paths() -> Vec<OpenApiPath>` to `#[jsonrpc]`
+  - [x] Add `graphql_openapi_paths() -> Vec<OpenApiPath>` to `#[graphql]`
+  - [x] Add `ws_openapi_paths() -> Vec<OpenApiPath>` to `#[ws]`
 
 - [ ] **Phase 3: Serve integration**
   - [ ] Parse `openapi` in `#[serve]` args

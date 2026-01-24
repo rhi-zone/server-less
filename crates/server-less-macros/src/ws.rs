@@ -548,6 +548,51 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                     .route(#path, ::axum::routing::get(#handler_name))
                     .with_state(state)
             }
+
+            /// Get OpenAPI paths for this WebSocket service (for composition with OpenApiBuilder)
+            ///
+            /// Returns a single GET endpoint for the WebSocket upgrade.
+            pub fn ws_openapi_paths() -> ::std::vec::Vec<::server_less::OpenApiPath> {
+                let methods: Vec<&str> = vec![#(#method_names),*];
+                let methods_desc = methods.join(", ");
+
+                vec![
+                    ::server_less::OpenApiPath {
+                        path: #path.to_string(),
+                        method: "get".to_string(),
+                        operation: ::server_less::OpenApiOperation {
+                            summary: Some(format!("WebSocket endpoint (methods: {})", methods_desc)),
+                            operation_id: Some("websocket".to_string()),
+                            parameters: vec![],
+                            request_body: None,
+                            responses: {
+                                let mut r = ::server_less::serde_json::Map::new();
+                                r.insert("101".to_string(), ::server_less::serde_json::json!({
+                                    "description": "Switching Protocols - WebSocket upgrade successful"
+                                }));
+                                r
+                            },
+                            extra: {
+                                let mut e = ::server_less::serde_json::Map::new();
+                                e.insert("x-websocket-protocol".to_string(), ::server_less::serde_json::json!({
+                                    "format": "JSON-RPC style",
+                                    "methods": methods,
+                                    "request_example": {
+                                        "method": "echo",
+                                        "params": {"message": "hello"},
+                                        "id": 1
+                                    },
+                                    "response_example": {
+                                        "result": "Echo: hello",
+                                        "id": 1
+                                    }
+                                }));
+                                e
+                            },
+                        },
+                    }
+                ]
+            }
         }
 
         // WebSocket upgrade handler

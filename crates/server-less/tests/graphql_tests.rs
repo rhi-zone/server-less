@@ -319,3 +319,37 @@ async fn test_graphql_custom_struct_mutation() {
     assert_eq!(user["email"], "charlie@example.com");
     assert_eq!(user["active"], true);
 }
+
+#[test]
+fn test_graphql_openapi_paths_generated() {
+    let paths = SimpleService::graphql_openapi_paths();
+
+    // Should have 2 paths: POST /graphql (query) and GET /graphql (playground)
+    assert_eq!(paths.len(), 2);
+
+    // Find the POST endpoint
+    let post_path = paths.iter().find(|p| p.method == "post").unwrap();
+    assert_eq!(post_path.path, "/graphql");
+    assert!(
+        post_path
+            .operation
+            .summary
+            .as_ref()
+            .unwrap()
+            .contains("query")
+    );
+    assert!(post_path.operation.request_body.is_some());
+    assert!(post_path.operation.responses.contains_key("200"));
+
+    // Find the GET endpoint (playground)
+    let get_path = paths.iter().find(|p| p.method == "get").unwrap();
+    assert_eq!(get_path.path, "/graphql");
+    assert!(
+        get_path
+            .operation
+            .summary
+            .as_ref()
+            .unwrap()
+            .contains("Playground")
+    );
+}

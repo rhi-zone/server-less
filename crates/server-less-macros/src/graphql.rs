@@ -243,6 +243,100 @@ pub(crate) fn expand_graphql(
                 self.graphql_schema().sdl()
             }
 
+            /// Get OpenAPI paths for this GraphQL service (for composition with OpenApiBuilder)
+            ///
+            /// Returns endpoints for GraphQL query execution and playground.
+            pub fn graphql_openapi_paths() -> ::std::vec::Vec<::server_less::OpenApiPath> {
+                vec![
+                    ::server_less::OpenApiPath {
+                        path: "/graphql".to_string(),
+                        method: "post".to_string(),
+                        operation: ::server_less::OpenApiOperation {
+                            summary: Some("GraphQL query endpoint".to_string()),
+                            operation_id: Some("graphql_query".to_string()),
+                            parameters: vec![],
+                            request_body: Some(::server_less::serde_json::json!({
+                                "required": true,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "required": ["query"],
+                                            "properties": {
+                                                "query": {
+                                                    "type": "string",
+                                                    "description": "GraphQL query string"
+                                                },
+                                                "operationName": {
+                                                    "type": "string",
+                                                    "description": "Optional operation name"
+                                                },
+                                                "variables": {
+                                                    "type": "object",
+                                                    "description": "Optional query variables"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            })),
+                            responses: {
+                                let mut r = ::server_less::serde_json::Map::new();
+                                r.insert("200".to_string(), ::server_less::serde_json::json!({
+                                    "description": "GraphQL response",
+                                    "content": {
+                                        "application/json": {
+                                            "schema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "data": {},
+                                                    "errors": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "message": {"type": "string"},
+                                                                "locations": {"type": "array"},
+                                                                "path": {"type": "array"}
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }));
+                                r
+                            },
+                            extra: ::server_less::serde_json::Map::new(),
+                        },
+                    },
+                    ::server_less::OpenApiPath {
+                        path: "/graphql".to_string(),
+                        method: "get".to_string(),
+                        operation: ::server_less::OpenApiOperation {
+                            summary: Some("GraphQL Playground".to_string()),
+                            operation_id: Some("graphql_playground".to_string()),
+                            parameters: vec![],
+                            request_body: None,
+                            responses: {
+                                let mut r = ::server_less::serde_json::Map::new();
+                                r.insert("200".to_string(), ::server_less::serde_json::json!({
+                                    "description": "GraphQL Playground HTML page",
+                                    "content": {
+                                        "text/html": {
+                                            "schema": {"type": "string"}
+                                        }
+                                    }
+                                }));
+                                r
+                            },
+                            extra: ::server_less::serde_json::Map::new(),
+                        },
+                    }
+                ]
+            }
+
             fn __graphql_resolve_query(
                 service: &::std::sync::Arc<Self>,
                 method: &str,

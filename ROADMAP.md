@@ -6,13 +6,14 @@ This document outlines the development roadmap for server-less.
 
 ## Current Status - Foundation ✅
 
-**18 macros implemented, 190+ tests passing**
+**18 macros implemented, 195+ tests passing**
 
 ### What's Working
 - ✅ Core runtime protocols (HTTP, CLI, MCP, WebSocket, JSON-RPC, GraphQL)
 - ✅ Schema generators (gRPC, Cap'n Proto, Thrift, Smithy, Connect)
 - ✅ Specification generators (OpenRPC, AsyncAPI, JSON Schema, Markdown)
 - ✅ OpenAPI standalone macro and composition (OpenApiBuilder)
+- ✅ Per-protocol OpenAPI paths methods (Phase 2)
 - ✅ Error derive macro with HTTP status mapping
 - ✅ Serve macro for multi-protocol composition
 - ✅ Context injection (HTTP, CLI, JSON-RPC, WebSocket)
@@ -27,7 +28,7 @@ This document outlines the development roadmap for server-less.
 ### Known Limitations
 - ⚠️ Schema generators use panic!() instead of Result types
 - ⚠️ GraphQL: Nested types and subscriptions not yet supported
-- ⚠️ OpenAPI composition phases 2-4 not yet implemented
+- ⚠️ OpenAPI composition phases 3-4 not yet implemented
 
 ---
 
@@ -36,7 +37,7 @@ This document outlines the development roadmap for server-less.
 **Goal:** Complete OpenAPI composition, improve schema generators
 
 ### OpenAPI Composition
-- [ ] **Phase 2: Per-protocol methods** - `http_openapi_paths()`, etc.
+- [x] **Phase 2: Per-protocol methods** - `http_openapi_paths()`, etc. ✅
 - [ ] **Phase 3: Serve integration** - Auto-generate combined spec
 - [ ] **Phase 4: Protocol-aware #[openapi]** - Detect sibling protocols
 

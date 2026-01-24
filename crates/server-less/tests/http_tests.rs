@@ -116,6 +116,37 @@ fn test_openapi_contains_operations() {
     assert_eq!(get_op.get("summary").unwrap(), "List all items");
 }
 
+#[test]
+fn test_http_openapi_paths_generated() {
+    let paths = ItemService::http_openapi_paths();
+
+    // Should have 3 paths: list_items, get_item, create_item
+    assert_eq!(paths.len(), 3);
+
+    // Check list_items
+    let list_path = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("list_items".to_string()));
+    assert!(list_path.is_some());
+    let list_path = list_path.unwrap();
+    assert_eq!(list_path.path, "/api/v1/items");
+    assert_eq!(list_path.method, "get");
+    assert_eq!(
+        list_path.operation.summary,
+        Some("List all items".to_string())
+    );
+
+    // Check create_item
+    let create_path = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("create_item".to_string()));
+    assert!(create_path.is_some());
+    let create_path = create_path.unwrap();
+    assert_eq!(create_path.path, "/api/v1/items");
+    assert_eq!(create_path.method, "post");
+    assert!(create_path.operation.request_body.is_some());
+}
+
 // HTTP handler tests would require setting up an actual test server
 // For comprehensive HTTP testing, consider using axum::TestClient
 // These tests verify the macro generates the expected code structure

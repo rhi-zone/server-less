@@ -302,3 +302,29 @@ async fn test_ws_async_with_request_id() {
     assert_eq!(json["result"], 25);
     assert_eq!(json["id"], "req-123");
 }
+
+#[test]
+fn test_ws_openapi_paths_generated() {
+    let paths = TestService::ws_openapi_paths();
+
+    // Should have 1 path: GET /ws (WebSocket upgrade)
+    assert_eq!(paths.len(), 1);
+
+    let ws_path = &paths[0];
+    assert_eq!(ws_path.path, "/ws");
+    assert_eq!(ws_path.method, "get");
+    assert!(
+        ws_path
+            .operation
+            .summary
+            .as_ref()
+            .unwrap()
+            .contains("WebSocket")
+    );
+
+    // Check that response includes 101 Switching Protocols
+    assert!(ws_path.operation.responses.contains_key("101"));
+
+    // Check extra contains WebSocket protocol info
+    assert!(ws_path.operation.extra.contains_key("x-websocket-protocol"));
+}

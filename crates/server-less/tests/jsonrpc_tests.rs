@@ -214,3 +214,28 @@ fn test_jsonrpc_custom_path_compiles() {
     let methods = CustomPathService::jsonrpc_methods();
     assert!(methods.contains(&"ping"));
 }
+
+#[test]
+fn test_jsonrpc_openapi_paths_generated() {
+    let paths = Calculator::jsonrpc_openapi_paths();
+
+    // Should have 1 path: POST /rpc
+    assert_eq!(paths.len(), 1);
+
+    let rpc_path = &paths[0];
+    assert_eq!(rpc_path.path, "/rpc");
+    assert_eq!(rpc_path.method, "post");
+    assert!(
+        rpc_path
+            .operation
+            .summary
+            .as_ref()
+            .unwrap()
+            .contains("JSON-RPC")
+    );
+    assert!(rpc_path.operation.request_body.is_some());
+
+    // Check that responses include 200 and 204
+    assert!(rpc_path.operation.responses.contains_key("200"));
+    assert!(rpc_path.operation.responses.contains_key("204"));
+}
