@@ -94,30 +94,27 @@ server-less = { features = ["openapi"] }  # Just schema generation, no axum
 Shared OpenAPI generation logic lives in `openapi_gen.rs` and is used by both
 `#[http]` and `#[openapi]` macros.
 
-**Future improvement:**
+### OpenAPI Composition (Queued)
 
-**Trait-based composable approach:** Define an `OpenApiSpec` trait that protocols
-   can implement, allowing generic composition:
-   ```rust
-   trait OpenApiSpec {
-       fn paths() -> Vec<OpenApiPath>;
-       fn schemas() -> Vec<OpenApiSchema>;
-   }
+Phase 1 complete: `OpenApiBuilder` in `server-less-openapi` crate.
+See `docs/design/openapi-composition.md` for full design.
 
-   // Protocol macros implement this:
-   #[http]  // Generates OpenApiSpec impl
-   #[jsonrpc]  // Could also generate OpenApiSpec impl
-   impl Service { }
+**Remaining phases:**
 
-   // Then compose:
-   let combined_spec = OpenApi::new()
-       .merge(HttpService::openapi_spec())
-       .merge(JsonRpcService::openapi_spec())
-       .build();
-   ```
-   This would enable cross-protocol schema sharing and composition.
+- [ ] **Phase 2: Per-protocol OpenAPI methods**
+  - Add `http_openapi_paths()` to `#[http]`
+  - Add `jsonrpc_openapi_paths()` to `#[jsonrpc]`
+  - Add similar methods to `#[graphql]`, `#[ws]`
 
-### OpenAPI Improvements (Post-extraction)
+- [ ] **Phase 3: Serve integration**
+  - `#[serve]` auto-generates combined `openapi_spec()` from detected protocols
+  - Opt-out via `#[serve(openapi = false)]`
+
+- [ ] **Phase 4: Protocol-aware #[openapi]**
+  - `#[openapi]` detects sibling protocol attributes
+  - Generates combined spec when multiple protocols present
+
+### OpenAPI Improvements
 - Add parameter schemas
 - Add response schemas
 - Support for `#[openapi(hidden)]` to exclude endpoints
