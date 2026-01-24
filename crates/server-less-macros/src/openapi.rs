@@ -69,7 +69,7 @@ use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
 use syn::{ItemImpl, Token, parse::Parse};
 
 use crate::context::has_qualified_context;
-use crate::http::{HttpMethodOverride, ResponseOverride, generate_openapi_spec};
+use crate::openapi_gen::{ResponseOverride, RouteOverride, generate_openapi_spec};
 
 /// Arguments for the #[openapi] attribute
 #[derive(Default)]
@@ -122,10 +122,10 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
     let prefix = args.prefix.unwrap_or_default();
 
     // Collect method information for OpenAPI generation
-    let mut openapi_methods: Vec<(MethodInfo, HttpMethodOverride, ResponseOverride)> = Vec::new();
+    let mut openapi_methods: Vec<(MethodInfo, RouteOverride, ResponseOverride)> = Vec::new();
 
     for method in &methods {
-        let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
+        let overrides = RouteOverride::parse_from_attrs(&method.method.attrs)?;
         let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
         if overrides.skip || overrides.hidden {

@@ -30,8 +30,10 @@ mod jsonschema;
 mod markdown;
 #[cfg(feature = "mcp")]
 mod mcp;
-#[cfg(feature = "http")]
+#[cfg(any(feature = "http", feature = "openapi"))]
 mod openapi;
+#[cfg(any(feature = "http", feature = "openapi"))]
+mod openapi_gen;
 #[cfg(feature = "openrpc")]
 mod openrpc;
 #[cfg(feature = "smithy")]
@@ -305,7 +307,7 @@ pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// #[http]
 /// impl MyService { /* ... */ }
 /// ```
-#[cfg(feature = "http")]
+#[cfg(any(feature = "http", feature = "openapi"))]
 #[proc_macro_attribute]
 pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as openapi::OpenApiArgs);

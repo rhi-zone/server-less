@@ -54,6 +54,7 @@ connect = ["server-less-macros/connect"]
 smithy = ["server-less-macros/smithy"]
 
 # Specification generators (no runtime deps)
+openapi = ["server-less-macros/openapi"]  # Standalone OpenAPI (no axum)
 openrpc = ["server-less-macros/openrpc"]
 asyncapi = ["server-less-macros/asyncapi"]
 jsonschema = ["server-less-macros/jsonschema"]
@@ -63,7 +64,7 @@ markdown = ["server-less-macros/markdown"]
 
 # All features
 full = [
-    "mcp", "http", "cli", "ws", "graphql", "jsonrpc",
+    "mcp", "http", "openapi", "cli", "ws", "graphql", "jsonrpc",
     "grpc", "capnp", "thrift", "connect", "smithy",
     "openrpc", "asyncapi", "jsonschema",
     "markdown"

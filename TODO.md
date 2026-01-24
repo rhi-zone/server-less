@@ -86,18 +86,17 @@ impl UserService {
 let spec = UserService::openapi_spec();
 ```
 
-**Current limitation:** `#[openapi]` requires the `http` feature because it reuses
-`generate_openapi_spec` and related types from `http.rs`.
+**Improvement 1 complete:** The `openapi` feature is now independent of `http`:
+```toml
+server-less = { features = ["openapi"] }  # Just schema generation, no axum
+```
 
-**Future improvements:**
+Shared OpenAPI generation logic lives in `openapi_gen.rs` and is used by both
+`#[http]` and `#[openapi]` macros.
 
-1. **Independent `openapi` feature:** Extract shared OpenAPI generation logic into a
-   separate module so `#[openapi]` can work without the full HTTP runtime. Would allow:
-   ```toml
-   server-less = { features = ["openapi"] }  # Just schema generation, no axum
-   ```
+**Future improvement:**
 
-2. **Trait-based composable approach:** Define an `OpenApiSpec` trait that protocols
+**Trait-based composable approach:** Define an `OpenApiSpec` trait that protocols
    can implement, allowing generic composition:
    ```rust
    trait OpenApiSpec {
