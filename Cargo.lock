@@ -1252,6 +1252,7 @@ dependencies = [
  "serde_json",
  "server-less-core",
  "server-less-macros",
+ "server-less-openapi",
  "tokio",
  "trybuild",
 ]
@@ -1280,6 +1281,15 @@ dependencies = [
  "server-less-parse",
  "server-less-rpc",
  "syn",
+]
+
+[[package]]
+name = "server-less-openapi"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

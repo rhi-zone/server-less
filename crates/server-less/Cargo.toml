@@ -8,6 +8,7 @@ description = "Composable derive macros for common Rust patterns"
 [dependencies]
 server-less-core = { path = "../server-less-core", default-features = false }
 server-less-macros = { path = "../server-less-macros", default-features = false }
+server-less-openapi = { path = "../server-less-openapi" }
 
 # Re-export common dependencies users will need
 serde = { version = "1", features = ["derive"] }

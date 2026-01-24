@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/server-less",
     "crates/server-less-core",
+    "crates/server-less-openapi",
     "crates/server-less-parse",
     "crates/server-less-rpc",
     "crates/server-less-macros",

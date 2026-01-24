@@ -196,6 +196,11 @@ pub use async_graphql_axum;
 // Re-export core types
 pub use server_less_core::*;
 
+// Re-export OpenAPI composition utilities
+pub use server_less_openapi::{
+    OpenApiBuilder, OpenApiError, OpenApiOperation, OpenApiParameter, OpenApiPath, OpenApiSchema,
+};
+
 // Re-export serde for generated code
 pub use serde;
 pub use serde_json;
@@ -249,7 +254,9 @@ pub mod prelude {
     pub use super::markdown;
 
     // Always available
-    pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, ServerlessError};
+    pub use super::{
+        Context, ErrorCode, ErrorResponse, IntoErrorCode, OpenApiBuilder, ServerlessError,
+    };
     pub use serde::{Deserialize, Serialize};
 
     // WebSocket sender (when ws feature enabled)
