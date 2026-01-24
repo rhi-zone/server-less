@@ -172,7 +172,7 @@ fn extract_option_inner(ty: &Type) -> Option<Type> {
 
 /// Per-method HTTP attribute overrides
 #[derive(Default, Clone)]
-pub(crate) struct HttpMethodOverride {
+pub struct HttpMethodOverride {
     pub method: Option<String>,
     pub path: Option<String>,
     pub skip: bool,
@@ -180,7 +180,7 @@ pub(crate) struct HttpMethodOverride {
 }
 
 impl HttpMethodOverride {
-    fn parse_from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
+    pub fn parse_from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         let mut result = Self::default();
 
         for attr in attrs {
@@ -215,14 +215,14 @@ impl HttpMethodOverride {
 
 /// Per-method response customization
 #[derive(Default, Clone)]
-pub(crate) struct ResponseOverride {
+pub struct ResponseOverride {
     pub status: Option<u16>,
     pub content_type: Option<String>,
     pub headers: Vec<(String, String)>,
 }
 
 impl ResponseOverride {
-    fn parse_from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
+    pub fn parse_from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         let mut result = Self::default();
         let mut pending_header_name: Option<String> = None;
 
@@ -273,6 +273,8 @@ impl ResponseOverride {
 #[derive(Default)]
 pub(crate) struct HttpArgs {
     pub prefix: Option<String>,
+    /// Whether to generate OpenAPI spec (default: true)
+    pub openapi: Option<bool>,
 }
 
 impl Parse for HttpArgs {
@@ -288,13 +290,19 @@ impl Parse for HttpArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.prefix = Some(lit.value());
                 }
+                "openapi" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.openapi = Some(lit.value());
+                }
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
                             "unknown argument `{other}`\n\
-                             Valid arguments: prefix\n\
-                             Example: #[http(prefix = \"/api/v1\")]"
+                             Valid arguments: prefix, openapi\n\
+                             Examples:\n\
+                             - #[http(prefix = \"/api/v1\")]\n\
+                             - #[http(openapi = false)]"
                         ),
                     ));
                 }
@@ -318,6 +326,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let has_qualified = has_qualified_context(&methods);
 
     let prefix = args.prefix.unwrap_or_default();
+    let generate_openapi = args.openapi.unwrap_or(true);
 
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
@@ -405,7 +414,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
         routes.push(route);
 
-        if !overrides.hidden {
+        if generate_openapi && !overrides.hidden {
             openapi_methods.push((
                 method.clone(),
                 overrides.clone(),
@@ -414,7 +423,19 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
     }
 
-    let openapi_fn = generate_openapi_spec(&struct_name, &prefix, &openapi_methods, has_qualified)?;
+    // Conditionally generate OpenAPI spec method
+    let openapi_method = if generate_openapi {
+        let openapi_fn =
+            generate_openapi_spec(&struct_name, &prefix, &openapi_methods, has_qualified)?;
+        quote! {
+            /// Get OpenAPI specification for this service
+            pub fn openapi_spec() -> ::server_less::serde_json::Value {
+                #openapi_fn
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     Ok(quote! {
         #impl_block
@@ -433,10 +454,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                     .with_state(state)
             }
 
-            /// Get OpenAPI specification for this service
-            pub fn openapi_spec() -> ::server_less::serde_json::Value {
-                #openapi_fn
-            }
+            #openapi_method
         }
 
         #(#handlers)*
@@ -808,7 +826,7 @@ fn generate_route(
     })
 }
 
-fn generate_openapi_spec(
+pub fn generate_openapi_spec(
     struct_name: &syn::Ident,
     prefix: &str,
     methods_with_overrides: &[(MethodInfo, HttpMethodOverride, ResponseOverride)],

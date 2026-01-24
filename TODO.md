@@ -13,26 +13,14 @@ Prioritized backlog of pending features, improvements, and ideas.
 ## High Priority
 
 ### WebSocket Bidirectional Patterns
-**Status:** Blocked - requires architecture changes
+**Status:** ✅ Implemented
 
-Currently WebSocket handlers are stateless request-response. True bidirectional communication requires handlers to have access to a sender/channel to push messages independently of requests.
+See commit `feat(ws): add WsSender for bidirectional WebSocket communication` for details.
 
-**Current limitation:**
+Methods can now receive a `WsSender` parameter for server push:
 ```rust
 #[ws]
 impl Service {
-    // Can only respond to incoming messages
-    async fn handle(&self, data: String) -> String {
-        format!("Echo: {}", data)
-    }
-}
-```
-
-**Desired capability:**
-```rust
-#[ws]
-impl Service {
-    // Need access to sender to push messages
     async fn handle(&self, data: String, sender: WsSender) -> String {
         // Can respond immediately
         let response = format!("Echo: {}", data);
@@ -40,7 +28,7 @@ impl Service {
         // Can also push messages later
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            sender.send("Delayed message").await;
+            sender.send("Delayed message").await.ok();
         });
 
         response
@@ -48,29 +36,19 @@ impl Service {
 }
 ```
 
-**Technical considerations:**
-- Need to inject `WsSender` into handler signature
-- Requires changes to `crates/trellis-macros/src/ws.rs` parameter extraction
-- May need new types in `crates/trellis-core/` for sender abstraction
-- Must handle sender lifecycle (what if connection closes?)
-- Should work with both JSON-RPC and raw WebSocket modes
-
-**Related:** WebSocket server-push examples (depends on this)
-
 ### WebSocket Server-Push Examples
-**Status:** Blocked by bidirectional patterns
+**Status:** ✅ Implemented
 
-Once bidirectional support is implemented, add examples showing:
-- Server-initiated notifications
-- Broadcasting to multiple clients
-- Subscription patterns (pub/sub)
-- Live data feeds (stock prices, metrics, etc.)
-
-**Location:** `examples/websocket-server-push/`
+Comprehensive examples added to `crates/server-less-macros/src/ws.rs` documentation:
+- Chat room with broadcasting
+- Background tasks with periodic heartbeats
+- Combining Context + WsSender for authenticated subscriptions
 
 ### Improve inline docs
-- Add more examples to existing documentation
-- Document Rust 2024 `+ use<>` requirement for streaming
+**Status:** ✅ Implemented
+
+- ✅ Added more examples to existing documentation
+- ✅ Document Rust 2024 `+ use<>` requirement for streaming
 
 ## Medium Priority
 
@@ -83,40 +61,62 @@ Once bidirectional support is implemented, add examples showing:
 - Document Rust 2024 `+ use<>` requirement for streaming
 
 ### Extract OpenAPI as Standalone Macro
-**Status:** Architecture decision needed
+**Status:** ✅ Partially implemented
 
-Currently OpenAPI spec generation is built into the `#[http]` macro, creating coupling. Should be extracted for:
-- Independent customization of OpenAPI generation
-- Composition with other schema generators
-- Reuse across protocols (not just HTTP)
+Two approaches now available:
 
-**Architecture options:**
+**1. Opt-out flag on `#[http]`:**
 ```rust
-// Option 1: Separate derive
-#[derive(OpenApi)]
-#[http]
+#[http(openapi = false)]  // No openapi_spec() method generated
 impl Service { }
 
-// Option 2: Explicit attribute
-#[http]
-#[openapi(title = "My API", version = "1.0.0")]
+#[http]  // Default: openapi = true, generates openapi_spec()
 impl Service { }
-
-// Option 3: Manual generation method
-let spec = Service::openapi_spec();
 ```
 
-**Technical considerations:**
-- Extract OpenAPI generation code from `crates/trellis-macros/src/http.rs`
-- Create new `crates/trellis-macros/src/openapi.rs` module
-- Decide on attribute vs derive approach
-- Ensure it can still access HTTP routing information
-- Consider composition with `#[http]`, `#[jsonrpc]`, `#[graphql]`
+**2. Standalone `#[openapi]` macro:**
+```rust
+#[openapi(prefix = "/api/v1")]
+impl UserService {
+    fn create_user(&self, name: String) -> User { }
+    fn get_user(&self, id: String) -> Option<User> { }
+}
 
-**Design questions:**
-- Should `#[openapi]` work independently, or require `#[http]`?
-- How to handle OpenAPI-specific attributes (`#[route(hidden)]`, etc.)?
-- Should other protocols also generate OpenAPI?
+// Use it:
+let spec = UserService::openapi_spec();
+```
+
+**Current limitation:** `#[openapi]` requires the `http` feature because it reuses
+`generate_openapi_spec` and related types from `http.rs`.
+
+**Future improvements:**
+
+1. **Independent `openapi` feature:** Extract shared OpenAPI generation logic into a
+   separate module so `#[openapi]` can work without the full HTTP runtime. Would allow:
+   ```toml
+   server-less = { features = ["openapi"] }  # Just schema generation, no axum
+   ```
+
+2. **Trait-based composable approach:** Define an `OpenApiSpec` trait that protocols
+   can implement, allowing generic composition:
+   ```rust
+   trait OpenApiSpec {
+       fn paths() -> Vec<OpenApiPath>;
+       fn schemas() -> Vec<OpenApiSchema>;
+   }
+
+   // Protocol macros implement this:
+   #[http]  // Generates OpenApiSpec impl
+   #[jsonrpc]  // Could also generate OpenApiSpec impl
+   impl Service { }
+
+   // Then compose:
+   let combined_spec = OpenApi::new()
+       .merge(HttpService::openapi_spec())
+       .merge(JsonRpcService::openapi_spec())
+       .build();
+   ```
+   This would enable cross-protocol schema sharing and composition.
 
 ### OpenAPI Improvements (Post-extraction)
 - Add parameter schemas

@@ -30,6 +30,8 @@ mod jsonschema;
 mod markdown;
 #[cfg(feature = "mcp")]
 mod mcp;
+#[cfg(feature = "http")]
+mod openapi;
 #[cfg(feature = "openrpc")]
 mod openrpc;
 #[cfg(feature = "smithy")]
@@ -227,7 +229,19 @@ mod ws;
 /// # Generated Methods
 /// - `http_router() -> axum::Router` - Complete router with all endpoints
 /// - `http_routes() -> Vec<&'static str>` - List of route paths
-/// - `openapi_spec() -> serde_json::Value` - OpenAPI 3.0 specification
+/// - `openapi_spec() -> serde_json::Value` - OpenAPI 3.0 specification (unless `openapi = false`)
+///
+/// # OpenAPI Control
+///
+/// By default, `#[http]` generates both HTTP routes and OpenAPI specs. You can disable
+/// OpenAPI generation:
+///
+/// ```ignore
+/// #[http(openapi = false)]  // No openapi_spec() method generated
+/// impl MyService { /* ... */ }
+/// ```
+///
+/// For standalone OpenAPI generation without HTTP routing, see `#[openapi]`.
 #[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -235,6 +249,69 @@ pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match http::expand_http(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Generate OpenAPI specification without HTTP routing.
+///
+/// Generates OpenAPI 3.0 specs using the same naming conventions as `#[http]`,
+/// but without creating route handlers. Useful for:
+/// - Schema-first development
+/// - Documentation-only use cases
+/// - Separate OpenAPI generation from HTTP routing
+///
+/// # Basic Usage
+///
+/// ```ignore
+/// use server_less::openapi;
+///
+/// #[openapi]
+/// impl UserService {
+///     /// Create a new user
+///     fn create_user(&self, name: String, email: String) -> User { /* ... */ }
+///
+///     /// Get user by ID
+///     fn get_user(&self, id: String) -> Option<User> { /* ... */ }
+/// }
+///
+/// // Generate spec:
+/// let spec = UserService::openapi_spec();
+/// ```
+///
+/// # With URL Prefix
+///
+/// ```ignore
+/// #[openapi(prefix = "/api/v1")]
+/// impl UserService { /* ... */ }
+/// ```
+///
+/// # Generated Methods
+///
+/// - `openapi_spec() -> serde_json::Value` - OpenAPI 3.0 specification
+///
+/// # Combining with #[http]
+///
+/// If you want separate control over OpenAPI generation:
+///
+/// ```ignore
+/// // Option 1: Disable OpenAPI in http, use standalone macro
+/// #[http(openapi = false)]
+/// #[openapi(prefix = "/api")]
+/// impl MyService { /* ... */ }
+///
+/// // Option 2: Just use http with default (openapi = true)
+/// #[http]
+/// impl MyService { /* ... */ }
+/// ```
+#[cfg(feature = "http")]
+#[proc_macro_attribute]
+pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as openapi::OpenApiArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match openapi::expand_openapi(args, impl_block) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }
