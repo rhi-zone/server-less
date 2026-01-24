@@ -1,5 +1,5 @@
 {
-  description = "trellis - Composable derive macros for Rust";
+  description = "server-less - Composable derive macros for Rust";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

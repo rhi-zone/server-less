@@ -23,7 +23,7 @@
 //! - `ws_handle_message_async(&self, message: &str).await` - Async handler
 //! - `ws_router(self) -> axum::Router` - Complete WebSocket server
 //!
-//! # Example
+//! # Basic Example
 //!
 //! ```ignore
 //! use server_less::ws;
@@ -52,6 +52,105 @@
 //! // {"method": "echo", "params": {"message": "hello"}}
 //! // Server responds:
 //! // {"result": "Echo: hello"}
+//! ```
+//!
+//! # Server Push with WsSender
+//!
+//! Methods can receive a `WsSender` parameter to send messages independently
+//! of the request/response cycle, enabling true bidirectional communication:
+//!
+//! ```ignore
+//! use server_less::{ws, WsSender};
+//! use std::collections::HashMap;
+//! use std::sync::{Arc, Mutex};
+//! use serde_json::json;
+//!
+//! #[derive(Clone)]
+//! struct ChatRoom {
+//!     users: Arc<Mutex<HashMap<String, Vec<WsSender>>>>,
+//! }
+//!
+//! #[ws(path = "/chat")]
+//! impl ChatRoom {
+//!     /// Join a chat room
+//!     async fn join(&self, sender: WsSender, room: String, username: String) -> String {
+//!         // Store the sender for server push
+//!         let mut users = self.users.lock().unwrap();
+//!         users.entry(room.clone()).or_default().push(sender.clone());
+//!
+//!         // Broadcast join notification to all users in room
+//!         for s in users.get(&room).unwrap() {
+//!             s.send_json(&json!({
+//!                 "type": "user_joined",
+//!                 "username": username
+//!             })).await.ok();
+//!         }
+//!
+//!         format!("Joined room: {}", room)
+//!     }
+//!
+//!     /// Send a message to all users in a room
+//!     async fn send_message(&self, room: String, username: String, message: String) -> String {
+//!         let users = self.users.lock().unwrap();
+//!         if let Some(senders) = users.get(&room) {
+//!             for sender in senders {
+//!                 sender.send_json(&json!({
+//!                     "type": "message",
+//!                     "username": username,
+//!                     "message": message
+//!                 })).await.ok();
+//!             }
+//!         }
+//!         "Message sent".to_string()
+//!     }
+//!
+//!     /// Background task example: periodic updates
+//!     async fn subscribe_updates(&self, sender: WsSender) -> String {
+//!         // Clone sender for background task
+//!         let sender_clone = sender.clone();
+//!         tokio::spawn(async move {
+//!             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+//!             loop {
+//!                 interval.tick().await;
+//!                 if sender_clone.send_json(&json!({
+//!                     "type": "heartbeat",
+//!                     "timestamp": chrono::Utc::now().to_rfc3339()
+//!                 })).await.is_err() {
+//!                     break; // Connection closed
+//!                 }
+//!             }
+//!         });
+//!         "Subscribed to updates".to_string()
+//!     }
+//! }
+//! ```
+//!
+//! # Combining Context and WsSender
+//!
+//! Methods can request both Context and WsSender for full access to request metadata
+//! and bidirectional communication:
+//!
+//! ```ignore
+//! use server_less::{ws, Context, WsSender};
+//!
+//! #[ws(path = "/api")]
+//! impl ApiService {
+//!     async fn authenticated_subscribe(
+//!         &self,
+//!         ctx: Context,
+//!         sender: WsSender,
+//!         topic: String,
+//!     ) -> Result<String, String> {
+//!         // Verify authentication from headers
+//!         let user_id = ctx.header("x-user-id")
+//!             .ok_or("Unauthorized")?;
+//!
+//!         // Subscribe with authentication context
+//!         self.subscribe_user(user_id, topic.clone(), sender).await;
+//!
+//!         Ok(format!("Subscribed to {}", topic))
+//!     }
+//! }
 //! ```
 
 use proc_macro2::TokenStream as TokenStream2;

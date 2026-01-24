@@ -3,8 +3,8 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 
 export default withMermaid(
   defineConfig({
-    title: 'Trellis',
-    description: 'Composable derive macros for Rust',
+    title: 'Server-less',
+    description: 'Write less server code - composable derive macros for Rust',
 
     themeConfig: {
       nav: [
@@ -31,7 +31,7 @@ export default withMermaid(
       },
 
       socialLinks: [
-        { icon: 'github', link: 'https://github.com/rhizome-lab/server-less' }
+        { icon: 'github', link: 'https://github.com/rhi-zone/server-less' }
       ],
 
       search: {

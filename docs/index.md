@@ -11,7 +11,7 @@ hero:
       link: /design/impl-first
     - theme: alt
       text: View on GitHub
-      link: https://github.com/rhizome-lab/server-less
+      link: https://github.com/rhi-zone/server-less
 
 features:
   - icon: 🏗️
@@ -113,7 +113,7 @@ Generate API documentation:
 - Better error handling
 - Improved documentation
 
-See [ROADMAP.md](https://github.com/rhizome-lab/server-less/blob/master/ROADMAP.md) for details.
+See [ROADMAP.md](https://github.com/rhi-zone/server-less/blob/master/ROADMAP.md) for details.
 
 ## Design Philosophy
 
@@ -126,9 +126,9 @@ Server-less follows four core principles:
 
 Read more: [Impl-First Design](/design/impl-first)
 
-## Part of Rhizome
+## Part of RHI
 
-Server-less is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem - tools for building composable systems.
+Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem - tools for building composable systems.
 
 Related projects:
 - **Lotus** - Object store (uses Server-less for server setup)
@@ -147,16 +147,16 @@ Related projects:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-server-less = { git = "https://github.com/rhizome-lab/server-less" }
+server-less = { git = "https://github.com/rhi-zone/server-less" }
 
 # Or select specific features
-server-less = { git = "https://github.com/rhizome-lab/server-less", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { git = "https://github.com/rhi-zone/server-less", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ## Contributing
 
-Contributions welcome! See [CLAUDE.md](https://github.com/rhizome-lab/server-less/blob/master/CLAUDE.md) for development guidelines.
+Contributions welcome! See [CLAUDE.md](https://github.com/rhi-zone/server-less/blob/master/CLAUDE.md) for development guidelines.
 
 ## License
 
-MIT License - see [LICENSE](https://github.com/rhizome-lab/server-less/blob/master/LICENSE) for details.
+MIT License - see [LICENSE](https://github.com/rhi-zone/server-less/blob/master/LICENSE) for details.

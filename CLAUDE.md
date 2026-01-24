@@ -135,9 +135,9 @@ cargo test         # Run tests
 cargo expand       # Inspect macro expansion
 ```
 
-## Part of Rhizome
+## Part of RHI
 
-Server-less is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem. Related projects:
+Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem. Related projects:
 - **Lotus** - Object store (uses server-less for server setup)
 - **Spore** - Lua runtime with LLM integration
 - **Hypha** - Async runtime primitives

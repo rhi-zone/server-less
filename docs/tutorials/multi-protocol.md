@@ -26,7 +26,7 @@ Becomes available as:
 
 ```toml
 [dependencies]
-server-less = { git = "https://github.com/rhizome-lab/server-less", features = ["full"] }
+server-less = { git = "https://github.com/rhi-zone/server-less", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 ```

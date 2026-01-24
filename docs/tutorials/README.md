@@ -180,15 +180,15 @@ impl Service {
 
 ## Need Help?
 
-- **Issues**: [GitHub Issues](https://github.com/rhizome-lab/server-less/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/rhizome-lab/server-less/discussions)
+- **Issues**: [GitHub Issues](https://github.com/rhi-zone/server-less/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/rhi-zone/server-less/discussions)
 - **Examples**: See `/examples` in the repository
 
 ## Contributing
 
 Found an issue in a tutorial? Have a tutorial idea?
 
-Open an issue or PR at [github.com/rhizome-lab/server-less](https://github.com/rhizome-lab/server-less)
+Open an issue or PR at [github.com/rhi-zone/server-less](https://github.com/rhi-zone/server-less)
 
 ---
 

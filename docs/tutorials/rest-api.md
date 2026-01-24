@@ -17,7 +17,7 @@ Add Server-less to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-server-less = { git = "https://github.com/rhizome-lab/server-less" }
+server-less = { git = "https://github.com/rhi-zone/server-less" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 ```

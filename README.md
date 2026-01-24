@@ -1,6 +1,6 @@
 # server-less
 
-[![Tests](https://img.shields.io/badge/tests-187%20passing-brightgreen)](https://github.com/rhizome-lab/server-less)
+[![Tests](https://img.shields.io/badge/tests-187%20passing-brightgreen)](https://github.com/rhi-zone/server-less)
 [![Rust](https://img.shields.io/badge/rust-2024%20edition-blue)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -128,10 +128,10 @@ Generate API documentation and contracts:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-server-less = { git = "https://github.com/rhizome-lab/server-less" }
+server-less = { git = "https://github.com/rhi-zone/server-less" }
 
 # Or select specific features
-server-less = { git = "https://github.com/rhizome-lab/server-less", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { git = "https://github.com/rhi-zone/server-less", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ### Available Features
@@ -285,9 +285,9 @@ server-less/
 - **[Iteration Log](docs/design/iteration-log.md)** - Evolution and design decisions
 - **[CLAUDE.md](CLAUDE.md)** - Development guidelines for AI assistants
 
-## Part of Rhizome
+## Part of RHI
 
-Server-less is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem - tools for building composable systems.
+Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem - tools for building composable systems.
 
 Related projects:
 - **Lotus** - Object store (uses server-less for server setup)
