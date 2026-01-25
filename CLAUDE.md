@@ -195,9 +195,21 @@ Scope is optional but recommended for multi-crate repos.
 - Document all attributes in both code and docs
 - Test macro expansion AND generated behavior
 
+## Design Principles
+
+**Unify, don't multiply.** One interface for multiple cases > separate interfaces. Plugin systems > hardcoded switches.
+
+**Simplicity over cleverness.** HashMap > inventory crate. OnceLock > lazy_static. Functions > traits until you need the trait. Use ecosystem tooling over hand-rolling.
+
+**Explicit over implicit.** Log when skipping. Show what's at stake before refusing.
+
+**Separate niche from shared.** Don't bloat shared config with feature-specific data. Use separate files for specialized data.
+
 ## Negative Constraints
 
 Do not:
+- Announce actions ("I will now...") - just do them
+- Leave work uncommitted
 - Generate code that isn't explicitly requested
 - Hide complexity in macro magic
 - Break when composed with other macros
