@@ -29,17 +29,18 @@ Prioritized backlog of pending features and improvements.
 ### OpenAPI Improvements
 
 - [ ] Add richer parameter schemas (description, examples, enum values)
-- [ ] Add response schemas with content types and examples
-- [ ] Support `#[openapi(hidden)]` to exclude specific endpoints
-- [ ] Support `#[openapi(tags = ["users"])]` for grouping
-- [ ] Support `#[openapi(deprecated)]` for deprecation warnings
+- [x] Add response descriptions via `#[response(description = "...")]` ✅
+- [x] Support `#[route(hidden)]` to exclude specific endpoints ✅
+- [x] Support `#[route(tags = "users,admin")]` for grouping ✅
+- [x] Support `#[route(deprecated)]` for deprecation warnings ✅
+- [x] Support `#[route(description = "...")]` for extended descriptions ✅
 
 ### GraphQL Improvements
 
-- [ ] Nested type resolution for complex relationships
+- [x] Nested type resolution for complex relationships ✅
 - [x] Custom scalar support (DateTime, UUID, Url, JSON) ✅
-- [ ] Subscription support for real-time updates
-- [ ] Input types for mutations (separate from output types)
+- [ ] Subscription support for real-time updates (requires WebSocket integration)
+- [x] Input types for mutations (`#[graphql_input]` + `#[graphql(inputs(...))]`) ✅
 - [x] Enum type support (`#[graphql_enum]` + `#[graphql(enums(...))]`) ✅
 - [ ] Interface/union type support
 
@@ -49,13 +50,12 @@ Prioritized backlog of pending features and improvements.
   - `validate_schema()` returns Result (grpc, capnp, thrift, smithy)
   - `assert_schema_matches()` panics for test convenience (intentional)
 - [x] Add "help" hints to `SchemaValidationError` ✅
-- [ ] Add span information to schema generator errors
+- [x] Add span information to HTTP path validation errors ✅
 
 ### Streaming
 
 - [ ] MCP streaming responses (progressive tool output)
-- [ ] gRPC unary streaming
-- [ ] gRPC server streaming
+- [x] gRPC server streaming (proto3 `stream` keyword generation) ✅
 - [ ] gRPC client streaming
 - [ ] gRPC bidirectional streaming
 
