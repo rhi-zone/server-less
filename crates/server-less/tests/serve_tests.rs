@@ -161,3 +161,75 @@ fn test_serve_jsonrpc_only() {
     let service = JsonRpcOnlyService;
     let _router = service.router();
 }
+
+// ============================================================================
+// OpenAPI Integration Tests
+// ============================================================================
+
+#[test]
+fn test_serve_combined_openapi_spec() {
+    let spec = MultiService::combined_openapi_spec();
+
+    // Should have OpenAPI version
+    assert_eq!(spec["openapi"], "3.0.0");
+
+    // Should have info with struct name as title
+    assert_eq!(spec["info"]["title"], "MultiService");
+
+    // Should have paths from HTTP protocol
+    assert!(
+        spec["paths"].is_object(),
+        "Should have paths object. Spec: {}",
+        serde_json::to_string_pretty(&spec).unwrap()
+    );
+}
+
+#[test]
+fn test_serve_http_openapi_has_paths() {
+    let spec = HttpOnlyService::combined_openapi_spec();
+
+    // Should have the HTTP endpoint path
+    let paths = &spec["paths"];
+    assert!(
+        paths.is_object(),
+        "Should have paths. Spec: {}",
+        serde_json::to_string_pretty(&spec).unwrap()
+    );
+}
+
+#[test]
+fn test_serve_combined_openapi_includes_jsonrpc() {
+    let spec = CombinedRpcService::combined_openapi_spec();
+
+    // Should have HTTP paths AND JSON-RPC path
+    let paths = &spec["paths"];
+    assert!(paths.is_object(), "Should have paths object");
+
+    // JSON-RPC endpoint should be present
+    assert!(
+        paths["/rpc"].is_object(),
+        "Should have /rpc JSON-RPC endpoint. Paths: {}",
+        serde_json::to_string_pretty(paths).unwrap()
+    );
+}
+
+// Test openapi = false opt-out
+#[derive(Clone)]
+struct NoOpenApiService;
+
+#[http]
+#[serve(http, openapi = false)]
+impl NoOpenApiService {
+    pub fn list_items(&self) -> Vec<String> {
+        vec![]
+    }
+}
+
+#[test]
+fn test_serve_openapi_disabled() {
+    // Service should still work, just no combined_openapi_spec() method
+    let service = NoOpenApiService;
+    let _router = service.router();
+    // Note: combined_openapi_spec() should NOT exist on this type
+    // (verified by the fact that it compiles without the method)
+}

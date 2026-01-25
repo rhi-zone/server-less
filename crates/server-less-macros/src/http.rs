@@ -913,10 +913,21 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
 /// Arguments for the #[serve] attribute
 #[derive(Default)]
 pub(crate) struct ServeArgs {
-    /// Protocols to serve (http, ws)
+    /// Protocols to serve (http, ws, jsonrpc, graphql)
     pub protocols: Vec<String>,
     /// Health check path (default: /health)
     pub health_path: Option<String>,
+    /// OpenAPI spec generation (default: true when protocols are present)
+    /// Set to false with `openapi = false`
+    pub openapi: Option<bool>,
+}
+
+impl ServeArgs {
+    /// Whether OpenAPI spec should be generated.
+    /// Default: true (opt-out with `openapi = false`)
+    pub fn openapi_enabled(&self) -> bool {
+        self.openapi.unwrap_or(true)
+    }
 }
 
 impl Parse for ServeArgs {
@@ -936,16 +947,28 @@ impl Parse for ServeArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.health_path = Some(lit.value());
                 }
+                "openapi" => {
+                    if input.peek(Token![=]) {
+                        input.parse::<Token![=]>()?;
+                        let lit: syn::LitBool = input.parse()?;
+                        args.openapi = Some(lit.value());
+                    } else {
+                        // Bare `openapi` means enable
+                        args.openapi = Some(true);
+                    }
+                }
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown protocol `{other}`\n\
+                            "unknown argument `{other}`\n\
                              \n\
                              Valid protocols: http, ws, jsonrpc, graphql\n\
-                             Valid options: health\n\
+                             Valid options: health, openapi\n\
                              \n\
-                             Example: #[serve(http, ws, health = \"/status\")]"
+                             Examples:\n\
+                             - #[serve(http, ws, health = \"/status\")]\n\
+                             - #[serve(http, openapi = false)]"
                         ),
                     ));
                 }
@@ -964,10 +987,46 @@ impl Parse for ServeArgs {
 pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
 
+    let openapi_enabled = args.openapi_enabled();
     let health_path = args.health_path.unwrap_or_else(|| "/health".to_string());
 
     // Build router combination based on protocols
     let router_setup = generate_router_setup(&args.protocols);
+
+    // Generate OpenAPI spec method and route if enabled
+    let (openapi_spec_method, openapi_route) = if openapi_enabled {
+        let openapi_paths_merges = generate_openapi_merges(&args.protocols);
+        let struct_name_str = struct_name.to_string();
+
+        let method = quote! {
+            /// Get the combined OpenAPI spec for all configured protocols.
+            ///
+            /// Merges paths from HTTP, JSON-RPC, GraphQL, and/or WebSocket
+            /// into a single OpenAPI 3.0 spec using OpenApiBuilder.
+            ///
+            /// Disable with `#[serve(http, openapi = false)]`.
+            pub fn combined_openapi_spec() -> ::server_less::serde_json::Value {
+                ::server_less::OpenApiBuilder::new()
+                    .title(#struct_name_str)
+                    .version("0.1.0")
+                    #openapi_paths_merges
+                    .build()
+            }
+        };
+
+        let route = quote! {
+            let router = router.route(
+                "/openapi.json",
+                ::axum::routing::get(|| async {
+                    ::axum::Json(#struct_name::combined_openapi_spec())
+                })
+            );
+        };
+
+        (method, route)
+    } else {
+        (quote! {}, quote! {})
+    };
 
     // Generate the serve method
     let serve_impl = quote! {
@@ -985,6 +1044,9 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
                     ::axum::routing::get(|| async { "ok" })
                 );
 
+                // Add OpenAPI spec endpoint
+                #openapi_route
+
                 let listener = ::tokio::net::TcpListener::bind(addr.as_ref()).await?;
                 ::axum::serve(listener, router).await
             }
@@ -996,11 +1058,18 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
             {
                 #router_setup
 
-                router.route(
+                let router = router.route(
                     #health_path,
                     ::axum::routing::get(|| async { "ok" })
-                )
+                );
+
+                // Add OpenAPI spec endpoint
+                #openapi_route
+
+                router
             }
+
+            #openapi_spec_method
         }
     };
 
@@ -1009,6 +1078,39 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
 
         #serve_impl
     })
+}
+
+/// Generate OpenAPI merge calls for each enabled protocol.
+fn generate_openapi_merges(protocols: &[String]) -> TokenStream2 {
+    let has_http = protocols.contains(&"http".to_string());
+    let has_ws = protocols.contains(&"ws".to_string());
+    let has_jsonrpc = protocols.contains(&"jsonrpc".to_string());
+    let has_graphql = protocols.contains(&"graphql".to_string());
+
+    let mut merges = Vec::new();
+
+    if has_http {
+        merges.push(quote! {
+            .merge_paths(Self::http_openapi_paths())
+        });
+    }
+    if has_jsonrpc {
+        merges.push(quote! {
+            .merge_paths(Self::jsonrpc_openapi_paths())
+        });
+    }
+    if has_graphql {
+        merges.push(quote! {
+            .merge_paths(Self::graphql_openapi_paths())
+        });
+    }
+    if has_ws {
+        merges.push(quote! {
+            .merge_paths(Self::ws_openapi_paths())
+        });
+    }
+
+    quote! { #(#merges)* }
 }
 
 /// Generate router setup code based on enabled protocols

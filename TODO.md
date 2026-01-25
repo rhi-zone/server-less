@@ -16,10 +16,10 @@ Prioritized backlog of pending features and improvements.
   - [x] Add `graphql_openapi_paths() -> Vec<OpenApiPath>` to `#[graphql]`
   - [x] Add `ws_openapi_paths() -> Vec<OpenApiPath>` to `#[ws]`
 
-- [ ] **Phase 3: Serve integration**
-  - [ ] Parse `openapi` in `#[serve]` args
-  - [ ] Generate combined `openapi_spec()` from detected protocols
-  - [ ] Support `#[serve(openapi = false)]` opt-out
+- [x] **Phase 3: Serve integration** ✅
+  - [x] Parse `openapi` in `#[serve]` args
+  - [x] Generate combined `openapi_spec()` from detected protocols
+  - [x] Support `#[serve(openapi = false)]` opt-out
 
 - [ ] **Phase 4: Protocol-aware #[openapi]**
   - [ ] Detect sibling protocol attributes (`#[http]`, `#[jsonrpc]`, etc.)
