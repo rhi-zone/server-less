@@ -33,7 +33,7 @@ Prioritized backlog of pending features and improvements.
 - [x] Support `#[route(hidden)]` to exclude specific endpoints ✅
 - [x] Support `#[route(tags = "users,admin")]` for grouping ✅
 - [x] Support `#[route(deprecated)]` for deprecation warnings ✅
-- [x] Support `#[route(description = "...")]` for extended descriptions ✅
+- [x] Doc comments → summary (first line) + description (full text) ✅
 
 ### GraphQL Improvements
 

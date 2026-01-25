@@ -245,7 +245,10 @@ struct EnhancedAttrsService;
 #[openapi(prefix = "/api")]
 impl EnhancedAttrsService {
     /// Get user by ID
-    #[route(tags = "users,public", description = "Fetch a user by their unique ID")]
+    ///
+    /// Fetch a user by their unique ID from the database.
+    /// Returns the user's data as a JSON string.
+    #[route(tags = "users,public")]
     pub fn get_user(&self, id: String) -> String {
         id
     }
@@ -302,17 +305,32 @@ fn test_openapi_deprecated_attribute() {
 }
 
 #[test]
-fn test_openapi_description_attribute() {
+fn test_openapi_description_from_doc_comment() {
     let spec = EnhancedAttrsService::openapi_spec();
     let paths = &spec["paths"];
 
     let get_user = &paths["/api/users/{id}"]["get"];
     assert!(get_user.is_object(), "Should have get_user endpoint");
 
+    // Summary should be the first line of the doc comment
     assert_eq!(
-        get_user["description"].as_str(),
-        Some("Fetch a user by their unique ID"),
-        "Should have description"
+        get_user["summary"].as_str(),
+        Some("Get user by ID"),
+        "Summary should be first line of doc comment"
+    );
+
+    // Description should be the full doc comment
+    let description = get_user["description"].as_str();
+    assert!(
+        description.is_some(),
+        "Should have description from doc comment"
+    );
+    assert!(
+        description
+            .unwrap()
+            .contains("Fetch a user by their unique ID"),
+        "Description should contain full doc text. Got: {:?}",
+        description
     );
 }
 

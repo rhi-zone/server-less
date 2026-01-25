@@ -57,8 +57,6 @@ pub struct RouteOverride {
     pub tags: Vec<String>,
     /// Mark this operation as deprecated
     pub deprecated: bool,
-    /// Extended description (separate from doc-comment summary)
-    pub description: Option<String>,
 }
 
 impl RouteOverride {
@@ -104,15 +102,11 @@ impl RouteOverride {
                         .filter(|s| !s.is_empty())
                         .collect();
                     Ok(())
-                } else if meta.path.is_ident("description") {
-                    let value: syn::LitStr = meta.value()?.parse()?;
-                    result.description = Some(value.value());
-                    Ok(())
                 } else {
                     Err(meta.error(
                         "unknown attribute\n\
                          \n\
-                         Valid attributes: method, path, skip, hidden, tags, deprecated, description\n\
+                         Valid attributes: method, path, skip, hidden, tags, deprecated\n\
                          \n\
                          Examples:\n\
                          - #[route(method = \"POST\")]\n\
@@ -120,7 +114,8 @@ impl RouteOverride {
                          - #[route(skip)] or #[route(hidden)]\n\
                          - #[route(tags = \"users,admin\")]\n\
                          - #[route(deprecated)]\n\
-                         - #[route(description = \"Extended description\")]",
+                         \n\
+                         Note: Use doc comments for descriptions (first line = summary, full = description)",
                     ))
                 }
             })?;
@@ -190,6 +185,27 @@ impl ResponseOverride {
         }
 
         Ok(result)
+    }
+}
+
+/// Split doc comment into summary (first line) and description (full text).
+///
+/// Returns (summary, description) where:
+/// - summary is the first non-empty line (or method name if no docs)
+/// - description is the full doc comment (or None if single line or no docs)
+fn split_doc_comment(docs: &Option<String>, fallback: &str) -> (String, Option<String>) {
+    match docs {
+        Some(doc_text) if !doc_text.is_empty() => {
+            let first_line = doc_text.lines().next().unwrap_or(fallback).to_string();
+            // Only set description if there's more than just the first line
+            let description = if doc_text.contains('\n') {
+                Some(doc_text.clone())
+            } else {
+                None
+            };
+            (first_line, description)
+        }
+        _ => (fallback.to_string(), None),
     }
 }
 
@@ -288,7 +304,7 @@ pub fn generate_openapi_paths(
         let full_path = format!("{}{}", prefix, path);
         let http_method_str = http_method.as_str().to_lowercase();
 
-        let summary = method.docs.clone().unwrap_or_else(|| method_name.clone());
+        let (summary, description) = split_doc_comment(&method.docs, &method_name);
         let operation_id = method_name.clone();
 
         let default_has_body = matches!(
@@ -428,9 +444,8 @@ pub fn generate_openapi_paths(
         // Extract new fields from overrides
         let tags = &overrides.tags;
         let deprecated = overrides.deprecated;
-        let description = overrides.description.as_ref();
         let has_description = description.is_some();
-        let description_str = description.cloned().unwrap_or_default();
+        let description_str = description.clone().unwrap_or_default();
 
         path_constructors.push(quote! {
             ::server_less::OpenApiPath {
@@ -482,7 +497,7 @@ pub fn generate_openapi_spec(
         let full_path = format!("{}{}", prefix, path);
         let http_method_str = http_method.as_str().to_lowercase();
 
-        let summary = method.docs.clone().unwrap_or_else(|| method_name.clone());
+        let (summary, description) = split_doc_comment(&method.docs, &method_name);
         let operation_id = method_name.clone();
 
         let default_has_body = matches!(
@@ -594,9 +609,8 @@ pub fn generate_openapi_spec(
         // Extract new OpenAPI fields from overrides
         let tags = &overrides.tags;
         let deprecated = overrides.deprecated;
-        let description = overrides.description.as_ref();
         let has_description = description.is_some();
-        let description_str = description.cloned().unwrap_or_default();
+        let description_str = description.clone().unwrap_or_default();
         let success_description = response_overrides
             .description
             .clone()
