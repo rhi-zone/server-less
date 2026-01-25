@@ -5,6 +5,7 @@ export default withMermaid(
   defineConfig({
     title: 'Server-less',
     description: 'Write less server code - composable derive macros for Rust',
+    base: '/server-less/',
 
     themeConfig: {
       nav: [
