@@ -505,3 +505,209 @@ fn test_graphql_enum_registered_in_schema() {
         sdl
     );
 }
+
+// ============================================================================
+// Nested Object Tests
+// ============================================================================
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct NestedProfile {
+    bio: String,
+    avatar_url: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct UserWithProfile {
+    id: i32,
+    name: String,
+    profile: NestedProfile,
+}
+
+#[derive(Clone)]
+struct NestedService;
+
+#[graphql]
+impl NestedService {
+    /// Get user with nested profile
+    pub fn get_user_with_profile(&self, id: i32) -> UserWithProfile {
+        UserWithProfile {
+            id,
+            name: "Alice".to_string(),
+            profile: NestedProfile {
+                bio: "Software engineer".to_string(),
+                avatar_url: "https://example.com/avatar.jpg".to_string(),
+            },
+        }
+    }
+
+    /// Get list of users with profiles
+    pub fn list_users_with_profiles(&self) -> Vec<UserWithProfile> {
+        vec![
+            UserWithProfile {
+                id: 1,
+                name: "Alice".to_string(),
+                profile: NestedProfile {
+                    bio: "Engineer".to_string(),
+                    avatar_url: "https://example.com/alice.jpg".to_string(),
+                },
+            },
+            UserWithProfile {
+                id: 2,
+                name: "Bob".to_string(),
+                profile: NestedProfile {
+                    bio: "Designer".to_string(),
+                    avatar_url: "https://example.com/bob.jpg".to_string(),
+                },
+            },
+        ]
+    }
+}
+
+#[tokio::test]
+async fn test_graphql_nested_object_query() {
+    let service = NestedService;
+    let schema = service.graphql_schema();
+
+    // Query nested object
+    let result = schema.execute("{ getUserWithProfile(id: 42) }").await;
+
+    assert!(
+        result.errors.is_empty(),
+        "Query should succeed: {:?}",
+        result.errors
+    );
+
+    // Convert to JSON for easier inspection
+    let json: serde_json::Value = serde_json::to_value(&result.data).unwrap();
+    let user = &json["getUserWithProfile"];
+
+    // Check top-level fields
+    assert_eq!(user["id"], 42);
+    assert_eq!(user["name"], "Alice");
+
+    // Check nested profile object (should NOT be a string)
+    let profile = &user["profile"];
+    assert!(
+        profile.is_object(),
+        "Profile should be an object, not a string. Got: {:?}",
+        profile
+    );
+    assert_eq!(profile["bio"], "Software engineer");
+    assert_eq!(profile["avatar_url"], "https://example.com/avatar.jpg");
+}
+
+#[tokio::test]
+async fn test_graphql_nested_object_in_list() {
+    let service = NestedService;
+    let schema = service.graphql_schema();
+
+    // Query list of nested objects
+    let result = schema.execute("{ listUsersWithProfiles }").await;
+
+    assert!(
+        result.errors.is_empty(),
+        "Query should succeed: {:?}",
+        result.errors
+    );
+
+    // Convert to JSON for easier inspection
+    let json: serde_json::Value = serde_json::to_value(&result.data).unwrap();
+    let users = json["listUsersWithProfiles"]
+        .as_array()
+        .expect("Should be an array");
+
+    assert_eq!(users.len(), 2);
+
+    // Check first user's nested profile
+    let alice = &users[0];
+    assert_eq!(alice["name"], "Alice");
+    let alice_profile = &alice["profile"];
+    assert!(
+        alice_profile.is_object(),
+        "Profile should be an object. Got: {:?}",
+        alice_profile
+    );
+    assert_eq!(alice_profile["bio"], "Engineer");
+
+    // Check second user's nested profile
+    let bob = &users[1];
+    assert_eq!(bob["name"], "Bob");
+    let bob_profile = &bob["profile"];
+    assert!(
+        bob_profile.is_object(),
+        "Profile should be an object. Got: {:?}",
+        bob_profile
+    );
+    assert_eq!(bob_profile["bio"], "Designer");
+}
+
+// ============================================================================
+// Input Type Tests
+// ============================================================================
+
+use server_less::graphql_input;
+
+#[graphql_input]
+#[derive(Clone, Debug, Deserialize)]
+struct CreateUserInput {
+    /// User's name
+    name: String,
+    /// User's email address
+    email: String,
+    /// Optional age
+    age: Option<i32>,
+}
+
+#[derive(Clone)]
+struct InputService;
+
+#[graphql(inputs(CreateUserInput))]
+impl InputService {
+    /// Get service status
+    pub fn get_status(&self) -> String {
+        "running".to_string()
+    }
+
+    /// Create a user
+    pub fn create_user(&self, input: CreateUserInput) -> String {
+        format!("Created: {} <{}>", input.name, input.email)
+    }
+}
+
+#[test]
+fn test_graphql_input_type_generated() {
+    // Verify the input type helper exists
+    let input_type = CreateUserInput::__graphql_input_type();
+    assert_eq!(input_type.type_name(), "CreateUserInput");
+}
+
+#[test]
+fn test_graphql_input_schema_registration() {
+    let service = InputService;
+    let sdl = service.graphql_sdl();
+
+    // Should have input type in schema
+    assert!(
+        sdl.contains("input CreateUserInput"),
+        "Should register CreateUserInput input type. SDL:\n{}",
+        sdl
+    );
+
+    // Check fields
+    assert!(
+        sdl.contains("name: String!"),
+        "Should have name field. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("email: String!"),
+        "Should have email field. SDL:\n{}",
+        sdl
+    );
+    // Optional field should not have !
+    assert!(
+        sdl.contains("age: Int"),
+        "Should have age field. SDL:\n{}",
+        sdl
+    );
+}

@@ -315,7 +315,10 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                         method: "post".to_string(),
                         operation: ::server_less::OpenApiOperation {
                             summary: Some(format!("JSON-RPC 2.0 endpoint (methods: {})", methods_desc)),
+                            description: None,
                             operation_id: Some("jsonrpc".to_string()),
+                            tags: vec!["jsonrpc".to_string()],
+                            deprecated: false,
                             parameters: vec![],
                             request_body: Some(::server_less::serde_json::json!({
                                 "required": true,

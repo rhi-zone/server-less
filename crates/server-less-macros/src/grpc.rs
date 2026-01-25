@@ -181,10 +181,22 @@ fn generate_proto_method(method: &MethodInfo) -> String {
         .as_ref()
         .map(|d| format!("  // {}\n", d))
         .unwrap_or_default();
-    format!(
-        "{}  rpc {}({}) returns ({});",
-        doc, method_name, request_name, response_name
-    )
+
+    // Check if this is a streaming response (returns impl Stream<Item = T>)
+    let ret = &method.return_info;
+    if ret.is_stream {
+        // Server streaming RPC
+        format!(
+            "{}  rpc {}({}) returns (stream {});",
+            doc, method_name, request_name, response_name
+        )
+    } else {
+        // Unary RPC
+        format!(
+            "{}  rpc {}({}) returns ({});",
+            doc, method_name, request_name, response_name
+        )
+    }
 }
 
 fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
@@ -205,6 +217,13 @@ fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
     let ret = &method.return_info;
     let response_msg = if ret.is_unit {
         format!("message {} {{\n}}", response_name)
+    } else if ret.is_stream {
+        // For streaming responses, use the stream item type
+        let proto_type = rust_type_to_proto(&ret.stream_item);
+        format!(
+            "message {} {{\n  {} result = 1;\n}}",
+            response_name, proto_type
+        )
     } else {
         let proto_type = rust_type_to_proto(&ret.ty);
         format!(

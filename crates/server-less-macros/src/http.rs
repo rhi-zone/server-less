@@ -726,7 +726,7 @@ fn generate_route(
     };
 
     let path = if let Some(ref p) = overrides.path {
-        validate_http_path(p)?;
+        validate_http_path(p, method_name.span())?;
         p.clone()
     } else {
         infer_path(&method_name.to_string(), &http_method, &method.params)
@@ -764,11 +764,11 @@ fn normalize_path_for_duplicate_check(path: &str) -> String {
 }
 
 /// Validate HTTP path at compile time
-fn validate_http_path(path: &str) -> syn::Result<()> {
+fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result<()> {
     // Check that path starts with /
     if !path.starts_with('/') {
         return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
+            method_span,
             format!(
                 "HTTP path must start with '/'. Got: '{}'\n\
                  \n\
@@ -781,7 +781,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
     // Check for multiple consecutive slashes
     if path.contains("//") {
         return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
+            method_span,
             format!(
                 "HTTP path contains consecutive slashes. Path: '{}'\n\
                  \n\
@@ -794,7 +794,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
     // Warn about trailing slashes (can cause routing issues)
     if path.len() > 1 && path.ends_with('/') {
         return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
+            method_span,
             format!(
                 "HTTP path has trailing slash. Path: '{}'\n\
                  \n\
@@ -821,7 +821,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
             ""
         };
         return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
+            method_span,
             format!(
                 "HTTP path contains invalid character '{}'. Path: '{}'{}",
                 ch, path, hint
@@ -834,7 +834,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
     let close_braces = path.matches('}').count();
     if open_braces != close_braces {
         return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
+            method_span,
             format!(
                 "HTTP path has mismatched braces. Path: '{}'\n\
                  \n\
@@ -854,7 +854,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
             // Check for empty parameter name
             if param_name.is_empty() {
                 return Err(syn::Error::new(
-                    proc_macro2::Span::call_site(),
+                    method_span,
                     format!(
                         "HTTP path has empty path parameter at segment {}. Path: '{}'\n\
                          \n\
@@ -870,7 +870,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
                 .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
             {
                 return Err(syn::Error::new(
-                    proc_macro2::Span::call_site(),
+                    method_span,
                     format!(
                         "HTTP path parameter '{}' contains invalid characters. Path: '{}'\n\
                          \n\
@@ -883,7 +883,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
             // Check for duplicate parameter names
             if !param_names.insert(param_name.to_string()) {
                 return Err(syn::Error::new(
-                    proc_macro2::Span::call_site(),
+                    method_span,
                     format!(
                         "HTTP path has duplicate parameter '{{{}}}'. Path: '{}'\n\
                          \n\
@@ -896,7 +896,7 @@ fn validate_http_path(path: &str) -> syn::Result<()> {
         } else if part.contains('{') || part.contains('}') {
             // Malformed segment with partial braces
             return Err(syn::Error::new(
-                proc_macro2::Span::call_site(),
+                method_span,
                 format!(
                     "HTTP path has malformed path parameter at segment {}. Path: '{}'\n\
                      \n\

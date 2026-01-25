@@ -248,3 +248,76 @@ fn test_schema_validation_fails_on_mismatch() {
     let err = result.unwrap_err();
     assert!(err.has_differences(), "Error should have differences");
 }
+
+// ============================================================================
+// Streaming Tests
+// ============================================================================
+
+use futures::Stream;
+
+#[derive(Clone)]
+struct StreamingService;
+
+#[grpc(package = "streaming.v1")]
+impl StreamingService {
+    /// Get a single item (unary)
+    pub fn get_item(&self, id: String) -> String {
+        id
+    }
+
+    /// Stream items (server streaming)
+    pub fn stream_items(&self) -> impl Stream<Item = String> + use<> {
+        futures::stream::iter(vec!["a".to_string(), "b".to_string()])
+    }
+
+    /// Stream numbers
+    pub fn stream_numbers(&self, count: i32) -> impl Stream<Item = i32> + use<> {
+        futures::stream::iter(0..count)
+    }
+}
+
+#[test]
+fn test_streaming_rpc_generates_stream_keyword() {
+    let proto = StreamingService::proto_schema();
+
+    // Unary method should NOT have stream keyword
+    assert!(
+        proto.contains("rpc GetItem(GetItemRequest) returns (GetItemResponse);"),
+        "Unary method should not have stream. Proto:\n{}",
+        proto
+    );
+
+    // Streaming methods SHOULD have stream keyword
+    assert!(
+        proto.contains("rpc StreamItems(StreamItemsRequest) returns (stream StreamItemsResponse);"),
+        "Stream method should have 'stream' keyword. Proto:\n{}",
+        proto
+    );
+
+    assert!(
+        proto.contains(
+            "rpc StreamNumbers(StreamNumbersRequest) returns (stream StreamNumbersResponse);"
+        ),
+        "Stream method should have 'stream' keyword. Proto:\n{}",
+        proto
+    );
+}
+
+#[test]
+fn test_streaming_response_message() {
+    let proto = StreamingService::proto_schema();
+
+    // Streaming response should use the item type
+    assert!(
+        proto.contains("message StreamItemsResponse"),
+        "Should have response message. Proto:\n{}",
+        proto
+    );
+
+    // The response should contain the stream item type
+    assert!(
+        proto.contains("string result = 1;") || proto.contains("int32 result = 1;"),
+        "Response should have result field with correct type. Proto:\n{}",
+        proto
+    );
+}

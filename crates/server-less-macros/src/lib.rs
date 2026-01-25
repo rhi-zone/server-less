@@ -6,6 +6,8 @@
 use proc_macro::TokenStream;
 #[cfg(feature = "graphql")]
 use syn::ItemEnum;
+#[cfg(feature = "graphql")]
+use syn::ItemStruct;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
 
 #[cfg(feature = "asyncapi")]
@@ -22,6 +24,8 @@ mod error;
 mod graphql;
 #[cfg(feature = "graphql")]
 mod graphql_enum;
+#[cfg(feature = "graphql")]
+mod graphql_input;
 #[cfg(feature = "grpc")]
 mod grpc;
 #[cfg(feature = "http")]
@@ -1080,6 +1084,56 @@ pub fn graphql_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item_enum = parse_macro_input!(item as ItemEnum);
 
     match graphql_enum::expand_graphql_enum(item_enum) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Define a GraphQL input type.
+///
+/// Generates a GraphQL InputObject type definition from a Rust struct.
+/// The struct must implement `serde::Deserialize` for input parsing.
+///
+/// # Example
+///
+/// ```ignore
+/// use server_less::graphql_input;
+/// use serde::Deserialize;
+///
+/// #[graphql_input]
+/// #[derive(Clone, Debug, Deserialize)]
+/// struct CreateUserInput {
+///     /// User's name
+///     name: String,
+///     /// User's email address
+///     email: String,
+///     /// Optional age
+///     age: Option<i32>,
+/// }
+///
+/// // Then register with #[graphql]:
+/// #[graphql(inputs(CreateUserInput))]
+/// impl UserService {
+///     pub fn create_user(&self, input: CreateUserInput) -> User { /* ... */ }
+/// }
+/// ```
+///
+/// # Generated Methods
+///
+/// - `__graphql_input_type() -> async_graphql::dynamic::InputObject` - Input type definition
+/// - `__from_graphql_value(value) -> Result<Self, String>` - Parse from GraphQL value
+///
+/// # Field Naming
+///
+/// Field names are converted to camelCase for GraphQL:
+/// - `user_name` → `userName`
+/// - `email_address` → `emailAddress`
+#[cfg(feature = "graphql")]
+#[proc_macro_attribute]
+pub fn graphql_input(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item_struct = parse_macro_input!(item as ItemStruct);
+
+    match graphql_input::expand_graphql_input(item_struct) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

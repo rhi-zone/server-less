@@ -22,9 +22,18 @@ pub struct OpenApiOperation {
     /// Short summary of the operation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Extended description of the operation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Unique operation identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<String>,
+    /// Tags for grouping operations in documentation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// Whether this operation is deprecated.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub deprecated: bool,
     /// Operation parameters.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameters: Vec<OpenApiParameter>,
@@ -91,7 +100,10 @@ impl Default for OpenApiOperation {
     fn default() -> Self {
         Self {
             summary: None,
+            description: None,
             operation_id: None,
+            tags: Vec::new(),
+            deprecated: false,
             parameters: Vec::new(),
             request_body: None,
             responses: serde_json::Map::new(),
@@ -112,6 +124,30 @@ impl OpenApiOperation {
     /// Set the operation ID.
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.operation_id = Some(id.into());
+        self
+    }
+
+    /// Set the description.
+    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+
+    /// Add a tag.
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        self.tags.push(tag.into());
+        self
+    }
+
+    /// Set multiple tags.
+    pub fn with_tags(mut self, tags: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.tags.extend(tags.into_iter().map(|t| t.into()));
+        self
+    }
+
+    /// Mark as deprecated.
+    pub fn deprecated(mut self) -> Self {
+        self.deprecated = true;
         self
     }
 

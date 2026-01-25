@@ -90,6 +90,8 @@ pub(crate) struct GraphqlArgs {
     pub name: Option<String>,
     /// Enum types to register with the schema (from #[graphql_enum])
     pub enums: Vec<syn::Ident>,
+    /// Input types to register with the schema (from #[graphql_input])
+    pub inputs: Vec<syn::Ident>,
 }
 
 impl Parse for GraphqlArgs {
@@ -112,18 +114,26 @@ impl Parse for GraphqlArgs {
                     let enum_types = content.parse_terminated(syn::Ident::parse, Token![,])?;
                     args.enums = enum_types.into_iter().collect();
                 }
+                "inputs" => {
+                    // Parse inputs(Type1, Type2, ...)
+                    let content;
+                    syn::parenthesized!(content in input);
+                    let input_types = content.parse_terminated(syn::Ident::parse, Token![,])?;
+                    args.inputs = input_types.into_iter().collect();
+                }
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
                             "unknown argument `{other}`\n\
                              \n\
-                             Valid arguments: name, enums\n\
+                             Valid arguments: name, enums, inputs\n\
                              \n\
                              Examples:\n\
                              - #[graphql(name = \"UserAPI\")]\n\
                              - #[graphql(enums(Status, Priority))]\n\
-                             - #[graphql(name = \"MyAPI\", enums(Status))]"
+                             - #[graphql(inputs(CreateUserInput))]\n\
+                             - #[graphql(name = \"MyAPI\", enums(Status), inputs(CreateUserInput))]"
                         ),
                     ));
                 }
@@ -179,6 +189,17 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
         })
         .collect();
 
+    // Generate input type registrations from #[graphql(inputs(...))]
+    let input_registrations: Vec<_> = args
+        .inputs
+        .iter()
+        .map(|input_type| {
+            quote! {
+                .register(#input_type::__graphql_input_type())
+            }
+        })
+        .collect();
+
     let schema_build = if has_mutations {
         quote! {
             let mutation = {
@@ -198,6 +219,7 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
                 .register(mutation)
                 #(#scalar_registrations)*
                 #(#enum_registrations)*
+                #(#input_registrations)*
                 .finish()
                 .expect("Failed to build GraphQL schema")
         }
@@ -207,6 +229,7 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
                 .register(query)
                 #(#scalar_registrations)*
                 #(#enum_registrations)*
+                #(#input_registrations)*
                 .finish()
                 .expect("Failed to build GraphQL schema")
         }
@@ -288,7 +311,10 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
                         method: "post".to_string(),
                         operation: ::server_less::OpenApiOperation {
                             summary: Some("GraphQL query endpoint".to_string()),
+                            description: None,
                             operation_id: Some("graphql_query".to_string()),
+                            tags: vec!["graphql".to_string()],
+                            deprecated: false,
                             parameters: vec![],
                             request_body: Some(::server_less::serde_json::json!({
                                 "required": true,
@@ -351,7 +377,10 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
                         method: "get".to_string(),
                         operation: ::server_less::OpenApiOperation {
                             summary: Some("GraphQL Playground".to_string()),
+                            description: None,
                             operation_id: Some("graphql_playground".to_string()),
+                            tags: vec!["graphql".to_string()],
+                            deprecated: false,
                             parameters: vec![],
                             request_body: None,
                             responses: {
@@ -527,87 +556,49 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
     };
 
     quote! {
+        // Helper to recursively convert serde_json::Value to async_graphql::Value
+        fn json_to_graphql(json_val: ::serde_json::Value) -> ::async_graphql::Value {
+            match json_val {
+                ::serde_json::Value::Null => ::async_graphql::Value::Null,
+                ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
+                ::serde_json::Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        ::async_graphql::Value::Number((i as i32).into())
+                    } else if let Some(f) = n.as_f64() {
+                        match ::serde_json::to_value(f) {
+                            Ok(::serde_json::Value::Number(num)) => {
+                                ::async_graphql::Value::Number(num.into())
+                            }
+                            _ => ::async_graphql::Value::String(f.to_string())
+                        }
+                    } else {
+                        ::async_graphql::Value::Number(n.into())
+                    }
+                }
+                ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
+                ::serde_json::Value::Array(arr) => {
+                    let values: Vec<_> = arr.into_iter()
+                        .map(json_to_graphql)
+                        .collect();
+                    ::async_graphql::Value::List(values)
+                }
+                ::serde_json::Value::Object(obj) => {
+                    let mut fields = ::async_graphql::indexmap::IndexMap::new();
+                    for (key, value) in obj {
+                        fields.insert(::async_graphql::Name::new(key), json_to_graphql(value));
+                    }
+                    ::async_graphql::Value::Object(fields)
+                }
+            }
+        }
+
         fn value_to_graphql<T>(v: T) -> ::async_graphql::Value
         where
             T: ::serde::Serialize + std::fmt::Debug,
         {
             // Try to serialize to JSON value first
             if let Ok(json_val) = ::serde_json::to_value(&v) {
-                match json_val {
-                    ::serde_json::Value::Null => ::async_graphql::Value::Null,
-                    ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
-                    ::serde_json::Value::Number(n) => {
-                        if let Some(i) = n.as_i64() {
-                            ::async_graphql::Value::Number((i as i32).into())
-                        } else if let Some(f) = n.as_f64() {
-                            // Convert f64 to JSON value then to GraphQL value
-                            match ::serde_json::to_value(f) {
-                                Ok(::serde_json::Value::Number(num)) => {
-                                    ::async_graphql::Value::Number(num.into())
-                                }
-                                _ => ::async_graphql::Value::String(f.to_string())
-                            }
-                        } else {
-                            ::async_graphql::Value::String(n.to_string())
-                        }
-                    }
-                    ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
-                    ::serde_json::Value::Array(arr) => {
-                        let values: Vec<_> = arr.into_iter()
-                            .map(|item| match item {
-                                ::serde_json::Value::Null => ::async_graphql::Value::Null,
-                                ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
-                                ::serde_json::Value::Number(n) => {
-                                    if let Some(i) = n.as_i64() {
-                                        ::async_graphql::Value::Number((i as i32).into())
-                                    } else {
-                                        // Use the serde_json Number directly
-                                        ::async_graphql::Value::Number(n.into())
-                                    }
-                                }
-                                ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
-                                other => ::async_graphql::Value::String(other.to_string()),
-                            })
-                            .collect();
-                        ::async_graphql::Value::List(values)
-                    }
-                    ::serde_json::Value::Object(obj) => {
-                        // Convert JSON object to GraphQL object
-                        let mut fields = ::async_graphql::indexmap::IndexMap::new();
-                        for (key, value) in obj {
-                            let gql_value = match value {
-                                ::serde_json::Value::Null => ::async_graphql::Value::Null,
-                                ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
-                                ::serde_json::Value::Number(n) => {
-                                    if let Some(i) = n.as_i64() {
-                                        ::async_graphql::Value::Number((i as i32).into())
-                                    } else {
-                                        ::async_graphql::Value::Number(n.into())
-                                    }
-                                }
-                                ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
-                                ::serde_json::Value::Array(arr) => {
-                                    let values: Vec<_> = arr.into_iter()
-                                        .map(|item| match item {
-                                            ::serde_json::Value::Null => ::async_graphql::Value::Null,
-                                            ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
-                                            ::serde_json::Value::Number(n) => ::async_graphql::Value::Number(n.into()),
-                                            ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
-                                            other => ::async_graphql::Value::String(other.to_string()),
-                                        })
-                                        .collect();
-                                    ::async_graphql::Value::List(values)
-                                }
-                                ::serde_json::Value::Object(_) => {
-                                    // Recursively convert nested objects to strings for now
-                                    ::async_graphql::Value::String(value.to_string())
-                                }
-                            };
-                            fields.insert(::async_graphql::Name::new(key), gql_value);
-                        }
-                        ::async_graphql::Value::Object(fields)
-                    }
-                }
+                json_to_graphql(json_val)
             } else {
                 // Fallback to Debug formatting
                 ::async_graphql::Value::String(format!("{:?}", v))

@@ -562,7 +562,10 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                         method: "get".to_string(),
                         operation: ::server_less::OpenApiOperation {
                             summary: Some(format!("WebSocket endpoint (methods: {})", methods_desc)),
+                            description: None,
                             operation_id: Some("websocket".to_string()),
+                            tags: vec!["websocket".to_string()],
+                            deprecated: false,
                             parameters: vec![],
                             request_body: None,
                             responses: {

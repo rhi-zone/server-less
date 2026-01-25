@@ -53,6 +53,12 @@ pub struct RouteOverride {
     pub path: Option<String>,
     pub skip: bool,
     pub hidden: bool,
+    /// Tags for grouping operations in documentation
+    pub tags: Vec<String>,
+    /// Mark this operation as deprecated
+    pub deprecated: bool,
+    /// Extended description (separate from doc-comment summary)
+    pub description: Option<String>,
 }
 
 impl RouteOverride {
@@ -71,6 +77,15 @@ impl RouteOverride {
                 } else if meta.path.is_ident("hidden") {
                     result.hidden = true;
                     Ok(())
+                } else if meta.path.is_ident("deprecated") {
+                    // Support both `deprecated` and `deprecated = true`
+                    if meta.input.peek(syn::Token![=]) {
+                        let value: syn::LitBool = meta.value()?.parse()?;
+                        result.deprecated = value.value();
+                    } else {
+                        result.deprecated = true;
+                    }
+                    Ok(())
                 } else if meta.path.is_ident("method") {
                     let value: syn::LitStr = meta.value()?.parse()?;
                     result.method = Some(value.value().to_uppercase());
@@ -79,8 +94,34 @@ impl RouteOverride {
                     let value: syn::LitStr = meta.value()?.parse()?;
                     result.path = Some(value.value());
                     Ok(())
+                } else if meta.path.is_ident("tags") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    // Support comma-separated tags: tags = "users,admin"
+                    result.tags = value
+                        .value()
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    Ok(())
+                } else if meta.path.is_ident("description") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.description = Some(value.value());
+                    Ok(())
                 } else {
-                    Err(meta.error("unknown attribute. Valid: method, path, skip, hidden"))
+                    Err(meta.error(
+                        "unknown attribute\n\
+                         \n\
+                         Valid attributes: method, path, skip, hidden, tags, deprecated, description\n\
+                         \n\
+                         Examples:\n\
+                         - #[route(method = \"POST\")]\n\
+                         - #[route(path = \"/custom\")]\n\
+                         - #[route(skip)] or #[route(hidden)]\n\
+                         - #[route(tags = \"users,admin\")]\n\
+                         - #[route(deprecated)]\n\
+                         - #[route(description = \"Extended description\")]",
+                    ))
                 }
             })?;
         }
@@ -95,6 +136,8 @@ pub struct ResponseOverride {
     pub status: Option<u16>,
     pub content_type: Option<String>,
     pub headers: Vec<(String, String)>,
+    /// Custom description for the response
+    pub description: Option<String>,
 }
 
 impl ResponseOverride {
@@ -126,16 +169,21 @@ impl ResponseOverride {
                         result.headers.push((name, value.value()));
                     }
                     Ok(())
+                } else if meta.path.is_ident("description") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.description = Some(value.value());
+                    Ok(())
                 } else {
                     Err(meta.error(
                         "unknown attribute\n\
                          \n\
-                         Valid attributes: status, content_type, header, value\n\
+                         Valid attributes: status, content_type, header, value, description\n\
                          \n\
                          Examples:\n\
                          - #[response(status = 201)]\n\
                          - #[response(content_type = \"application/octet-stream\")]\n\
-                         - #[response(header = \"X-Custom\", value = \"foo\")]",
+                         - #[response(header = \"X-Custom\", value = \"foo\")]\n\
+                         - #[response(description = \"User created successfully\")]",
                     ))
                 }
             })?;
@@ -352,12 +400,16 @@ pub fn generate_openapi_paths(
             .map(|s| s.to_string())
             .unwrap_or_else(|| inferred_code.to_string());
         let has_error = ret.is_result;
+        let success_description = response_overrides
+            .description
+            .clone()
+            .unwrap_or_else(|| "Successful response".to_string());
 
         let responses = if has_error {
             quote! {
                 {
                     let mut r = ::server_less::serde_json::Map::new();
-                    r.insert(#success_code.to_string(), ::server_less::serde_json::json!({"description": "Successful response"}));
+                    r.insert(#success_code.to_string(), ::server_less::serde_json::json!({"description": #success_description}));
                     r.insert("400".to_string(), ::server_less::serde_json::json!({"description": "Bad request"}));
                     r.insert("500".to_string(), ::server_less::serde_json::json!({"description": "Internal server error"}));
                     r
@@ -367,11 +419,18 @@ pub fn generate_openapi_paths(
             quote! {
                 {
                     let mut r = ::server_less::serde_json::Map::new();
-                    r.insert(#success_code.to_string(), ::server_less::serde_json::json!({"description": "Successful response"}));
+                    r.insert(#success_code.to_string(), ::server_less::serde_json::json!({"description": #success_description}));
                     r
                 }
             }
         };
+
+        // Extract new fields from overrides
+        let tags = &overrides.tags;
+        let deprecated = overrides.deprecated;
+        let description = overrides.description.as_ref();
+        let has_description = description.is_some();
+        let description_str = description.cloned().unwrap_or_default();
 
         path_constructors.push(quote! {
             ::server_less::OpenApiPath {
@@ -379,7 +438,10 @@ pub fn generate_openapi_paths(
                 method: #http_method_str.to_string(),
                 operation: ::server_less::OpenApiOperation {
                     summary: Some(#summary.to_string()),
+                    description: if #has_description { Some(#description_str.to_string()) } else { None },
                     operation_id: Some(#operation_id.to_string()),
+                    tags: vec![#(#tags.to_string()),*],
+                    deprecated: #deprecated,
                     parameters: vec![#(#param_constructors),*],
                     request_body: #request_body,
                     responses: #responses,
@@ -529,6 +591,17 @@ pub fn generate_openapi_spec(
             .collect();
         let has_custom_headers = !response_overrides.headers.is_empty();
 
+        // Extract new OpenAPI fields from overrides
+        let tags = &overrides.tags;
+        let deprecated = overrides.deprecated;
+        let description = overrides.description.as_ref();
+        let has_description = description.is_some();
+        let description_str = description.cloned().unwrap_or_default();
+        let success_description = response_overrides
+            .description
+            .clone()
+            .unwrap_or_else(|| "Successful response".to_string());
+
         operation_data.push(quote! {
             {
                 let path = #full_path;
@@ -538,6 +611,11 @@ pub fn generate_openapi_spec(
                 let success_code = #success_code;
                 let has_error_responses = #error_responses;
                 let has_body = #has_body_props;
+                let tags: Vec<&str> = vec![#(#tags),*];
+                let deprecated = #deprecated;
+                let has_description = #has_description;
+                let description_str = #description_str;
+                let success_description = #success_description;
 
                 let mut parameters: Vec<::server_less::serde_json::Value> = Vec::new();
                 #(
@@ -608,7 +686,7 @@ pub fn generate_openapi_spec(
 
                 // Build success response with optional content type and headers
                 let mut success_response = ::server_less::serde_json::json!({
-                    "description": "Successful response"
+                    "description": success_description
                 });
 
                 // Add content type if specified
@@ -648,6 +726,27 @@ pub fn generate_openapi_spec(
                     "operationId": operation_id,
                     "responses": responses
                 });
+
+                // Add description if specified
+                if has_description {
+                    operation.as_object_mut().unwrap()
+                        .insert("description".to_string(), ::server_less::serde_json::Value::String(description_str.to_string()));
+                }
+
+                // Add tags if specified
+                if !tags.is_empty() {
+                    let tags_json: Vec<::server_less::serde_json::Value> = tags.iter()
+                        .map(|t| ::server_less::serde_json::Value::String(t.to_string()))
+                        .collect();
+                    operation.as_object_mut().unwrap()
+                        .insert("tags".to_string(), ::server_less::serde_json::Value::Array(tags_json));
+                }
+
+                // Add deprecated flag if true
+                if deprecated {
+                    operation.as_object_mut().unwrap()
+                        .insert("deprecated".to_string(), ::server_less::serde_json::Value::Bool(true));
+                }
 
                 if !parameters.is_empty() {
                     operation.as_object_mut().unwrap()

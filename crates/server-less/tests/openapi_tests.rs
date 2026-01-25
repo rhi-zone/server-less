@@ -231,3 +231,117 @@ fn test_openapi_detects_single_protocol() {
         serde_json::to_string_pretty(paths).unwrap()
     );
 }
+
+// ============================================================================
+// Enhanced Attributes Tests (tags, deprecated, description)
+// ============================================================================
+
+use server_less::response;
+use server_less::route;
+
+#[derive(Clone)]
+struct EnhancedAttrsService;
+
+#[openapi(prefix = "/api")]
+impl EnhancedAttrsService {
+    /// Get user by ID
+    #[route(tags = "users,public", description = "Fetch a user by their unique ID")]
+    pub fn get_user(&self, id: String) -> String {
+        id
+    }
+
+    /// Create user (deprecated)
+    #[route(tags = "users", deprecated)]
+    #[response(description = "User created successfully")]
+    pub fn create_user(&self, name: String) -> String {
+        name
+    }
+
+    /// Hidden endpoint
+    #[route(hidden)]
+    pub fn internal_method(&self) -> String {
+        "secret".to_string()
+    }
+}
+
+#[test]
+fn test_openapi_tags_attribute() {
+    let spec = EnhancedAttrsService::openapi_spec();
+    let paths = &spec["paths"];
+
+    let get_user = &paths["/api/users/{id}"]["get"];
+    assert!(get_user.is_object(), "Should have get_user endpoint");
+
+    let tags = get_user["tags"].as_array();
+    assert!(tags.is_some(), "Should have tags array");
+    let tags = tags.unwrap();
+    assert!(
+        tags.iter().any(|t| t.as_str() == Some("users")),
+        "Should have 'users' tag. Tags: {:?}",
+        tags
+    );
+    assert!(
+        tags.iter().any(|t| t.as_str() == Some("public")),
+        "Should have 'public' tag. Tags: {:?}",
+        tags
+    );
+}
+
+#[test]
+fn test_openapi_deprecated_attribute() {
+    let spec = EnhancedAttrsService::openapi_spec();
+    let paths = &spec["paths"];
+
+    let create_user = &paths["/api/users"]["post"];
+    assert!(create_user.is_object(), "Should have create_user endpoint");
+
+    assert_eq!(
+        create_user["deprecated"], true,
+        "Should be marked as deprecated"
+    );
+}
+
+#[test]
+fn test_openapi_description_attribute() {
+    let spec = EnhancedAttrsService::openapi_spec();
+    let paths = &spec["paths"];
+
+    let get_user = &paths["/api/users/{id}"]["get"];
+    assert!(get_user.is_object(), "Should have get_user endpoint");
+
+    assert_eq!(
+        get_user["description"].as_str(),
+        Some("Fetch a user by their unique ID"),
+        "Should have description"
+    );
+}
+
+#[test]
+fn test_openapi_response_description_attribute() {
+    let spec = EnhancedAttrsService::openapi_spec();
+    let paths = &spec["paths"];
+
+    let create_user = &paths["/api/users"]["post"];
+    assert!(create_user.is_object(), "Should have create_user endpoint");
+
+    let response_200 = &create_user["responses"]["200"];
+    assert_eq!(
+        response_200["description"].as_str(),
+        Some("User created successfully"),
+        "Should have custom response description"
+    );
+}
+
+#[test]
+fn test_openapi_hidden_excludes_from_spec() {
+    let spec = EnhancedAttrsService::openapi_spec();
+    let paths = &spec["paths"];
+
+    // internal_method should NOT appear in the spec
+    let internal = &paths["/api/internal-methods"]["get"];
+    assert!(
+        internal.is_null(),
+        "Hidden endpoint should not appear in spec. Paths: {}",
+        serde_json::to_string_pretty(paths).unwrap()
+    );
+}
