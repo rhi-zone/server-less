@@ -88,6 +88,8 @@ use syn::{ItemImpl, Token, parse::Parse};
 #[derive(Default)]
 pub(crate) struct GraphqlArgs {
     pub name: Option<String>,
+    /// Enum types to register with the schema (from #[graphql_enum])
+    pub enums: Vec<syn::Ident>,
 }
 
 impl Parse for GraphqlArgs {
@@ -96,12 +98,19 @@ impl Parse for GraphqlArgs {
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
-            input.parse::<Token![=]>()?;
 
             match ident.to_string().as_str() {
                 "name" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.name = Some(lit.value());
+                }
+                "enums" => {
+                    // Parse enums(Type1, Type2, ...)
+                    let content;
+                    syn::parenthesized!(content in input);
+                    let enum_types = content.parse_terminated(syn::Ident::parse, Token![,])?;
+                    args.enums = enum_types.into_iter().collect();
                 }
                 other => {
                     return Err(syn::Error::new(
@@ -109,9 +118,12 @@ impl Parse for GraphqlArgs {
                         format!(
                             "unknown argument `{other}`\n\
                              \n\
-                             Valid arguments: name\n\
+                             Valid arguments: name, enums\n\
                              \n\
-                             Example: #[graphql(name = \"UserAPI\")]"
+                             Examples:\n\
+                             - #[graphql(name = \"UserAPI\")]\n\
+                             - #[graphql(enums(Status, Priority))]\n\
+                             - #[graphql(name = \"MyAPI\", enums(Status))]"
                         ),
                     ));
                 }
@@ -126,10 +138,7 @@ impl Parse for GraphqlArgs {
     }
 }
 
-pub(crate) fn expand_graphql(
-    _args: GraphqlArgs,
-    impl_block: ItemImpl,
-) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
@@ -148,6 +157,28 @@ pub(crate) fn expand_graphql(
 
     let has_mutations = !mutation_methods.is_empty();
 
+    // Collect custom scalars used across all methods
+    let custom_scalars = collect_custom_scalars(&methods);
+    let scalar_registrations: Vec<_> = custom_scalars
+        .iter()
+        .map(|name| {
+            quote! {
+                .register(Scalar::new(#name))
+            }
+        })
+        .collect();
+
+    // Generate enum type registrations from #[graphql(enums(...))]
+    let enum_registrations: Vec<_> = args
+        .enums
+        .iter()
+        .map(|enum_type| {
+            quote! {
+                .register(#enum_type::__graphql_enum_type())
+            }
+        })
+        .collect();
+
     let schema_build = if has_mutations {
         quote! {
             let mutation = {
@@ -165,6 +196,8 @@ pub(crate) fn expand_graphql(
             Schema::build(#query_type_name, Some(#mutation_type_name), None)
                 .register(query)
                 .register(mutation)
+                #(#scalar_registrations)*
+                #(#enum_registrations)*
                 .finish()
                 .expect("Failed to build GraphQL schema")
         }
@@ -172,6 +205,8 @@ pub(crate) fn expand_graphql(
         quote! {
             Schema::build(#query_type_name, None::<&str>, None)
                 .register(query)
+                #(#scalar_registrations)*
+                #(#enum_registrations)*
                 .finish()
                 .expect("Failed to build GraphQL schema")
         }
@@ -747,5 +782,44 @@ fn map_inner_type_to_graphql(inner: &str) -> &'static str {
         "Boolean"
     } else {
         "String" // Custom types default to String
+    }
+}
+
+/// Collect custom scalar types used across all methods (parameters + return types).
+///
+/// Returns a deduplicated list of scalar names that need to be registered
+/// with the dynamic schema builder.
+fn collect_custom_scalars(methods: &[MethodInfo]) -> Vec<String> {
+    let mut scalars = std::collections::BTreeSet::new();
+
+    for method in methods {
+        // Check parameters
+        for param in &method.params {
+            let ty = &param.ty;
+            check_type_for_scalars(&quote!(#ty).to_string(), &mut scalars);
+        }
+
+        // Check return type
+        if let Some(ref ty) = method.return_info.ty {
+            check_type_for_scalars(&quote!(#ty).to_string(), &mut scalars);
+        }
+    }
+
+    scalars.into_iter().collect()
+}
+
+/// Check a type string for custom scalar types and add them to the set.
+fn check_type_for_scalars(type_str: &str, scalars: &mut std::collections::BTreeSet<String>) {
+    if type_str.contains("DateTime") {
+        scalars.insert("DateTime".to_string());
+    }
+    if type_str.contains("Uuid") {
+        scalars.insert("UUID".to_string());
+    }
+    if type_str.contains("Url") && !type_str.contains("UrlError") {
+        scalars.insert("Url".to_string());
+    }
+    if type_str.contains("serde_json :: Value") || type_str == "Value" {
+        scalars.insert("JSON".to_string());
     }
 }

@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use server_less::graphql;
+use server_less::{graphql, graphql_enum};
 
 #[derive(Clone)]
 struct SimpleService {
@@ -351,5 +351,157 @@ fn test_graphql_openapi_paths_generated() {
             .as_ref()
             .unwrap()
             .contains("Playground")
+    );
+}
+
+// ============================================================================
+// Custom Scalar Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct JsonService;
+
+#[graphql]
+impl JsonService {
+    /// Get raw JSON data
+    pub fn get_data(&self) -> serde_json::Value {
+        serde_json::json!({"key": "value"})
+    }
+
+    /// Echo JSON data
+    pub fn create_entry(&self, data: serde_json::Value) -> serde_json::Value {
+        data
+    }
+}
+
+#[test]
+fn test_graphql_json_scalar_schema() {
+    let service = JsonService;
+    let sdl = service.graphql_sdl();
+
+    // The JSON scalar should be registered in the schema
+    assert!(
+        sdl.contains("scalar JSON"),
+        "Should register JSON scalar type. SDL:\n{}",
+        sdl
+    );
+}
+
+#[tokio::test]
+async fn test_graphql_json_scalar_query() {
+    let service = JsonService;
+    let schema = service.graphql_schema();
+
+    let result = schema.execute("{ getData }").await;
+    assert!(
+        result.errors.is_empty(),
+        "JSON scalar query should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    assert!(data["getData"].is_object(), "Should return JSON object");
+    assert_eq!(data["getData"]["key"], "value");
+}
+
+// ============================================================================
+// Enum Type Tests
+// ============================================================================
+
+#[graphql_enum]
+#[derive(Clone, Debug)]
+enum Priority {
+    /// Low priority
+    Low,
+    /// Medium priority
+    Medium,
+    /// High priority
+    High,
+    /// Critical priority
+    Critical,
+}
+
+#[test]
+fn test_graphql_enum_type_definition() {
+    let enum_type = Priority::__graphql_enum_type();
+    // The enum type should have been created (we can't easily inspect it,
+    // but at least it compiles and returns the right type)
+    let _ = enum_type;
+}
+
+#[test]
+fn test_graphql_enum_to_value() {
+    let value = Priority::High.__to_graphql_value();
+    // The value should be an Enum variant in SCREAMING_SNAKE_CASE
+    assert_eq!(
+        value,
+        async_graphql::Value::Enum(async_graphql::Name::new("HIGH"))
+    );
+}
+
+#[test]
+fn test_graphql_enum_all_variants() {
+    assert_eq!(
+        Priority::Low.__to_graphql_value(),
+        async_graphql::Value::Enum(async_graphql::Name::new("LOW"))
+    );
+    assert_eq!(
+        Priority::Medium.__to_graphql_value(),
+        async_graphql::Value::Enum(async_graphql::Name::new("MEDIUM"))
+    );
+    assert_eq!(
+        Priority::High.__to_graphql_value(),
+        async_graphql::Value::Enum(async_graphql::Name::new("HIGH"))
+    );
+    assert_eq!(
+        Priority::Critical.__to_graphql_value(),
+        async_graphql::Value::Enum(async_graphql::Name::new("CRITICAL"))
+    );
+}
+
+#[derive(Clone)]
+struct PriorityService;
+
+#[graphql(enums(Priority))]
+impl PriorityService {
+    /// Get default priority
+    pub fn get_default_priority(&self) -> String {
+        // For now returns as String until full enum return type support
+        "HIGH".to_string()
+    }
+}
+
+#[test]
+fn test_graphql_enum_registered_in_schema() {
+    let service = PriorityService;
+    let sdl = service.graphql_sdl();
+
+    // The Priority enum should be registered in the SDL
+    assert!(
+        sdl.contains("enum Priority"),
+        "Should register Priority enum type. SDL:\n{}",
+        sdl
+    );
+
+    // Should have SCREAMING_SNAKE_CASE variants
+    assert!(
+        sdl.contains("LOW"),
+        "Should have LOW variant. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("MEDIUM"),
+        "Should have MEDIUM variant. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("HIGH"),
+        "Should have HIGH variant. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("CRITICAL"),
+        "Should have CRITICAL variant. SDL:\n{}",
+        sdl
     );
 }

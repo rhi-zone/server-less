@@ -155,6 +155,8 @@ pub use server_less_macros::openrpc;
 
 #[cfg(feature = "graphql")]
 pub use server_less_macros::graphql;
+#[cfg(feature = "graphql")]
+pub use server_less_macros::graphql_enum;
 
 #[cfg(feature = "grpc")]
 pub use server_less_macros::grpc;
@@ -212,6 +214,8 @@ pub mod prelude {
     pub use super::cli;
     #[cfg(feature = "graphql")]
     pub use super::graphql;
+    #[cfg(feature = "graphql")]
+    pub use super::graphql_enum;
     #[cfg(feature = "http")]
     pub use super::http;
     #[cfg(feature = "jsonrpc")]

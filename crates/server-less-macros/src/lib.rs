@@ -4,6 +4,8 @@
 //! and derive macros for common patterns.
 
 use proc_macro::TokenStream;
+#[cfg(feature = "graphql")]
+use syn::ItemEnum;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
 
 #[cfg(feature = "asyncapi")]
@@ -18,6 +20,8 @@ mod context;
 mod error;
 #[cfg(feature = "graphql")]
 mod graphql;
+#[cfg(feature = "graphql")]
+mod graphql_enum;
 #[cfg(feature = "grpc")]
 mod grpc;
 #[cfg(feature = "http")]
@@ -1027,6 +1031,55 @@ pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = parse_macro_input!(item as ItemImpl);
 
     match graphql::expand_graphql(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Define a GraphQL enum type.
+///
+/// Generates a GraphQL Enum type definition from a Rust enum.
+/// Only unit variants (no fields) are supported.
+///
+/// # Example
+///
+/// ```ignore
+/// use server_less::graphql_enum;
+///
+/// #[graphql_enum]
+/// #[derive(Clone, Debug)]
+/// enum Status {
+///     /// User is active
+///     Active,
+///     /// User is inactive
+///     Inactive,
+///     /// Awaiting approval
+///     Pending,
+/// }
+///
+/// // Then register with #[graphql]:
+/// #[graphql(enums(Status))]
+/// impl MyService {
+///     pub fn get_status(&self) -> Status { Status::Active }
+/// }
+/// ```
+///
+/// # Generated Methods
+///
+/// - `__graphql_enum_type() -> async_graphql::dynamic::Enum` - Enum type definition
+/// - `__to_graphql_value(&self) -> async_graphql::Value` - Convert to GraphQL value
+///
+/// # Variant Naming
+///
+/// Variant names are converted to SCREAMING_SNAKE_CASE for GraphQL:
+/// - `Active` → `ACTIVE`
+/// - `InProgress` → `IN_PROGRESS`
+#[cfg(feature = "graphql")]
+#[proc_macro_attribute]
+pub fn graphql_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item_enum = parse_macro_input!(item as ItemEnum);
+
+    match graphql_enum::expand_graphql_enum(item_enum) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

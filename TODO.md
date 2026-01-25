@@ -36,10 +36,10 @@ Prioritized backlog of pending features and improvements.
 ### GraphQL Improvements
 
 - [ ] Nested type resolution for complex relationships
-- [ ] Custom scalar support (DateTime, UUID, Url, JSON)
+- [x] Custom scalar support (DateTime, UUID, Url, JSON) ✅
 - [ ] Subscription support for real-time updates
 - [ ] Input types for mutations (separate from output types)
-- [ ] Enum type support
+- [x] Enum type support (`#[graphql_enum]` + `#[graphql(enums(...))]`) ✅
 - [ ] Interface/union type support
 
 ### Error Handling
