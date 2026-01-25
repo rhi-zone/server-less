@@ -21,9 +21,10 @@ Prioritized backlog of pending features and improvements.
   - [x] Generate combined `openapi_spec()` from detected protocols
   - [x] Support `#[serve(openapi = false)]` opt-out
 
-- [ ] **Phase 4: Protocol-aware #[openapi]**
-  - [ ] Detect sibling protocol attributes (`#[http]`, `#[jsonrpc]`, etc.)
-  - [ ] Generate combined spec when multiple protocols present
+- [x] **Phase 4: Protocol-aware #[openapi]** ✅
+  - [x] Detect sibling protocol attributes (`#[http]`, `#[jsonrpc]`, etc.)
+  - [x] Generate combined spec when multiple protocols present
+  - Note: `#[openapi]` must be placed FIRST to detect sibling protocols
 
 ### OpenAPI Improvements
 

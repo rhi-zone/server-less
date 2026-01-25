@@ -321,7 +321,8 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
         routes.push(route);
 
-        if generate_openapi && !overrides.hidden {
+        // Always collect for http_openapi_paths() (used by #[openapi] and #[serve])
+        if !overrides.hidden {
             openapi_methods.push((
                 method.clone(),
                 overrides.clone(),
