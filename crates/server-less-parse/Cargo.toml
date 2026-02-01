@@ -3,6 +3,7 @@ name = "server-less-parse"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Shared parsing utilities for server-less proc macros"
 
 [lib]

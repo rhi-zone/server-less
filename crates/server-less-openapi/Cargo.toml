@@ -3,6 +3,7 @@ name = "server-less-openapi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "OpenAPI composition utilities for server-less"
 
 [dependencies]

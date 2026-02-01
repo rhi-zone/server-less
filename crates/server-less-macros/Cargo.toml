@@ -3,6 +3,7 @@ name = "server-less-macros"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Proc macros for server-less"
 
 [lib]
@@ -10,8 +11,8 @@ proc-macro = true
 
 [dependencies]
 # Shared parsing and RPC utilities
-server-less-parse = { path = "../server-less-parse" }
-server-less-rpc = { path = "../server-less-rpc" }
+server-less-parse = { path = "../server-less-parse", version = "0.1.0" }
+server-less-rpc = { path = "../server-less-rpc", version = "0.1.0" }
 
 # Proc macro essentials
 syn = { version = "2", features = ["full", "extra-traits"] }
