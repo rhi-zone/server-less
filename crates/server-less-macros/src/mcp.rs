@@ -67,6 +67,12 @@ pub(crate) struct McpArgs {
     namespace: Option<String>,
 }
 
+impl McpArgs {
+    pub(crate) fn with_namespace(namespace: Option<String>) -> Self {
+        Self { namespace }
+    }
+}
+
 impl Parse for McpArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut args = McpArgs::default();

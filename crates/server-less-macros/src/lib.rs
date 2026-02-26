@@ -4,11 +4,44 @@
 //! and derive macros for common patterns.
 
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 #[cfg(feature = "graphql")]
 use syn::ItemEnum;
 #[cfg(feature = "graphql")]
 use syn::ItemStruct;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
+
+/// Strip the first `impl` block from a token stream.
+///
+/// Preset macros call multiple expand functions, each of which emits the
+/// original impl block followed by generated code. To avoid duplicate method
+/// definitions, the preset emits the impl block from the first expand call
+/// and strips it from subsequent calls.
+fn strip_first_impl(tokens: TokenStream2) -> TokenStream2 {
+    let file: syn::File = syn::parse2(tokens.clone()).unwrap_or_else(|_| {
+        // If parsing fails, return the original tokens unchanged
+        syn::File {
+            shebang: None,
+            attrs: vec![],
+            items: vec![],
+        }
+    });
+
+    let mut found_first = false;
+    let remaining: Vec<_> = file
+        .items
+        .into_iter()
+        .filter(|item| {
+            if !found_first && matches!(item, syn::Item::Impl(_)) {
+                found_first = true;
+                return false;
+            }
+            true
+        })
+        .collect();
+
+    quote::quote! { #(#remaining)* }
+}
 
 #[cfg(feature = "asyncapi")]
 mod asyncapi;
@@ -50,6 +83,16 @@ mod smithy;
 mod thrift;
 #[cfg(feature = "ws")]
 mod ws;
+
+// Blessed preset modules
+#[cfg(feature = "cli")]
+mod program;
+#[cfg(feature = "jsonrpc")]
+mod rpc_preset;
+#[cfg(feature = "http")]
+mod server;
+#[cfg(feature = "mcp")]
+mod tool;
 
 /// Generate HTTP handlers from an impl block.
 ///
@@ -1339,6 +1382,166 @@ pub fn response(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Pass through unchanged - the #[http] macro parses these attributes
     item
+}
+
+// ============================================================================
+// Blessed Presets
+// ============================================================================
+
+/// Blessed preset: HTTP server with OpenAPI and serve.
+///
+/// Combines `#[http]` + `#[serve(http)]` into a single attribute.
+///
+/// # Example
+///
+/// ```ignore
+/// use server_less::server;
+///
+/// #[derive(Clone)]
+/// struct MyApi;
+///
+/// #[server]
+/// impl MyApi {
+///     pub fn list_items(&self) -> Vec<String> { vec![] }
+///     pub fn create_item(&self, name: String) -> String { name }
+/// }
+///
+/// // Equivalent to:
+/// // #[http]
+/// // #[serve(http)]
+/// // impl MyApi { ... }
+/// ```
+///
+/// # Options
+///
+/// - `prefix` - URL prefix (e.g., `#[server(prefix = "/api")]`)
+/// - `openapi` - Toggle OpenAPI generation (default: true)
+/// - `health` - Custom health check path (default: `/health`)
+#[cfg(feature = "http")]
+#[proc_macro_attribute]
+pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as server::ServerArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match server::expand_server(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Blessed preset: JSON-RPC server with OpenRPC spec and serve.
+///
+/// Combines `#[jsonrpc]` + `#[openrpc]` + `#[serve(jsonrpc)]` into a single attribute.
+/// OpenRPC and serve are included when their features are enabled, and gracefully
+/// omitted otherwise.
+///
+/// # Example
+///
+/// ```ignore
+/// use server_less::rpc;
+///
+/// #[derive(Clone)]
+/// struct Calculator;
+///
+/// #[rpc]
+/// impl Calculator {
+///     pub fn add(&self, a: i32, b: i32) -> i32 { a + b }
+///     pub fn multiply(&self, a: i32, b: i32) -> i32 { a * b }
+/// }
+/// ```
+///
+/// # Options
+///
+/// - `path` - JSON-RPC endpoint path (e.g., `#[rpc(path = "/api")]`)
+/// - `openrpc` - Toggle OpenRPC spec generation (default: true)
+/// - `health` - Custom health check path (default: `/health`)
+#[cfg(feature = "jsonrpc")]
+#[proc_macro_attribute]
+pub fn rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as rpc_preset::RpcArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match rpc_preset::expand_rpc(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Blessed preset: MCP tools with JSON Schema.
+///
+/// Combines `#[mcp]` + `#[jsonschema]` into a single attribute.
+/// JSON Schema is included when the feature is enabled, and gracefully
+/// omitted otherwise.
+///
+/// # Example
+///
+/// ```ignore
+/// use server_less::tool;
+///
+/// struct FileTools;
+///
+/// #[tool(namespace = "file")]
+/// impl FileTools {
+///     pub fn read_file(&self, path: String) -> String { String::new() }
+///     pub fn write_file(&self, path: String, content: String) -> bool { true }
+/// }
+/// ```
+///
+/// # Options
+///
+/// - `namespace` - MCP tool namespace prefix
+/// - `jsonschema` - Toggle JSON Schema generation (default: true)
+#[cfg(feature = "mcp")]
+#[proc_macro_attribute]
+pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as tool::ToolArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match tool::expand_tool(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Blessed preset: CLI application with Markdown docs.
+///
+/// Combines `#[cli]` + `#[markdown]` into a single attribute.
+/// Markdown docs are included when the feature is enabled, and gracefully
+/// omitted otherwise.
+///
+/// Named `program` instead of `cli` to avoid collision with the existing
+/// `#[cli]` attribute macro.
+///
+/// # Example
+///
+/// ```ignore
+/// use server_less::program;
+///
+/// struct MyApp;
+///
+/// #[program(name = "myctl", version = "1.0.0")]
+/// impl MyApp {
+///     pub fn create_user(&self, name: String) { println!("Created {}", name); }
+///     pub fn list_users(&self) { println!("Listing users..."); }
+/// }
+/// ```
+///
+/// # Options
+///
+/// - `name` - CLI application name
+/// - `version` - CLI version string
+/// - `about` - CLI description
+/// - `markdown` - Toggle Markdown docs generation (default: true)
+#[cfg(feature = "cli")]
+#[proc_macro_attribute]
+pub fn program(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as program::ProgramArgs);
+    let impl_block = parse_macro_input!(item as ItemImpl);
+
+    match program::expand_program(args, impl_block) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
 }
 
 /// Derive macro for error types that implement `IntoErrorCode`.

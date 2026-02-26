@@ -171,7 +171,7 @@ server-less = { version = "0.1", default-features = false, features = ["http", "
 | Schema generators | `grpc`, `capnp`, `thrift`, `connect`, `smithy` | No |
 | Spec generators | `openrpc`, `asyncapi`, `jsonschema` | No |
 | Doc generators | `markdown` | No |
-| Type stubs | `typescript`, `python` | No |
+| Related | [`normalize-typegen`](https://github.com/rhizone/normalize) | TypeScript/Python type stubs (separate repo) |
 
 **Always available:** `ServerlessError` derive (commonly needed, zero deps).
 

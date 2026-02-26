@@ -199,6 +199,19 @@ pub use server_less_macros::jsonschema;
 #[cfg(feature = "asyncapi")]
 pub use server_less_macros::asyncapi;
 
+// Blessed presets
+#[cfg(feature = "http")]
+pub use server_less_macros::server;
+
+#[cfg(feature = "jsonrpc")]
+pub use server_less_macros::rpc;
+
+#[cfg(feature = "mcp")]
+pub use server_less_macros::tool;
+
+#[cfg(feature = "cli")]
+pub use server_less_macros::program;
+
 // Error derive macro (always available - no deps, commonly needed)
 pub use server_less_macros::ServerlessError;
 
@@ -285,6 +298,16 @@ pub mod prelude {
     // Documentation generators
     #[cfg(feature = "markdown")]
     pub use super::markdown;
+
+    // Blessed presets
+    #[cfg(feature = "cli")]
+    pub use super::program;
+    #[cfg(feature = "jsonrpc")]
+    pub use super::rpc;
+    #[cfg(feature = "http")]
+    pub use super::server;
+    #[cfg(feature = "mcp")]
+    pub use super::tool;
 
     // Always available
     pub use super::{
