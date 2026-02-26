@@ -11,6 +11,19 @@ pub use extract::Context;
 #[cfg(feature = "ws")]
 pub use extract::WsSender;
 
+/// Trait for types that can be mounted as CLI subcommand groups.
+///
+/// Implemented automatically by `#[cli]` on an impl block. Allows nested
+/// composition: a parent CLI can mount a child's commands as a subcommand group.
+#[cfg(feature = "cli")]
+pub trait CliSubcommand {
+    /// Build the clap Command tree for this type's subcommands.
+    fn cli_command() -> ::clap::Command;
+
+    /// Dispatch a matched subcommand to the appropriate method.
+    fn cli_dispatch(&self, matches: &::clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>>;
+}
+
 /// Method metadata extracted from an impl block.
 /// Used internally by macros but exposed for advanced use cases.
 #[derive(Debug, Clone)]

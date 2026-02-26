@@ -68,6 +68,15 @@ Prioritized backlog of pending features and improvements.
 - [ ] Render `SchemaType` to GraphQL type
 - [ ] Validate schema consistency across protocols
 
+### Mount Points — Per-Protocol Projections
+
+- [x] Shared detection: `is_reference` / `reference_inner` on `ReturnInfo` (parse crate) ✅
+- [x] `CliSubcommand` trait + CLI mount support (static & slug) ✅
+- [ ] `HttpMount` trait — `fn users(&self) -> &Users` → route prefix `/users/...`
+- [ ] `McpNamespace` trait — `fn users(&self) -> &Users` → tool prefix `users_*`
+- [ ] `WsMount` trait — WebSocket JSON-RPC namespace delegation
+- [ ] `JsonRpcMount` trait — JSON-RPC method namespace delegation
+
 ### Middleware System
 
 - [ ] Design middleware trait/interface

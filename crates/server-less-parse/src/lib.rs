@@ -5,7 +5,7 @@
 
 use syn::{
     FnArg, GenericArgument, Ident, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Pat, PathArguments,
-    ReturnType, Type,
+    ReturnType, Type, TypeReference,
 };
 
 /// Parsed information about a method
@@ -74,6 +74,10 @@ pub struct ReturnInfo {
     pub is_stream: bool,
     /// The stream item type if is_stream
     pub stream_item: Option<Type>,
+    /// Whether the return type is a reference (&T)
+    pub is_reference: bool,
+    /// The inner type T if returning &T
+    pub reference_inner: Option<Type>,
 }
 
 impl MethodInfo {
@@ -269,6 +273,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
             is_unit: true,
             is_stream: false,
             stream_item: None,
+            is_reference: false,
+            reference_inner: None,
         },
         ReturnType::Type(_, ty) => {
             let ty = ty.as_ref().clone();
@@ -285,6 +291,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: false,
                     is_stream: false,
                     stream_item: None,
+                    is_reference: false,
+                    reference_inner: None,
                 };
             }
 
@@ -300,6 +308,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: false,
                     is_stream: false,
                     stream_item: None,
+                    is_reference: false,
+                    reference_inner: None,
                 };
             }
 
@@ -315,6 +325,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: false,
                     is_stream: true,
                     stream_item: Some(item),
+                    is_reference: false,
+                    reference_inner: None,
                 };
             }
 
@@ -330,6 +342,26 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: true,
                     is_stream: false,
                     stream_item: None,
+                    is_reference: false,
+                    reference_inner: None,
+                };
+            }
+
+            // Check for &T (reference return — mount point)
+            if let Type::Reference(TypeReference { elem, .. }) = &ty {
+                let inner = elem.as_ref().clone();
+                return ReturnInfo {
+                    ty: Some(ty),
+                    ok_type: None,
+                    err_type: None,
+                    some_type: None,
+                    is_result: false,
+                    is_option: false,
+                    is_unit: false,
+                    is_stream: false,
+                    stream_item: None,
+                    is_reference: true,
+                    reference_inner: Some(inner),
                 };
             }
 
@@ -344,6 +376,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                 is_unit: false,
                 is_stream: false,
                 stream_item: None,
+                is_reference: false,
+                reference_inner: None,
             }
         }
     }

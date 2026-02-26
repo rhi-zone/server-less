@@ -144,6 +144,9 @@ pub use server_less_macros::serve;
 #[cfg(feature = "cli")]
 pub use server_less_macros::cli;
 
+#[cfg(feature = "cli")]
+pub use server_less_core::CliSubcommand;
+
 #[cfg(feature = "ws")]
 pub use server_less_macros::ws;
 
@@ -212,6 +215,8 @@ pub use serde_json;
 /// Prelude for convenient imports
 pub mod prelude {
     // Runtime protocols
+    #[cfg(feature = "cli")]
+    pub use super::CliSubcommand;
     #[cfg(feature = "cli")]
     pub use super::cli;
     #[cfg(feature = "graphql")]

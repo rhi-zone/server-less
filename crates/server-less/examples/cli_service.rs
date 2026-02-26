@@ -1,4 +1,18 @@
 //! Example CLI service demonstrating the #[cli] macro.
+//!
+//! # Flat commands
+//!
+//! ```bash
+//! cargo run --example cli_service -- users list-users
+//! cargo run --example cli_service -- users create-user --name "Bob" --email "bob@test.com"
+//! ```
+//!
+//! # Mounted subcommand groups
+//!
+//! ```bash
+//! cargo run --example cli_service -- admin users list-users
+//! cargo run --example cli_service -- admin health
+//! ```
 
 use serde::{Deserialize, Serialize};
 use server_less::cli;
@@ -91,7 +105,27 @@ impl UserService {
     }
 }
 
+// --- Mount point example: compose services into a parent CLI ---
+
+#[derive(Default)]
+pub struct AdminApp {
+    users: UserService,
+}
+
+#[cli(name = "admin", version = "0.1.0", about = "Admin panel")]
+impl AdminApp {
+    /// Check system health
+    pub fn health(&self) -> String {
+        "ok".to_string()
+    }
+
+    /// User management commands
+    pub fn users(&self) -> &UserService {
+        &self.users
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let service = UserService::new();
-    service.cli_run()
+    let app = AdminApp::default();
+    app.cli_run()
 }

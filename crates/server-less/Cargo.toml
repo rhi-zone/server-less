@@ -43,7 +43,7 @@ default = ["full"]
 # Runtime protocols (require external deps)
 mcp = ["server-less-macros/mcp"]
 http = ["server-less-macros/http", "axum"]
-cli = ["server-less-macros/cli", "clap"]
+cli = ["server-less-macros/cli", "server-less-core/cli", "clap"]
 ws = ["server-less-macros/ws", "server-less-core/ws", "axum", "futures"]
 graphql = ["server-less-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
 jsonrpc = ["server-less-macros/jsonrpc", "axum"]
