@@ -9,7 +9,7 @@ description = "Composable derive macros for common Rust patterns"
 [dependencies]
 server-less-core = { path = "../server-less-core", version = "0.1.0", default-features = false }
 server-less-macros = { path = "../server-less-macros", version = "0.1.0", default-features = false }
-server-less-openapi = { path = "../server-less-openapi", version = "0.1.0" }
+server-less-openapi = { path = "../server-less-openapi", version = "0.1.0", optional = true }
 
 # Re-export common dependencies users will need
 serde = { version = "1", features = ["derive"] }
@@ -42,11 +42,11 @@ default = ["full"]
 
 # Runtime protocols (require external deps)
 mcp = ["server-less-macros/mcp", "server-less-core/mcp"]
-http = ["server-less-macros/http", "server-less-core/http", "axum"]
+http = ["server-less-macros/http", "server-less-core/http", "axum", "server-less-openapi"]
 cli = ["server-less-macros/cli", "server-less-core/cli", "clap"]
-ws = ["server-less-macros/ws", "server-less-core/ws", "axum", "futures"]
-jsonrpc = ["server-less-macros/jsonrpc", "server-less-core/jsonrpc", "axum"]
-graphql = ["server-less-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
+ws = ["server-less-macros/ws", "server-less-core/ws", "axum", "futures", "server-less-openapi"]
+jsonrpc = ["server-less-macros/jsonrpc", "server-less-core/jsonrpc", "axum", "server-less-openapi"]
+graphql = ["server-less-macros/graphql", "async-graphql", "async-graphql-axum", "axum", "server-less-openapi"]
 
 # Schema generators (no runtime deps, just string generation)
 grpc = ["server-less-macros/grpc"]
@@ -56,7 +56,7 @@ connect = ["server-less-macros/connect"]
 smithy = ["server-less-macros/smithy"]
 
 # Specification generators (no runtime deps)
-openapi = ["server-less-macros/openapi"]  # Standalone OpenAPI (no axum)
+openapi = ["server-less-macros/openapi", "server-less-openapi"]  # Standalone OpenAPI (no axum)
 openrpc = ["server-less-macros/openrpc"]
 asyncapi = ["server-less-macros/asyncapi"]
 jsonschema = ["server-less-macros/jsonschema"]

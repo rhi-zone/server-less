@@ -616,7 +616,9 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                             "result": value
                         });
                         if let Some(id) = id {
-                            resp.as_object_mut().unwrap().insert("id".to_string(), id);
+                            resp.as_object_mut()
+                                .expect("BUG: json!({}) must produce an Object")
+                                .insert("id".to_string(), id);
                         }
                         resp
                     }
@@ -627,7 +629,9 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                             }
                         });
                         if let Some(id) = id {
-                            resp.as_object_mut().unwrap().insert("id".to_string(), id);
+                            resp.as_object_mut()
+                                .expect("BUG: json!({}) must produce an Object")
+                                .insert("id".to_string(), id);
                         }
                         resp
                     }

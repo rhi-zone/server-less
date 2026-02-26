@@ -119,8 +119,16 @@ pub struct HttpMountPathInfo {
     pub summary: Option<String>,
 }
 
-/// Method metadata extracted from an impl block.
-/// Used internally by macros but exposed for advanced use cases.
+/// Runtime method metadata with string-based types.
+///
+/// This is a simplified, serialization-friendly representation of method
+/// information intended for runtime introspection and tooling. Types are
+/// stored as strings rather than `syn` AST nodes.
+///
+/// **Not to be confused with [`server_less_parse::MethodInfo`]**, which is
+/// the richer, `syn`-based representation used internally by proc macros
+/// during code generation. The parse version retains full type information
+/// (`syn::Type`, `syn::Ident`) and supports `#[param(...)]` attributes.
 #[derive(Debug, Clone)]
 pub struct MethodInfo {
     /// Method name (e.g., "create_user")
@@ -141,7 +149,10 @@ pub struct MethodInfo {
     pub is_result: bool,
 }
 
-/// Parameter metadata
+/// Runtime parameter metadata with string-based types.
+///
+/// See [`MethodInfo`] for the relationship between this type and
+/// `server_less_parse::ParamInfo`.
 #[derive(Debug, Clone)]
 pub struct ParamInfo {
     /// Parameter name

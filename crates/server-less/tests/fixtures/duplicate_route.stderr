@@ -1,0 +1,10 @@
+error: Duplicate route: GET /users/{id} is already defined by method 'get_user'
+
+       Hint: You can either:
+       1. Use #[route(skip)] to exclude this method from HTTP routing
+       2. Use #[route(path = "/custom")] to use a different path
+       3. Use #[route(method = "PATCH")] to use a different HTTP method
+  --> tests/fixtures/duplicate_route.rs:12:9
+   |
+12 |     pub fn fetch_user(&self, user_id: u32) -> String {
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

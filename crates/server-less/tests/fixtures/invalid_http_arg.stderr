@@ -1,0 +1,9 @@
+error: unknown argument `invalid_arg`
+       Valid arguments: prefix, openapi
+       Examples:
+       - #[http(prefix = "/api/v1")]
+       - #[http(openapi = false)]
+ --> tests/fixtures/invalid_http_arg.rs:5:8
+  |
+5 | #[http(invalid_arg = true)]
+  |        ^^^^^^^^^^^

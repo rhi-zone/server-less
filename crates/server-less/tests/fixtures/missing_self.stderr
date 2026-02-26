@@ -1,0 +1,13 @@
+error[E0277]: the trait bound `MyService: Clone` is not satisfied
+ --> tests/fixtures/missing_self.rs:5:1
+  |
+5 | #[http]
+  | ^^^^^^^ the trait `Clone` is not implemented for `MyService`
+  |
+  = help: see issue #48214
+  = note: this error originates in the attribute macro `http` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider annotating `MyService` with `#[derive(Clone)]`
+  |
+3 + #[derive(Clone)]
+4 | struct MyService;
+  |

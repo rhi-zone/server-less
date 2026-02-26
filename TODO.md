@@ -166,21 +166,21 @@ Prioritized backlog of pending features and improvements.
 
 ### Polish & Hardening
 
-- [ ] Add `trybuild` compile-fail tests (dep declared but unused)
-- [ ] Add unit tests for `server-less-parse` and `server-less-rpc` (no tests of their own)
+- [x] Add `trybuild` compile-fail tests (3 fixtures: missing_self, invalid_http_arg, duplicate_route)
+- [x] Add unit tests for `server-less-parse` (35 tests) and `server-less-rpc` (39 tests)
 - [ ] Add HTTP round-trip tests via `axum::TestClient`
-- [ ] Implement `http_mount_openapi_paths()` (currently returns `Vec::new()` with TODO)
-- [ ] Wire up CLI context injection (`generate_cli_context_extraction` is dead code)
-- [ ] Replace `.unwrap()` with `.expect("BUG: ...")` in generated code for diagnosability
-- [ ] Fix `strip_first_impl()` silently dropping code on parse failure
-- [ ] Add `--all-features` and `--no-default-features` CI checks
-- [ ] Add MSRV CI job (rust-version = 1.85)
-- [ ] Add `cargo doc --no-deps` CI check for doc warnings
-- [ ] Add examples for blessed presets (`#[server]`, `#[rpc]`, `#[tool]`, `#[program]`)
+- [x] Implement `http_mount_openapi_paths()` (populates from method info at macro expansion time)
+- [x] Wire up CLI context injection (was already wired — removed stale `#[allow(dead_code)]`)
+- [x] Replace `.unwrap()` with `.expect("BUG: ...")` in generated code (ws.rs, openapi_gen.rs)
+- [x] Fix `strip_first_impl()` silently dropping code on parse failure (now emits `compile_error!`)
+- [x] Add `--all-features` and `--no-default-features` CI checks (already present in CI)
+- [x] Add MSRV CI job (rust-version = 1.85, separate `msrv` job with `cargo check`)
+- [x] Add `cargo doc --no-deps` CI check for doc warnings (already present in CI)
+- [x] Add examples for blessed presets (`server_preset.rs`, `rpc_preset.rs`, `tool_preset.rs`, `program_preset.rs`)
 - [ ] Add examples for `ServerlessError`, `OpenApiBuilder`, and mount points
-- [ ] Create missing `examples/param_service.rs` (referenced in tests)
-- [ ] Feature-gate `server-less-openapi` (always compiled even when unused)
-- [ ] Document relationship between `MethodInfo`/`ParamInfo` in core vs parse crates
+- [x] Create missing `examples/param_service.rs` (stable Rust version demonstrating inference)
+- [x] Feature-gate `server-less-openapi` (optional dep, pulled in by http/ws/jsonrpc/graphql/openapi features)
+- [x] Document relationship between `MethodInfo`/`ParamInfo` in core vs parse crates
 
 ---
 

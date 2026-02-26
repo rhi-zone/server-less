@@ -228,7 +228,8 @@ pub use async_graphql_axum;
 // Re-export core types
 pub use server_less_core::*;
 
-// Re-export OpenAPI composition utilities
+// Re-export OpenAPI composition utilities (available when any protocol that generates OpenAPI is enabled)
+#[cfg(feature = "server-less-openapi")]
 pub use server_less_openapi::{
     OpenApiBuilder, OpenApiError, OpenApiOperation, OpenApiParameter, OpenApiPath, OpenApiSchema,
 };
@@ -310,9 +311,11 @@ pub mod prelude {
     pub use super::tool;
 
     // Always available
-    pub use super::{
-        Context, ErrorCode, ErrorResponse, IntoErrorCode, OpenApiBuilder, ServerlessError,
-    };
+    pub use super::{Context, ErrorCode, ErrorResponse, IntoErrorCode, ServerlessError};
+
+    // OpenAPI composition (available when any protocol that generates OpenAPI is enabled)
+    #[cfg(feature = "server-less-openapi")]
+    pub use super::OpenApiBuilder;
     pub use serde::{Deserialize, Serialize};
 
     // WebSocket sender (when ws feature enabled)

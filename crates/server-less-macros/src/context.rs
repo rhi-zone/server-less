@@ -162,7 +162,6 @@ pub fn generate_http_context_extraction() -> (TokenStream2, TokenStream2) {
 ///
 /// Returns `(extraction, call)` - though for CLI there's no extractor needed,
 /// just the call to create the Context.
-#[allow(dead_code)] // Will be used when CLI macro adds Context support
 pub fn generate_cli_context_extraction() -> (TokenStream2, TokenStream2) {
     let extraction = quote! {}; // No extractor needed for CLI
 

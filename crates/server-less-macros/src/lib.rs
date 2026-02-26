@@ -18,20 +18,19 @@ use syn::{DeriveInput, ItemImpl, parse_macro_input};
 /// definitions, the preset emits the impl block from the first expand call
 /// and strips it from subsequent calls.
 fn strip_first_impl(tokens: TokenStream2) -> TokenStream2 {
-    let file: syn::File = syn::parse2(tokens.clone()).unwrap_or_else(|_| {
-        // SILENT FAILURE: If parsing fails, we return an empty File which causes
-        // ALL items (including the generated impls) to be silently dropped.
-        // This can happen if a prior expand function emits syntactically invalid
-        // tokens. The preset macro will still emit the tokens from the first
-        // expand call, but any subsequent generated code will be lost.
-        // TODO: propagate this error via compile_error! so users see a diagnostic
-        // instead of mysterious missing-method errors.
-        syn::File {
-            shebang: None,
-            attrs: vec![],
-            items: vec![],
+    let file: syn::File = match syn::parse2(tokens.clone()) {
+        Ok(file) => file,
+        Err(err) => {
+            // Emit the original tokens (so the user's code is preserved) plus
+            // a compile_error! pointing at the parse failure.  This surfaces the
+            // real problem instead of silently dropping generated impls.
+            let msg = format!("server-less: preset macro failed to parse generated tokens: {err}");
+            return quote::quote! {
+                #tokens
+                ::core::compile_error!(#msg);
+            };
         }
-    });
+    };
 
     let mut found_first = false;
     let remaining: Vec<_> = file

@@ -255,6 +255,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
     let mut openapi_methods = Vec::new();
+    let mut mount_path_entries = Vec::new();
     // Maps normalized route signature (e.g., "GET /users/{*}") to (method_name, original_path)
     let mut route_signatures: std::collections::HashMap<String, (String, String)> =
         std::collections::HashMap::new();
@@ -338,6 +339,19 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
         routes.push(route);
 
+        // Collect path info for HttpMount::http_mount_openapi_paths()
+        let method_str = http_method_enum.as_str().to_lowercase();
+        let summary = method.docs.clone();
+        let has_summary = summary.is_some();
+        let summary_lit = summary.unwrap_or_default();
+        mount_path_entries.push(quote! {
+            ::server_less::HttpMountPathInfo {
+                path: #full_path.to_string(),
+                method: #method_str.to_string(),
+                summary: if #has_summary { Some(#summary_lit.to_string()) } else { None },
+            }
+        });
+
         // Always collect for http_openapi_paths() (used by #[openapi] and #[serve])
         if !overrides.hidden {
             openapi_methods.push((
@@ -387,7 +401,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
             }
 
             fn http_mount_openapi_paths() -> Vec<::server_less::HttpMountPathInfo> {
-                Vec::new() // TODO: populate from openapi paths
+                vec![#(#mount_path_entries),*]
             }
         }
 
