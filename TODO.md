@@ -150,12 +150,12 @@ Prioritized backlog of pending features and improvements.
 
 ### "Server" Blessed Preset
 
-- [ ] Design `#[derive(Server)]` expansion
+- [x] Design `#[derive(Server)]` expansion ✅
 - [ ] `ServerCore` trait for base functionality
 - [ ] `OpenApi` derive for spec generation
 - [ ] `Metrics` derive for prometheus metrics
 - [ ] `HealthCheck` derive for `/health` endpoint
-- [ ] `#[server(openapi = false)]` toggle
+- [x] `#[server(openapi = false)]` toggle ✅
 
 ### IDE Integration
 
@@ -163,6 +163,24 @@ Prioritized backlog of pending features and improvements.
 - [ ] Go-to-definition for generated methods
 - [ ] Hover documentation for attributes
 - [ ] Code action: "Add #[http] to impl block"
+
+### Polish & Hardening
+
+- [ ] Add `trybuild` compile-fail tests (dep declared but unused)
+- [ ] Add unit tests for `server-less-parse` and `server-less-rpc` (no tests of their own)
+- [ ] Add HTTP round-trip tests via `axum::TestClient`
+- [ ] Implement `http_mount_openapi_paths()` (currently returns `Vec::new()` with TODO)
+- [ ] Wire up CLI context injection (`generate_cli_context_extraction` is dead code)
+- [ ] Replace `.unwrap()` with `.expect("BUG: ...")` in generated code for diagnosability
+- [ ] Fix `strip_first_impl()` silently dropping code on parse failure
+- [ ] Add `--all-features` and `--no-default-features` CI checks
+- [ ] Add MSRV CI job (rust-version = 1.85)
+- [ ] Add `cargo doc --no-deps` CI check for doc warnings
+- [ ] Add examples for blessed presets (`#[server]`, `#[rpc]`, `#[tool]`, `#[program]`)
+- [ ] Add examples for `ServerlessError`, `OpenApiBuilder`, and mount points
+- [ ] Create missing `examples/param_service.rs` (referenced in tests)
+- [ ] Feature-gate `server-less-openapi` (always compiled even when unused)
+- [ ] Document relationship between `MethodInfo`/`ParamInfo` in core vs parse crates
 
 ---
 

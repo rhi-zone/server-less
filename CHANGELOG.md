@@ -1,12 +1,16 @@
 # Changelog
 
-All notable changes to the Trellis project will be documented in this file.
+All notable changes to the server-less project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Added - January 2025
+_No changes yet._
+
+## [0.1.0] - 2025-01-25
+
+### Added
 
 #### GraphQL Improvements
 - **GraphQL array type mapping**: Vec<T> now properly maps to GraphQL List(T) with inner type extraction
@@ -69,8 +73,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Updated README.md with real examples
 - Documented async support, SSE streaming, feature flags
 
-### Added - Earlier
-
 #### Core Features
 - **Feature Gates**: Added `#[cfg(feature = "...")]` guards around macro re-exports
   - Features: `http`, `ws`, `jsonrpc`, `graphql`, `cli`, `mcp`, `grpc`, `capnp`, `thrift`, `connect`, `smithy`
@@ -98,7 +100,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Unsupported parameter patterns report errors instead of being silently skipped
 
 ### Current Status
-- **187 tests passing**
+- **329 tests passing**
 - All clippy checks clean
 - Full documentation coverage
 - Comprehensive tutorials

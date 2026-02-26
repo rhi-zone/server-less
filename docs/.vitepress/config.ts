@@ -10,7 +10,7 @@ export default withMermaid(
     themeConfig: {
       nav: [
         { text: 'Home', link: '/' },
-        { text: 'Guide', link: '/guide/' },
+        { text: 'Tutorials', link: '/tutorials/rest-api' },
       ],
 
       sidebar: {
@@ -18,14 +18,22 @@ export default withMermaid(
           {
             text: 'Introduction',
             items: [
-              { text: 'What is Trellis?', link: '/' },
-              { text: 'Getting Started', link: '/guide/' },
+              { text: 'What is Server-less?', link: '/' },
             ]
           },
           {
-            text: 'Macros',
+            text: 'Design',
             items: [
-              { text: 'Overview', link: '/macros/' },
+              { text: 'Impl-First', link: '/design/impl-first' },
+              { text: 'Extension Coordination', link: '/design/extension-coordination' },
+              { text: 'Implementation Notes', link: '/design/implementation-notes' },
+            ]
+          },
+          {
+            text: 'Tutorials',
+            items: [
+              { text: 'REST API', link: '/tutorials/rest-api' },
+              { text: 'Multi-Protocol', link: '/tutorials/multi-protocol' },
             ]
           },
         ]

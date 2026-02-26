@@ -557,7 +557,18 @@ fn generate_param_handling(
                 });
             } else if let Some(ref default_val) = param.default_value {
                 // Parse the default value at compile time
-                let default_expr: proc_macro2::TokenStream = default_val.parse().unwrap();
+                let default_expr: proc_macro2::TokenStream = default_val.parse().map_err(|_| {
+                    syn::Error::new(
+                        method.name.span(),
+                        format!(
+                            "failed to parse default value `{}` as a Rust expression\n\
+                                 \n\
+                                 Hint: Default values must be valid Rust expressions, e.g., \
+                                 #[param(default = 0)] or #[param(default = \"hello\")]",
+                            default_val
+                        ),
+                    )
+                })?;
                 calls.push(quote! {
                     query_extractor.0.get(#name_str)
                         .and_then(|v| v.parse::<#ty>().ok())
@@ -660,7 +671,7 @@ fn generate_response_handling(
                         Ok::<_, std::convert::Infallible>(
                             ::axum::response::sse::Event::default()
                                 .json_data(item)
-                                .unwrap()
+                                .expect("BUG: failed to serialize SSE event as JSON — the Stream item type must implement serde::Serialize")
                         )
                     })
                 )

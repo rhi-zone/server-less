@@ -104,7 +104,7 @@ Generate API documentation:
 
 **Current: Foundation ✅**
 - 18 macros implemented
-- 171 tests passing, 0 failures
+- 329 tests passing, 0 failures
 - Complete design documentation
 - Working examples for all major protocols
 

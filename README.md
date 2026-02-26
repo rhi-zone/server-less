@@ -1,6 +1,6 @@
 # server-less
 
-[![Tests](https://img.shields.io/badge/tests-187%20passing-brightgreen)](https://github.com/rhi-zone/server-less)
+[![Tests](https://img.shields.io/badge/tests-329%20passing-brightgreen)](https://github.com/rhi-zone/server-less)
 [![Rust](https://img.shields.io/badge/rust-2024%20edition-blue)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -257,7 +257,7 @@ See [docs/design/](docs/design/) for detailed design philosophy.
 ```bash
 nix develop        # Enter dev shell (optional)
 cargo build        # Build all crates
-cargo test         # Run all tests (171 passing)
+cargo test         # Run all tests (329 passing)
 cargo clippy       # Lint checks
 cargo expand       # Inspect macro expansion
 ```

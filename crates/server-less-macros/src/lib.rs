@@ -19,7 +19,13 @@ use syn::{DeriveInput, ItemImpl, parse_macro_input};
 /// and strips it from subsequent calls.
 fn strip_first_impl(tokens: TokenStream2) -> TokenStream2 {
     let file: syn::File = syn::parse2(tokens.clone()).unwrap_or_else(|_| {
-        // If parsing fails, return the original tokens unchanged
+        // SILENT FAILURE: If parsing fails, we return an empty File which causes
+        // ALL items (including the generated impls) to be silently dropped.
+        // This can happen if a prior expand function emits syntactically invalid
+        // tokens. The preset macro will still emit the tokens from the first
+        // expand call, but any subsequent generated code will be lost.
+        // TODO: propagate this error via compile_error! so users see a diagnostic
+        // instead of mysterious missing-method errors.
         syn::File {
             shebang: None,
             attrs: vec![],

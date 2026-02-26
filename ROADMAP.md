@@ -6,7 +6,7 @@ This document outlines the development roadmap for server-less.
 
 ## Current Status - Foundation ✅
 
-**18 macros implemented, 195+ tests passing**
+**18 macros implemented, 329 tests passing**
 
 ### What's Working
 - ✅ Core runtime protocols (HTTP, CLI, MCP, WebSocket, JSON-RPC, GraphQL)
@@ -26,9 +26,10 @@ This document outlines the development roadmap for server-less.
 - ✅ Comprehensive test coverage
 
 ### Known Limitations
-- ⚠️ Schema generators use panic!() instead of Result types
-- ⚠️ GraphQL: Nested types and subscriptions not yet supported
-- ⚠️ OpenAPI composition phases 3-4 not yet implemented
+- ⚠️ `http_mount_openapi_paths()` returns empty Vec (TODO)
+- ⚠️ CLI context injection not yet wired up
+- ⚠️ GraphQL subscriptions not yet supported
+- ⚠️ No compile-fail tests (trybuild dep declared but unused)
 
 ---
 
@@ -38,21 +39,22 @@ This document outlines the development roadmap for server-less.
 
 ### OpenAPI Composition
 - [x] **Phase 2: Per-protocol methods** - `http_openapi_paths()`, etc. ✅
-- [ ] **Phase 3: Serve integration** - Auto-generate combined spec
-- [ ] **Phase 4: Protocol-aware #[openapi]** - Detect sibling protocols
+- [x] **Phase 3: Serve integration** - Auto-generate combined spec ✅
+- [x] **Phase 4: Protocol-aware #[openapi]** - Detect sibling protocols ✅
 
 ### OpenAPI Improvements
 - [ ] Richer parameter schemas
 - [ ] Response schemas with examples
-- [ ] `#[openapi(hidden)]` attribute
+- [x] `#[route(hidden)]` attribute ✅
 
 ### Error Handling
-- [ ] Replace panic!() with Result in schema validation
-- [ ] Better error messages with spans
+- [x] Replace panic!() with Result in schema validation ✅
+- [x] Better error messages with spans ✅
+- [ ] `trybuild` compile-fail tests for error message verification
 
 ### GraphQL
-- [ ] Nested type resolution
-- [ ] Custom scalar support (DateTime, UUID)
+- [x] Nested type resolution ✅
+- [x] Custom scalar support (DateTime, UUID) ✅
 - [ ] Subscription support
 
 ---

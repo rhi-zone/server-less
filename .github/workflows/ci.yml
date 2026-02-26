@@ -25,4 +25,10 @@ jobs:
       - name: Build
         run: cargo build --all-targets
       - name: Test
-        run: cargo test --all-targets
+        run: cargo test --all-targets --all-features
+      - name: Build (no default features)
+        run: cargo build --no-default-features
+      - name: Doc
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
