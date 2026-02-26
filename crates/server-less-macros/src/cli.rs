@@ -69,7 +69,7 @@ use heck::ToKebabCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{ItemImpl, Token, parse::Parse};
 
 // Import Context helpers
@@ -161,41 +161,7 @@ fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
     block
 }
 
-/// Categorized methods for CLI generation.
-struct PartitionedMethods<'a> {
-    /// Regular leaf commands (no reference return).
-    leaf: Vec<&'a MethodInfo>,
-    /// Static mounts: `fn foo(&self) -> &T` (no params).
-    static_mounts: Vec<&'a MethodInfo>,
-    /// Slug mounts: `fn foo(&self, id: Id) -> &T` (has params).
-    slug_mounts: Vec<&'a MethodInfo>,
-}
-
-fn partition_methods(methods: &[MethodInfo]) -> PartitionedMethods<'_> {
-    let mut result = PartitionedMethods {
-        leaf: Vec::new(),
-        static_mounts: Vec::new(),
-        slug_mounts: Vec::new(),
-    };
-
-    for method in methods {
-        if has_cli_skip(method) {
-            continue;
-        }
-
-        if method.return_info.is_reference && !method.is_async {
-            if method.params.is_empty() {
-                result.static_mounts.push(method);
-            } else {
-                result.slug_mounts.push(method);
-            }
-        } else {
-            result.leaf.push(method);
-        }
-    }
-
-    result
-}
+// partition_methods is now shared from server_less_parse
 
 pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
@@ -210,7 +176,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let version = args.version.unwrap_or_else(|| "0.1.0".to_string());
     let about = args.about.unwrap_or_default();
 
-    let partitioned = partition_methods(&methods);
+    let partitioned = partition_methods(&methods, has_cli_skip);
 
     // Generate subcommands for leaf methods
     let leaf_subcommands: Vec<_> = partitioned

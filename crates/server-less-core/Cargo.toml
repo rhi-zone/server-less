@@ -30,4 +30,7 @@ clap = { version = "4", optional = true }
 
 [features]
 cli = ["clap"]
+mcp = []
+jsonrpc = []
+http = ["axum"]
 ws = ["futures", "tokio", "axum"]

@@ -24,6 +24,101 @@ pub trait CliSubcommand {
     fn cli_dispatch(&self, matches: &::clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>>;
 }
 
+/// Trait for types that can be mounted as MCP tool namespaces.
+///
+/// Implemented automatically by `#[mcp]` on an impl block. Allows nested
+/// composition: a parent MCP server can mount a child's tools with a name prefix.
+#[cfg(feature = "mcp")]
+pub trait McpNamespace {
+    /// Get tool definitions for this namespace.
+    fn mcp_namespace_tools() -> Vec<serde_json::Value>;
+
+    /// Get tool names for this namespace (without prefix).
+    fn mcp_namespace_tool_names() -> Vec<String>;
+
+    /// Call a tool by name (sync). Returns error for async-only methods.
+    fn mcp_namespace_call(
+        &self,
+        name: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
+
+    /// Call a tool by name (async).
+    fn mcp_namespace_call_async(
+        &self,
+        name: &str,
+        args: serde_json::Value,
+    ) -> impl std::future::Future<Output = Result<serde_json::Value, String>> + Send;
+}
+
+/// Trait for types that can be mounted as JSON-RPC method namespaces.
+///
+/// Implemented automatically by `#[jsonrpc]` on an impl block. Allows nested
+/// composition: a parent JSON-RPC server can mount a child's methods with a dot-separated prefix.
+#[cfg(feature = "jsonrpc")]
+pub trait JsonRpcMount {
+    /// Get method names for this mount (without prefix).
+    fn jsonrpc_mount_methods() -> Vec<String>;
+
+    /// Dispatch a method call (async).
+    fn jsonrpc_mount_dispatch(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> impl std::future::Future<Output = Result<serde_json::Value, String>> + Send;
+}
+
+/// Trait for types that can be mounted as WebSocket method namespaces.
+///
+/// Implemented automatically by `#[ws]` on an impl block. Allows nested
+/// composition: a parent WebSocket server can mount a child's methods with a dot-separated prefix.
+#[cfg(feature = "ws")]
+pub trait WsMount {
+    /// Get method names for this mount (without prefix).
+    fn ws_mount_methods() -> Vec<String>;
+
+    /// Dispatch a method call (sync). Returns error for async-only methods.
+    fn ws_mount_dispatch(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
+
+    /// Dispatch a method call (async).
+    fn ws_mount_dispatch_async(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> impl std::future::Future<Output = Result<serde_json::Value, String>> + Send;
+}
+
+/// Trait for types that can be mounted as HTTP route groups.
+///
+/// Implemented automatically by `#[http]` on an impl block. Allows nested
+/// composition: a parent HTTP server can mount a child's routes under a path prefix.
+#[cfg(feature = "http")]
+pub trait HttpMount: Send + Sync + 'static {
+    /// Build an axum Router for this mount's routes.
+    fn http_mount_router(self: ::std::sync::Arc<Self>) -> ::axum::Router;
+
+    /// Get OpenAPI path definitions for this mount.
+    fn http_mount_openapi_paths() -> Vec<crate::HttpMountPathInfo>
+    where
+        Self: Sized;
+}
+
+/// Simplified path info for HttpMount composition.
+#[cfg(feature = "http")]
+#[derive(Debug, Clone)]
+pub struct HttpMountPathInfo {
+    /// The path (relative to the mount point).
+    pub path: String,
+    /// The HTTP method (get, post, etc.).
+    pub method: String,
+    /// Summary text.
+    pub summary: Option<String>,
+}
+
 /// Method metadata extracted from an impl block.
 /// Used internally by macros but exposed for advanced use cases.
 #[derive(Debug, Clone)]

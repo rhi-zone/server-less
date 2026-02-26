@@ -332,3 +332,198 @@ async fn test_mcp_stream_with_sync_call_fails() {
             .contains("not supported in sync context")
     );
 }
+
+// ============================================================================
+// Mount Point Tests
+// ============================================================================
+
+/// Child service for mount testing
+#[derive(Clone)]
+struct UserTools;
+
+#[mcp]
+impl UserTools {
+    /// List all users
+    fn list(&self) -> Vec<String> {
+        vec!["alice".to_string(), "bob".to_string()]
+    }
+
+    /// Get a user by name
+    fn get(&self, name: String) -> String {
+        format!("User: {}", name)
+    }
+}
+
+/// Child service for posts
+#[derive(Clone)]
+struct PostTools;
+
+#[mcp]
+impl PostTools {
+    /// List posts
+    fn list(&self) -> Vec<String> {
+        vec!["post1".to_string()]
+    }
+}
+
+/// Parent with static mount
+#[derive(Clone)]
+struct McpApp {
+    user_tools: UserTools,
+    post_tools: PostTools,
+}
+
+#[mcp]
+impl McpApp {
+    /// Health check
+    fn health(&self) -> String {
+        "ok".to_string()
+    }
+
+    /// Mount user tools
+    fn users(&self) -> &UserTools {
+        &self.user_tools
+    }
+
+    /// Mount post tools
+    fn posts(&self) -> &PostTools {
+        &self.post_tools
+    }
+}
+
+#[test]
+fn test_mcp_static_mount_tools_listed() {
+    let tools = McpApp::mcp_tools();
+    let names: Vec<_> = tools
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap().to_string())
+        .collect();
+
+    // Leaf method
+    assert!(names.contains(&"health".to_string()));
+    // Mounted tools (prefixed)
+    assert!(names.contains(&"users_list".to_string()));
+    assert!(names.contains(&"users_get".to_string()));
+    assert!(names.contains(&"posts_list".to_string()));
+}
+
+#[test]
+fn test_mcp_static_mount_dispatch_sync() {
+    let app = McpApp {
+        user_tools: UserTools,
+        post_tools: PostTools,
+    };
+
+    // Dispatch to leaf
+    let result = app.mcp_call("health", serde_json::json!({}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!("ok"));
+
+    // Dispatch to mounted child
+    let result = app.mcp_call("users_list", serde_json::json!({}));
+    assert!(result.is_ok());
+    let users: Vec<String> = serde_json::from_value(result.unwrap()).unwrap();
+    assert_eq!(users, vec!["alice", "bob"]);
+
+    // Dispatch to mounted child with args
+    let result = app.mcp_call("users_get", serde_json::json!({"name": "alice"}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!("User: alice"));
+}
+
+#[tokio::test]
+async fn test_mcp_static_mount_dispatch_async() {
+    let app = McpApp {
+        user_tools: UserTools,
+        post_tools: PostTools,
+    };
+
+    let result = app
+        .mcp_call_async("users_get", serde_json::json!({"name": "bob"}))
+        .await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!("User: bob"));
+}
+
+#[test]
+fn test_mcp_multiple_static_mounts() {
+    let app = McpApp {
+        user_tools: UserTools,
+        post_tools: PostTools,
+    };
+
+    // Both mounts work
+    assert!(app.mcp_call("users_list", serde_json::json!({})).is_ok());
+    assert!(app.mcp_call("posts_list", serde_json::json!({})).is_ok());
+}
+
+/// Slug mount: parent with parameterized child
+#[derive(Clone)]
+struct McpSlugApp {
+    user_tools: UserTools,
+}
+
+#[mcp]
+impl McpSlugApp {
+    /// Access a user's tools by ID
+    fn user(&self, id: String) -> &UserTools {
+        // In real code, id would select a user; for testing we return the same service
+        let _ = &id;
+        &self.user_tools
+    }
+}
+
+#[test]
+fn test_mcp_slug_mount_tools_have_slug_param() {
+    let tools = McpSlugApp::mcp_tools();
+    let names: Vec<_> = tools
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap().to_string())
+        .collect();
+
+    assert!(names.contains(&"user_list".to_string()));
+    assert!(names.contains(&"user_get".to_string()));
+
+    // Check that slug param "id" is in the inputSchema
+    let user_list = tools
+        .iter()
+        .find(|t| t.get("name").unwrap().as_str().unwrap() == "user_list")
+        .unwrap();
+    let schema = user_list.get("inputSchema").unwrap();
+    let props = schema.get("properties").unwrap().as_object().unwrap();
+    assert!(props.contains_key("id"));
+}
+
+#[test]
+fn test_mcp_slug_mount_dispatch() {
+    let app = McpSlugApp {
+        user_tools: UserTools,
+    };
+
+    let result = app.mcp_call("user_list", serde_json::json!({"id": "42"}));
+    assert!(result.is_ok());
+    let users: Vec<String> = serde_json::from_value(result.unwrap()).unwrap();
+    assert_eq!(users, vec!["alice", "bob"]);
+
+    let result = app.mcp_call("user_get", serde_json::json!({"id": "42", "name": "alice"}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!("User: alice"));
+}
+
+/// McpNamespace trait test
+#[test]
+fn test_mcp_namespace_trait_implemented() {
+    use server_less::McpNamespace;
+
+    let tools = <UserTools as McpNamespace>::mcp_namespace_tools();
+    assert_eq!(tools.len(), 2);
+
+    let names = <UserTools as McpNamespace>::mcp_namespace_tool_names();
+    assert!(names.contains(&"list".to_string()));
+    assert!(names.contains(&"get".to_string()));
+
+    let svc = UserTools;
+    let result =
+        <UserTools as McpNamespace>::mcp_namespace_call(&svc, "list", serde_json::json!({}));
+    assert!(result.is_ok());
+}

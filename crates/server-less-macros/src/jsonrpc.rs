@@ -57,7 +57,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
@@ -109,19 +109,70 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
     let path = args.path.unwrap_or_else(|| "/rpc".to_string());
 
-    let dispatch_arms_async: Vec<_> = methods
+    let partitioned = partition_methods(&methods, |_| false);
+
+    let dispatch_arms_async: Vec<_> = partitioned
+        .leaf
         .iter()
         .map(|m| generate_dispatch_arm(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
-    let method_names: Vec<_> = methods.iter().map(|m| m.name.to_string()).collect();
+    let method_names: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .map(|m| m.name.to_string())
+        .collect();
 
-    // Check if any method uses Context
-    let uses_context = methods.iter().any(|m| {
+    // Generate mount dispatch arms and method names
+    let mount_dispatch_arms: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .map(|m| generate_static_mount_dispatch(m))
+        .chain(
+            partitioned
+                .slug_mounts
+                .iter()
+                .map(|m| generate_slug_mount_dispatch(m)),
+        )
+        .collect();
+
+    let mount_method_names: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .chain(partitioned.slug_mounts.iter())
+        .map(|m| generate_mount_method_names(m))
+        .collect();
+
+    // Check if any leaf method uses Context
+    let uses_context = partitioned.leaf.iter().any(|m| {
         partition_context_params(&m.params, has_qualified)
             .map(|(ctx, _)| ctx.is_some())
             .unwrap_or(false)
     });
+
+    // Mount dispatch inner method — always takes (method, args) without Context
+    let mount_dispatch_inner = if uses_context {
+        quote! {
+            async fn jsonrpc_mount_dispatch_inner(
+                &self,
+                method: &str,
+                args: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                let __ctx = ::server_less::Context::new();
+                self.jsonrpc_dispatch(__ctx, method, args).await
+            }
+        }
+    } else {
+        quote! {
+            async fn jsonrpc_mount_dispatch_inner(
+                &self,
+                method: &str,
+                args: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                self.jsonrpc_dispatch(method, args).await
+            }
+        }
+    };
 
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_jsonrpc_handler_{}", struct_name_snake);
@@ -198,10 +249,26 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     Ok(quote! {
         #impl_block
 
+        impl ::server_less::JsonRpcMount for #struct_name {
+            fn jsonrpc_mount_methods() -> Vec<String> {
+                Self::jsonrpc_methods().into_iter().map(|s| s.to_string()).collect()
+            }
+
+            async fn jsonrpc_mount_dispatch(
+                &self,
+                method: &str,
+                params: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                self.jsonrpc_mount_dispatch_inner(method, params).await
+            }
+        }
+
         impl #struct_name {
             /// Get available JSON-RPC method names
             pub fn jsonrpc_methods() -> Vec<&'static str> {
-                vec![#(#method_names),*]
+                let mut names: Vec<&'static str> = vec![#(#method_names),*];
+                #(#mount_method_names)*
+                names
             }
 
             /// Handle a JSON-RPC 2.0 request
@@ -287,9 +354,12 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             #dispatch_sig {
                 match method {
                     #(#dispatch_arms_async)*
+                    #(#mount_dispatch_arms)*
                     _ => Err(format!("Method not found: {}", method)),
                 }
             }
+
+            #mount_dispatch_inner
 
             /// Create an axum Router with JSON-RPC endpoint
             pub fn jsonrpc_router(self) -> ::axum::Router
@@ -457,4 +527,61 @@ fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Resul
             #response
         }
     })
+}
+
+/// Generate mount method names contribution for jsonrpc_methods().
+fn generate_mount_method_names(method: &MethodInfo) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    quote! {
+        {
+            let child_methods = <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_methods();
+            for child_name in child_methods {
+                let prefixed = format!("{}{}", #mount_prefix, child_name);
+                names.push(Box::leak(prefixed.into_boxed_str()));
+            }
+        }
+    }
+}
+
+/// Generate dispatch for a static mount (`fn foo(&self) -> &T`).
+fn generate_static_mount_dispatch(method: &MethodInfo) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    quote! {
+        __method if __method.starts_with(#mount_prefix) => {
+            let __stripped = &__method[#mount_prefix.len()..];
+            let __delegate = self.#method_name();
+            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch(__delegate, __stripped, args).await
+        }
+    }
+}
+
+/// Generate dispatch for a slug mount (`fn foo(&self, id: Id) -> &T`).
+fn generate_slug_mount_dispatch(method: &MethodInfo) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    let slug_extractions: Vec<_> = method
+        .params
+        .iter()
+        .map(server_less_rpc::generate_param_extraction)
+        .collect();
+    let slug_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
+
+    quote! {
+        __method if __method.starts_with(#mount_prefix) => {
+            let __stripped = &__method[#mount_prefix.len()..];
+            #(#slug_extractions)*
+            let __delegate = self.#method_name(#(#slug_names),*);
+            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch(__delegate, __stripped, args).await
+        }
+    }
 }

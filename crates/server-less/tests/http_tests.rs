@@ -593,6 +593,105 @@ fn test_response_normal_method_unchanged() {
 }
 
 // ============================================================================
+// Mount Point Tests
+// ============================================================================
+
+/// Child service for HTTP mount testing
+#[derive(Clone)]
+struct UserApi;
+
+#[http]
+impl UserApi {
+    /// List all users
+    fn list_users(&self) -> Vec<String> {
+        vec!["alice".to_string(), "bob".to_string()]
+    }
+
+    /// Get a user by ID
+    fn get_user(&self, id: String) -> String {
+        format!("User: {}", id)
+    }
+
+    /// Create a user
+    fn create_user(&self, name: String) -> String {
+        format!("Created: {}", name)
+    }
+}
+
+/// Another child service
+#[derive(Clone)]
+struct PostApi;
+
+#[http]
+impl PostApi {
+    /// List all posts
+    fn list_posts(&self) -> Vec<String> {
+        vec!["post1".to_string()]
+    }
+}
+
+/// Parent with static mounts
+#[derive(Clone)]
+struct HttpApp {
+    user_api: UserApi,
+    post_api: PostApi,
+}
+
+#[http]
+impl HttpApp {
+    /// Health check
+    fn get_health(&self) -> String {
+        "ok".to_string()
+    }
+
+    /// Mount user API
+    fn users(&self) -> &UserApi {
+        &self.user_api
+    }
+
+    /// Mount post API
+    fn posts(&self) -> &PostApi {
+        &self.post_api
+    }
+}
+
+#[test]
+fn test_http_static_mount_router_created() {
+    let app = HttpApp {
+        user_api: UserApi,
+        post_api: PostApi,
+    };
+    let _router = app.http_router();
+}
+
+#[test]
+fn test_http_static_mount_openapi_paths() {
+    let spec = HttpApp::openapi_spec();
+    let paths = spec.get("paths").unwrap().as_object().unwrap();
+
+    // Leaf path (get_health → GET /healths via HTTP convention)
+    assert!(
+        paths.contains_key("/healths"),
+        "Expected /healths path, got: {:?}",
+        paths.keys().collect::<Vec<_>>()
+    );
+
+    // Note: mounted child OpenAPI paths are not yet merged into parent spec
+    // (http_mount_openapi_paths is a TODO). The router correctly nests
+    // child routes, but the OpenAPI spec only shows leaf methods for now.
+}
+
+/// HttpMount trait test
+#[test]
+fn test_http_mount_trait_implemented() {
+    use server_less::HttpMount;
+
+    // Verify the trait is implemented and the router can be created
+    let router = <UserApi as HttpMount>::http_mount_router(std::sync::Arc::new(UserApi));
+    let _ = router; // Router creation succeeds
+}
+
+// ============================================================================
 // Parameter Customization
 // ============================================================================
 // The #[param(...)] attribute for parameter customization is implemented and

@@ -478,6 +478,52 @@ pub fn extract_methods(impl_block: &ItemImpl) -> syn::Result<Vec<MethodInfo>> {
     Ok(methods)
 }
 
+/// Categorized methods for code generation.
+///
+/// Methods returning `&T` (non-async) are mount points; everything else is a leaf.
+/// Mount points are further split by whether they take parameters (slug) or not (static).
+pub struct PartitionedMethods<'a> {
+    /// Regular leaf methods (no reference return).
+    pub leaf: Vec<&'a MethodInfo>,
+    /// Static mounts: `fn foo(&self) -> &T` (no params).
+    pub static_mounts: Vec<&'a MethodInfo>,
+    /// Slug mounts: `fn foo(&self, id: Id) -> &T` (has params).
+    pub slug_mounts: Vec<&'a MethodInfo>,
+}
+
+/// Partition methods into leaf commands, static mounts, and slug mounts.
+///
+/// The `skip` predicate allows each protocol to apply its own skip logic
+/// (e.g., `#[cli(skip)]`, `#[mcp(skip)]`).
+pub fn partition_methods<'a>(
+    methods: &'a [MethodInfo],
+    skip: impl Fn(&MethodInfo) -> bool,
+) -> PartitionedMethods<'a> {
+    let mut result = PartitionedMethods {
+        leaf: Vec::new(),
+        static_mounts: Vec::new(),
+        slug_mounts: Vec::new(),
+    };
+
+    for method in methods {
+        if skip(method) {
+            continue;
+        }
+
+        if method.return_info.is_reference && !method.is_async {
+            if method.params.is_empty() {
+                result.static_mounts.push(method);
+            } else {
+                result.slug_mounts.push(method);
+            }
+        } else {
+            result.leaf.push(method);
+        }
+    }
+
+    result
+}
+
 /// Get the struct name from an impl block
 pub fn get_impl_name(impl_block: &ItemImpl) -> syn::Result<Ident> {
     if let Type::Path(type_path) = impl_block.self_ty.as_ref()

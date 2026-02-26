@@ -146,7 +146,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
 
 // Import Context helpers
@@ -235,6 +235,23 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let prefix = args.prefix.unwrap_or_default();
     let generate_openapi = args.openapi.unwrap_or(true);
 
+    let partitioned = partition_methods(&methods, |_| false);
+
+    // Generate mount routes (static mounts only)
+    let mut mount_routes = Vec::new();
+    for mount in &partitioned.static_mounts {
+        let mount_name = mount.name.to_string();
+        let mount_path = format!("/{}", mount_name);
+        let method_name = &mount.name;
+        let inner_ty = mount.return_info.reference_inner.as_ref().unwrap();
+
+        mount_routes.push(quote! {
+            .nest_service(#mount_path, <#inner_ty as ::server_less::HttpMount>::http_mount_router(
+                ::std::sync::Arc::new(state.#method_name().clone())
+            ))
+        });
+    }
+
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
     let mut openapi_methods = Vec::new();
@@ -242,7 +259,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let mut route_signatures: std::collections::HashMap<String, (String, String)> =
         std::collections::HashMap::new();
 
-    for method in &methods {
+    for method in &partitioned.leaf {
         let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
         let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
@@ -324,7 +341,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         // Always collect for http_openapi_paths() (used by #[openapi] and #[serve])
         if !overrides.hidden {
             openapi_methods.push((
-                method.clone(),
+                (*method).clone(),
                 overrides.clone(),
                 response_overrides.clone(),
             ));
@@ -358,6 +375,22 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     Ok(quote! {
         #impl_block
 
+        impl ::server_less::HttpMount for #struct_name {
+            fn http_mount_router(self: ::std::sync::Arc<Self>) -> ::axum::Router {
+                use ::axum::routing::{get, post, put, patch, delete};
+
+                let state = self;
+                ::axum::Router::new()
+                    #(#routes)*
+                    #(#mount_routes)*
+                    .with_state(state)
+            }
+
+            fn http_mount_openapi_paths() -> Vec<::server_less::HttpMountPathInfo> {
+                Vec::new() // TODO: populate from openapi paths
+            }
+        }
+
         impl #struct_name {
             /// Create an axum Router for this service
             pub fn http_router(self) -> ::axum::Router
@@ -369,6 +402,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                 let state = ::std::sync::Arc::new(self);
                 ::axum::Router::new()
                     #(#routes)*
+                    #(#mount_routes)*
                     .with_state(state)
             }
 

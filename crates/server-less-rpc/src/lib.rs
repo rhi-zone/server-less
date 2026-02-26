@@ -224,6 +224,60 @@ pub fn generate_dispatch_arm(
     }
 }
 
+/// Generate a dispatch arm with support for injected parameters.
+///
+/// Parameters whose index appears in `injected_params` will use the provided
+/// TokenStream expression instead of being deserialized from JSON. This is
+/// used for mount trait dispatch where Context/WsSender need injection.
+pub fn generate_dispatch_arm_with_injections(
+    method: &MethodInfo,
+    method_name_override: Option<&str>,
+    async_handling: AsyncHandling,
+    injected_params: &[(usize, TokenStream)],
+) -> TokenStream {
+    let method_name_str = method_name_override
+        .map(String::from)
+        .unwrap_or_else(|| method.name.to_string());
+
+    // Methods that are async OR return streams require async context
+    let requires_async = method.is_async || method.return_info.is_stream;
+
+    // For methods requiring async with Error handling, return early
+    if requires_async && matches!(async_handling, AsyncHandling::Error) {
+        return quote! {
+            #method_name_str => {
+                return Err("Async methods and streaming methods not supported in sync context".to_string());
+            }
+        };
+    }
+
+    // Generate param extractions, substituting injected params
+    let param_extractions: Vec<TokenStream> = method
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if let Some((_, injection)) = injected_params.iter().find(|(idx, _)| *idx == i) {
+                let name = &p.name;
+                quote! { let #name = #injection; }
+            } else {
+                generate_param_extraction(p)
+            }
+        })
+        .collect();
+
+    let call = generate_method_call(method, async_handling);
+    let response = generate_json_response(method);
+
+    quote! {
+        #method_name_str => {
+            #(#param_extractions)*
+            #call
+            #response
+        }
+    }
+}
+
 /// Infer JSON schema type from Rust type.
 pub fn infer_json_type(ty: &syn::Type) -> &'static str {
     let ty_str = quote!(#ty).to_string();

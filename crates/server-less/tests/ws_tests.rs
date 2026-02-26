@@ -328,3 +328,165 @@ fn test_ws_openapi_paths_generated() {
     // Check extra contains WebSocket protocol info
     assert!(ws_path.operation.extra.contains_key("x-websocket-protocol"));
 }
+
+// ============================================================================
+// Mount Point Tests
+// ============================================================================
+
+/// Child service for mount testing
+#[derive(Clone)]
+struct MathWs;
+
+#[ws]
+impl MathWs {
+    /// Add two numbers
+    fn add(&self, a: i32, b: i32) -> i32 {
+        a + b
+    }
+
+    /// Double a number
+    fn double(&self, n: i32) -> i32 {
+        n * 2
+    }
+}
+
+/// Another child service
+#[derive(Clone)]
+struct EchoWs;
+
+#[ws]
+impl EchoWs {
+    /// Echo a message
+    fn echo(&self, msg: String) -> String {
+        format!("Echo: {}", msg)
+    }
+}
+
+/// Parent with static mounts
+#[derive(Clone)]
+struct WsApp {
+    math: MathWs,
+    echo_svc: EchoWs,
+}
+
+#[ws]
+impl WsApp {
+    /// Ping health check
+    fn ping(&self) -> String {
+        "pong".to_string()
+    }
+
+    /// Mount math tools
+    fn math(&self) -> &MathWs {
+        &self.math
+    }
+
+    /// Mount echo tools
+    fn echo_svc(&self) -> &EchoWs {
+        &self.echo_svc
+    }
+}
+
+#[test]
+fn test_ws_static_mount_methods_listed() {
+    let methods = WsApp::ws_methods();
+
+    // Leaf method
+    assert!(methods.contains(&"ping"));
+    // Mounted methods (dot-separated)
+    assert!(methods.contains(&"math.add"));
+    assert!(methods.contains(&"math.double"));
+    assert!(methods.contains(&"echo_svc.echo"));
+}
+
+#[test]
+fn test_ws_static_mount_sync_dispatch() {
+    let app = WsApp {
+        math: MathWs,
+        echo_svc: EchoWs,
+    };
+
+    // Dispatch to leaf
+    let response = app.ws_handle_message(r#"{"method":"ping","params":{}}"#);
+    assert!(response.is_ok());
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], "pong");
+
+    // Dispatch to mounted child
+    let response = app.ws_handle_message(r#"{"method":"math.add","params":{"a":10,"b":5}}"#);
+    assert!(response.is_ok());
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], 15);
+
+    // Dispatch to another mount
+    let response = app.ws_handle_message(r#"{"method":"echo_svc.echo","params":{"msg":"hello"}}"#);
+    assert!(response.is_ok());
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], "Echo: hello");
+}
+
+#[tokio::test]
+async fn test_ws_static_mount_async_dispatch() {
+    let app = WsApp {
+        math: MathWs,
+        echo_svc: EchoWs,
+    };
+
+    let response = app
+        .ws_handle_message_async(r#"{"method":"math.double","params":{"n":21}}"#)
+        .await;
+    assert!(response.is_ok());
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], 42);
+}
+
+/// Slug mount: parent with parameterized child
+#[derive(Clone)]
+struct WsSlugApp {
+    math: MathWs,
+}
+
+#[ws]
+impl WsSlugApp {
+    /// Access a calculator by ID
+    fn calc(&self, id: String) -> &MathWs {
+        let _ = &id;
+        &self.math
+    }
+}
+
+#[test]
+fn test_ws_slug_mount_methods_listed() {
+    let methods = WsSlugApp::ws_methods();
+
+    assert!(methods.contains(&"calc.add"));
+    assert!(methods.contains(&"calc.double"));
+}
+
+#[test]
+fn test_ws_slug_mount_sync_dispatch() {
+    let app = WsSlugApp { math: MathWs };
+
+    let response =
+        app.ws_handle_message(r#"{"method":"calc.add","params":{"id":"calc-1","a":3,"b":4}}"#);
+    assert!(response.is_ok());
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert_eq!(json["result"], 7);
+}
+
+/// WsMount trait test
+#[test]
+fn test_ws_mount_trait_implemented() {
+    use server_less::WsMount;
+
+    let methods = <MathWs as WsMount>::ws_mount_methods();
+    assert_eq!(methods.len(), 2);
+    assert!(methods.contains(&"add".to_string()));
+    assert!(methods.contains(&"double".to_string()));
+
+    let svc = MathWs;
+    let result =
+        <MathWs as WsMount>::ws_mount_dispatch(&svc, "add", serde_json::json!({"a": 1, "b": 2}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!(3));
+}

@@ -239,3 +239,181 @@ fn test_jsonrpc_openapi_paths_generated() {
     assert!(rpc_path.operation.responses.contains_key("200"));
     assert!(rpc_path.operation.responses.contains_key("204"));
 }
+
+// ============================================================================
+// Mount Point Tests
+// ============================================================================
+
+/// Child service for mount testing
+#[derive(Clone)]
+struct MathTools;
+
+#[jsonrpc]
+impl MathTools {
+    /// Add two numbers
+    fn add(&self, a: i32, b: i32) -> i32 {
+        a + b
+    }
+
+    /// Double a number
+    fn double(&self, n: i32) -> i32 {
+        n * 2
+    }
+}
+
+/// Another child service
+#[derive(Clone)]
+struct StringTools;
+
+#[jsonrpc]
+impl StringTools {
+    /// Uppercase a string
+    fn upper(&self, s: String) -> String {
+        s.to_uppercase()
+    }
+}
+
+/// Parent with static mounts
+#[derive(Clone)]
+struct JsonRpcApp {
+    math: MathTools,
+    strings: StringTools,
+}
+
+#[jsonrpc]
+impl JsonRpcApp {
+    /// Ping health check
+    fn ping(&self) -> String {
+        "pong".to_string()
+    }
+
+    /// Mount math tools
+    fn math(&self) -> &MathTools {
+        &self.math
+    }
+
+    /// Mount string tools
+    fn strings(&self) -> &StringTools {
+        &self.strings
+    }
+}
+
+#[test]
+fn test_jsonrpc_static_mount_methods_listed() {
+    let methods = JsonRpcApp::jsonrpc_methods();
+
+    // Leaf method
+    assert!(methods.contains(&"ping"));
+    // Mounted methods (dot-separated)
+    assert!(methods.contains(&"math.add"));
+    assert!(methods.contains(&"math.double"));
+    assert!(methods.contains(&"strings.upper"));
+}
+
+#[tokio::test]
+async fn test_jsonrpc_static_mount_dispatch() {
+    let app = JsonRpcApp {
+        math: MathTools,
+        strings: StringTools,
+    };
+
+    // Dispatch to leaf
+    let response = app
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "params": {},
+            "id": 1
+        }))
+        .await;
+    assert_eq!(response["result"], "pong");
+
+    // Dispatch to mounted child
+    let response = app
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "math.add",
+            "params": {"a": 10, "b": 5},
+            "id": 2
+        }))
+        .await;
+    assert_eq!(response["result"], 15);
+
+    // Dispatch to another mount
+    let response = app
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "strings.upper",
+            "params": {"s": "hello"},
+            "id": 3
+        }))
+        .await;
+    assert_eq!(response["result"], "HELLO");
+}
+
+#[tokio::test]
+async fn test_jsonrpc_static_mount_double() {
+    let app = JsonRpcApp {
+        math: MathTools,
+        strings: StringTools,
+    };
+
+    let response = app
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "math.double",
+            "params": {"n": 21},
+            "id": 1
+        }))
+        .await;
+    assert_eq!(response["result"], 42);
+}
+
+/// Slug mount: parent with parameterized child
+#[derive(Clone)]
+struct JsonRpcSlugApp {
+    math: MathTools,
+}
+
+#[jsonrpc]
+impl JsonRpcSlugApp {
+    /// Access a calculator by ID
+    fn calc(&self, id: String) -> &MathTools {
+        let _ = &id;
+        &self.math
+    }
+}
+
+#[test]
+fn test_jsonrpc_slug_mount_methods_listed() {
+    let methods = JsonRpcSlugApp::jsonrpc_methods();
+
+    assert!(methods.contains(&"calc.add"));
+    assert!(methods.contains(&"calc.double"));
+}
+
+#[tokio::test]
+async fn test_jsonrpc_slug_mount_dispatch() {
+    let app = JsonRpcSlugApp { math: MathTools };
+
+    let response = app
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "calc.add",
+            "params": {"id": "calc-1", "a": 3, "b": 4},
+            "id": 1
+        }))
+        .await;
+    assert_eq!(response["result"], 7);
+}
+
+/// JsonRpcMount trait test
+#[test]
+fn test_jsonrpc_mount_trait_implemented() {
+    use server_less::JsonRpcMount;
+
+    let methods = <MathTools as JsonRpcMount>::jsonrpc_mount_methods();
+    assert_eq!(methods.len(), 2);
+    assert!(methods.contains(&"add".to_string()));
+    assert!(methods.contains(&"double".to_string()));
+}

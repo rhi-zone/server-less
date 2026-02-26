@@ -147,6 +147,18 @@ pub use server_less_macros::cli;
 #[cfg(feature = "cli")]
 pub use server_less_core::CliSubcommand;
 
+#[cfg(feature = "mcp")]
+pub use server_less_core::McpNamespace;
+
+#[cfg(feature = "jsonrpc")]
+pub use server_less_core::JsonRpcMount;
+
+#[cfg(feature = "ws")]
+pub use server_less_core::WsMount;
+
+#[cfg(feature = "http")]
+pub use server_less_core::HttpMount;
+
 #[cfg(feature = "ws")]
 pub use server_less_macros::ws;
 
@@ -217,6 +229,14 @@ pub mod prelude {
     // Runtime protocols
     #[cfg(feature = "cli")]
     pub use super::CliSubcommand;
+    #[cfg(feature = "http")]
+    pub use super::HttpMount;
+    #[cfg(feature = "jsonrpc")]
+    pub use super::JsonRpcMount;
+    #[cfg(feature = "mcp")]
+    pub use super::McpNamespace;
+    #[cfg(feature = "ws")]
+    pub use super::WsMount;
     #[cfg(feature = "cli")]
     pub use super::cli;
     #[cfg(feature = "graphql")]

@@ -41,12 +41,12 @@ optional = true
 default = ["full"]
 
 # Runtime protocols (require external deps)
-mcp = ["server-less-macros/mcp"]
-http = ["server-less-macros/http", "axum"]
+mcp = ["server-less-macros/mcp", "server-less-core/mcp"]
+http = ["server-less-macros/http", "server-less-core/http", "axum"]
 cli = ["server-less-macros/cli", "server-less-core/cli", "clap"]
 ws = ["server-less-macros/ws", "server-less-core/ws", "axum", "futures"]
+jsonrpc = ["server-less-macros/jsonrpc", "server-less-core/jsonrpc", "axum"]
 graphql = ["server-less-macros/graphql", "async-graphql", "async-graphql-axum", "axum"]
-jsonrpc = ["server-less-macros/jsonrpc", "axum"]
 
 # Schema generators (no runtime deps, just string generation)
 grpc = ["server-less-macros/grpc"]

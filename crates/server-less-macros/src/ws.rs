@@ -155,7 +155,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name, partition_methods};
 use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
@@ -260,6 +260,26 @@ fn partition_ws_params(
     Ok((context_param, sender_param, other_params))
 }
 
+/// Build injection list for mount trait dispatch.
+///
+/// Context params get `Context::new()`. Returns None if the method
+/// uses WsSender (can't be dispatched through mount).
+fn build_mount_injections(
+    params: &[ParamInfo],
+    has_qualified_ctx: bool,
+    has_qualified_sender: bool,
+) -> Option<Vec<(usize, proc_macro2::TokenStream)>> {
+    let mut injections = Vec::new();
+    for (i, p) in params.iter().enumerate() {
+        if crate::context::should_inject_context(&p.ty, has_qualified_ctx) {
+            injections.push((i, quote! { ::server_less::Context::new() }));
+        } else if should_inject_ws_sender(&p.ty, has_qualified_sender) {
+            return None; // Can't dispatch methods requiring WsSender through mount
+        }
+    }
+    Some(injections)
+}
+
 /// Arguments for the #[ws] attribute
 #[derive(Default)]
 pub(crate) struct WsArgs {
@@ -307,22 +327,62 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
     let path = args.path.unwrap_or_else(|| "/ws".to_string());
 
-    // Generate dispatch match arms (sync and async versions)
-    let dispatch_arms_sync: Vec<_> = methods
+    let partitioned = partition_methods(&methods, |_| false);
+
+    // Generate dispatch match arms (sync and async versions) for leaf methods only
+    let dispatch_arms_sync: Vec<_> = partitioned
+        .leaf
         .iter()
         .map(|m| generate_dispatch_arm_sync(m, has_qualified_ctx, has_qualified_sender))
         .collect::<syn::Result<Vec<_>>>()?;
 
-    let dispatch_arms_async: Vec<_> = methods
+    let dispatch_arms_async: Vec<_> = partitioned
+        .leaf
         .iter()
         .map(|m| generate_dispatch_arm_async(m, has_qualified_ctx, has_qualified_sender))
         .collect::<syn::Result<Vec<_>>>()?;
 
-    // Method names for documentation
-    let method_names: Vec<_> = methods.iter().map(|m| m.name.to_string()).collect();
+    // Method names for leaf methods
+    let method_names: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .map(|m| m.name.to_string())
+        .collect();
 
-    // Check if any method uses Context or WsSender
-    let uses_injected_params = methods.iter().any(|m| {
+    // Generate mount dispatch arms and method names
+    let mount_dispatch_sync: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .map(|m| generate_ws_static_mount_dispatch(m, false))
+        .chain(
+            partitioned
+                .slug_mounts
+                .iter()
+                .map(|m| generate_ws_slug_mount_dispatch(m, false)),
+        )
+        .collect();
+
+    let mount_dispatch_async: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .map(|m| generate_ws_static_mount_dispatch(m, true))
+        .chain(
+            partitioned
+                .slug_mounts
+                .iter()
+                .map(|m| generate_ws_slug_mount_dispatch(m, true)),
+        )
+        .collect();
+
+    let mount_method_names: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .chain(partitioned.slug_mounts.iter())
+        .map(|m| generate_ws_mount_method_names(m))
+        .collect();
+
+    // Check if any leaf method uses Context or WsSender
+    let uses_injected_params = partitioned.leaf.iter().any(|m| {
         partition_ws_params(&m.params, has_qualified_ctx, has_qualified_sender)
             .map(|(ctx, sender, _)| ctx.is_some() || sender.is_some())
             .unwrap_or(false)
@@ -429,13 +489,68 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         quote! { let __ctx = ::server_less::Context::new(); }
     };
 
+    // Generate dispatch arms for mount trait with Context injection (skip WsSender methods)
+    let mount_trait_dispatch_sync: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .filter_map(|m| {
+            let injections =
+                build_mount_injections(&m.params, has_qualified_ctx, has_qualified_sender)?;
+            Some(server_less_rpc::generate_dispatch_arm_with_injections(
+                m,
+                None,
+                AsyncHandling::Error,
+                &injections,
+            ))
+        })
+        .collect();
+
+    let mount_trait_dispatch_async: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .filter_map(|m| {
+            let injections =
+                build_mount_injections(&m.params, has_qualified_ctx, has_qualified_sender)?;
+            Some(server_less_rpc::generate_dispatch_arm_with_injections(
+                m,
+                None,
+                AsyncHandling::Await,
+                &injections,
+            ))
+        })
+        .collect();
+
     Ok(quote! {
         #impl_block
+
+        impl ::server_less::WsMount for #struct_name {
+            fn ws_mount_methods() -> Vec<String> {
+                Self::ws_methods().into_iter().map(|s| s.to_string()).collect()
+            }
+
+            fn ws_mount_dispatch(
+                &self,
+                method: &str,
+                params: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                self.ws_mount_dispatch_inner(method, params)
+            }
+
+            async fn ws_mount_dispatch_async(
+                &self,
+                method: &str,
+                params: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                self.ws_mount_dispatch_async_inner(method, params).await
+            }
+        }
 
         impl #struct_name {
             /// Get available WebSocket method names
             pub fn ws_methods() -> Vec<&'static str> {
-                vec![#(#method_names),*]
+                let mut names: Vec<&'static str> = vec![#(#method_names),*];
+                #(#mount_method_names)*
+                names
             }
 
             /// Handle an incoming WebSocket JSON-RPC message (sync version)
@@ -526,6 +641,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             #dispatch_sig_sync {
                 match method {
                     #(#dispatch_arms_sync)*
+                    #(#mount_dispatch_sync)*
                     _ => Err(format!("Unknown method: {}", method)),
                 }
             }
@@ -534,6 +650,33 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             #dispatch_sig_async {
                 match method {
                     #(#dispatch_arms_async)*
+                    #(#mount_dispatch_async)*
+                    _ => Err(format!("Unknown method: {}", method)),
+                }
+            }
+
+            /// Internal dispatch for mount trait (no Context/WsSender, sync).
+            fn ws_mount_dispatch_inner(
+                &self,
+                method: &str,
+                args: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                match method {
+                    #(#mount_trait_dispatch_sync)*
+                    #(#mount_dispatch_sync)*
+                    _ => Err(format!("Unknown method: {}", method)),
+                }
+            }
+
+            /// Internal dispatch for mount trait (no Context/WsSender, async).
+            async fn ws_mount_dispatch_async_inner(
+                &self,
+                method: &str,
+                args: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                match method {
+                    #(#mount_trait_dispatch_async)*
+                    #(#mount_dispatch_async)*
                     _ => Err(format!("Unknown method: {}", method)),
                 }
             }
@@ -756,4 +899,82 @@ fn generate_dispatch_arm_with_injected_params(
             #response
         }
     })
+}
+
+/// Generate mount method names contribution for ws_methods().
+fn generate_ws_mount_method_names(method: &MethodInfo) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    quote! {
+        {
+            let child_methods = <#inner_ty as ::server_less::WsMount>::ws_mount_methods();
+            for child_name in child_methods {
+                let prefixed = format!("{}{}", #mount_prefix, child_name);
+                names.push(Box::leak(prefixed.into_boxed_str()));
+            }
+        }
+    }
+}
+
+/// Generate dispatch for a static WS mount.
+fn generate_ws_static_mount_dispatch(method: &MethodInfo, is_async: bool) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    if is_async {
+        quote! {
+            __method if __method.starts_with(#mount_prefix) => {
+                let __stripped = &__method[#mount_prefix.len()..];
+                let __delegate = self.#method_name();
+                <#inner_ty as ::server_less::WsMount>::ws_mount_dispatch_async(__delegate, __stripped, args).await
+            }
+        }
+    } else {
+        quote! {
+            __method if __method.starts_with(#mount_prefix) => {
+                let __stripped = &__method[#mount_prefix.len()..];
+                let __delegate = self.#method_name();
+                <#inner_ty as ::server_less::WsMount>::ws_mount_dispatch(__delegate, __stripped, args)
+            }
+        }
+    }
+}
+
+/// Generate dispatch for a slug WS mount.
+fn generate_ws_slug_mount_dispatch(method: &MethodInfo, is_async: bool) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    let slug_extractions: Vec<_> = method
+        .params
+        .iter()
+        .map(server_less_rpc::generate_param_extraction)
+        .collect();
+    let slug_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
+
+    if is_async {
+        quote! {
+            __method if __method.starts_with(#mount_prefix) => {
+                let __stripped = &__method[#mount_prefix.len()..];
+                #(#slug_extractions)*
+                let __delegate = self.#method_name(#(#slug_names),*);
+                <#inner_ty as ::server_less::WsMount>::ws_mount_dispatch_async(__delegate, __stripped, args).await
+            }
+        }
+    } else {
+        quote! {
+            __method if __method.starts_with(#mount_prefix) => {
+                let __stripped = &__method[#mount_prefix.len()..];
+                #(#slug_extractions)*
+                let __delegate = self.#method_name(#(#slug_names),*);
+                <#inner_ty as ::server_less::WsMount>::ws_mount_dispatch(__delegate, __stripped, args)
+            }
+        }
+    }
 }

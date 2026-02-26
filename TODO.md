@@ -72,10 +72,10 @@ Prioritized backlog of pending features and improvements.
 
 - [x] Shared detection: `is_reference` / `reference_inner` on `ReturnInfo` (parse crate) ✅
 - [x] `CliSubcommand` trait + CLI mount support (static & slug) ✅
-- [ ] `HttpMount` trait — `fn users(&self) -> &Users` → route prefix `/users/...`
-- [ ] `McpNamespace` trait — `fn users(&self) -> &Users` → tool prefix `users_*`
-- [ ] `WsMount` trait — WebSocket JSON-RPC namespace delegation
-- [ ] `JsonRpcMount` trait — JSON-RPC method namespace delegation
+- [x] `HttpMount` trait — `fn users(&self) -> &Users` → route prefix `/users/...` ✅
+- [x] `McpNamespace` trait — `fn users(&self) -> &Users` → tool prefix `users_*` ✅
+- [x] `WsMount` trait — WebSocket JSON-RPC namespace delegation ✅
+- [x] `JsonRpcMount` trait — JSON-RPC method namespace delegation ✅
 
 ### Middleware System
 
