@@ -76,6 +76,7 @@ full = [
 tokio = { version = "1", features = ["full"] }
 trybuild = "1"
 axum = { version = "0.8", features = ["ws"] }
+tower = { version = "0.5", features = ["util"] }
 clap = "4"
 futures = "0.3"
 async-graphql = "7"
