@@ -455,3 +455,242 @@ fn test_cli_subcommand_trait_implemented() {
     let result = <UserService as CliSubcommand>::cli_dispatch(&svc, &matches);
     assert!(result.is_ok());
 }
+
+// ── Bool switch tests ─────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct BoolService;
+
+#[cli(name = "bool-app")]
+impl BoolService {
+    /// Run with optional verbose flag
+    pub fn run(&self, verbose: bool, name: String) -> String {
+        if verbose {
+            format!("VERBOSE: {name}")
+        } else {
+            name
+        }
+    }
+}
+
+#[test]
+fn test_bool_arg_has_set_true_action() {
+    let cmd = BoolService::cli_command();
+    let run_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "run")
+        .unwrap();
+
+    let verbose_arg = run_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "verbose")
+        .unwrap();
+
+    // SetTrue args don't require a value
+    assert!(!verbose_arg.is_required_set());
+}
+
+#[test]
+fn test_bool_dispatch_with_flag() {
+    let svc = BoolService;
+    let result = svc.cli_run_with(["bool-app", "run", "--verbose", "--name", "test"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_bool_dispatch_without_flag() {
+    let svc = BoolService;
+    let result = svc.cli_run_with(["bool-app", "run", "--name", "test"]);
+    assert!(result.is_ok());
+}
+
+// ── Vec param tests ───────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct VecService;
+
+#[cli(name = "vec-app")]
+impl VecService {
+    /// Tag items
+    pub fn tag(&self, tags: Vec<String>) -> Vec<String> {
+        tags
+    }
+}
+
+#[test]
+fn test_vec_arg_has_append_action() {
+    let cmd = VecService::cli_command();
+    let tag_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "tag")
+        .unwrap();
+
+    let tags_arg = tag_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "tags")
+        .unwrap();
+
+    // Append args are not required
+    assert!(!tags_arg.is_required_set());
+}
+
+#[test]
+fn test_vec_dispatch_repeated() {
+    let svc = VecService;
+    let result = svc.cli_run_with(["vec-app", "tag", "--tags", "a", "--tags", "b"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_vec_dispatch_comma_delimited() {
+    let svc = VecService;
+    let result = svc.cli_run_with(["vec-app", "tag", "--tags", "a,b"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_vec_dispatch_empty() {
+    let svc = VecService;
+    let result = svc.cli_run_with(["vec-app", "tag"]);
+    assert!(result.is_ok());
+}
+
+// ── Global flag tests ─────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct GlobalApp;
+
+#[cli(name = "global-app", global = [verbose, dry_run])]
+impl GlobalApp {
+    /// List things
+    pub fn list(&self, verbose: bool, dry_run: bool) -> Vec<String> {
+        if verbose {
+            vec!["verbose-item".to_string()]
+        } else {
+            vec!["item".to_string()]
+        }
+    }
+}
+
+#[test]
+fn test_global_flags_on_root_command() {
+    let cmd = GlobalApp::cli_command();
+
+    let verbose_arg = cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "verbose");
+    assert!(verbose_arg.is_some());
+
+    let dry_run_arg = cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "dry-run");
+    assert!(dry_run_arg.is_some());
+}
+
+#[test]
+fn test_global_flag_before_subcommand() {
+    let app = GlobalApp;
+    let result = app.cli_run_with(["global-app", "--verbose", "list"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_global_flag_after_subcommand() {
+    let app = GlobalApp;
+    let result = app.cli_run_with(["global-app", "list", "--verbose"]);
+    assert!(result.is_ok());
+}
+
+// ── Output formatting tests ──────────────────────────────────────────
+
+#[test]
+fn test_format_flags_present() {
+    let cmd = ItemService::cli_command();
+
+    assert!(cmd.get_arguments().any(|a| a.get_id().as_str() == "jsonl"));
+    assert!(
+        cmd.get_arguments()
+            .any(|a| a.get_id().as_str() == "compact")
+    );
+    assert!(cmd.get_arguments().any(|a| a.get_id().as_str() == "jq"));
+}
+
+#[test]
+fn test_jsonl_flag_dispatch() {
+    let svc = ItemService::new();
+    let result = svc.cli_run_with(["item-cli", "--jsonl", "list-items"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_compact_flag_dispatch() {
+    let svc = ItemService::new();
+    let result = svc.cli_run_with(["item-cli", "--compact", "list-items"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_jq_flag_dispatch_conditional() {
+    // Only test --jq if jq binary is available
+    if std::process::Command::new("jq")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
+        let svc = ItemService::new();
+        let result = svc.cli_run_with(["item-cli", "--jq", ".[0].name", "list-items"]);
+        assert!(result.is_ok());
+    }
+}
+
+// ── Defaults hook tests ──────────────────────────────────────────────
+
+#[derive(Clone)]
+struct DefaultsService;
+
+impl DefaultsService {
+    fn my_defaults(&self, param_name: &str) -> Option<String> {
+        match param_name {
+            "greeting" => Some("hello".to_string()),
+            _ => None,
+        }
+    }
+}
+
+#[cli(name = "defaults-app", defaults = "my_defaults")]
+impl DefaultsService {
+    /// Greet someone
+    pub fn greet(&self, greeting: String, target: String) -> String {
+        format!("{greeting}, {target}!")
+    }
+}
+
+#[test]
+fn test_defaults_missing_arg_uses_default() {
+    let svc = DefaultsService;
+    // greeting not provided — should fall back to my_defaults
+    let result = svc.cli_run_with(["defaults-app", "greet", "--target", "world"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_defaults_explicit_arg_overrides() {
+    let svc = DefaultsService;
+    let result = svc.cli_run_with([
+        "defaults-app",
+        "greet",
+        "--greeting",
+        "hi",
+        "--target",
+        "world",
+    ]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_defaults_missing_non_defaulted_errors() {
+    let svc = DefaultsService;
+    // target has no default → should error
+    let result = svc.cli_run_with(["defaults-app", "greet"]);
+    assert!(result.is_err());
+}

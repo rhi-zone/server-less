@@ -119,6 +119,57 @@ pub struct HttpMountPathInfo {
     pub summary: Option<String>,
 }
 
+/// Format CLI output according to output flags.
+///
+/// - `jsonl`: one JSON object per line for array values
+/// - `compact`: compact JSON (no whitespace)
+/// - `jq`: filter through the `jq` binary
+/// - Default: pretty-printed JSON
+#[cfg(feature = "cli")]
+pub fn cli_format_output(
+    value: serde_json::Value,
+    jsonl: bool,
+    compact: bool,
+    jq: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if let Some(filter) = jq {
+        let input = serde_json::to_string(&value)?;
+        let output = std::process::Command::new("jq")
+            .arg(filter)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                use std::io::Write;
+                if let Some(ref mut stdin) = child.stdin {
+                    stdin.write_all(input.as_bytes())?;
+                }
+                child.wait_with_output()
+            })?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("jq failed: {stderr}").into());
+        }
+        Ok(String::from_utf8(output.stdout)?.trim_end().to_string())
+    } else if jsonl {
+        match value {
+            serde_json::Value::Array(items) => {
+                let lines: Vec<String> = items
+                    .iter()
+                    .map(serde_json::to_string)
+                    .collect::<Result<_, _>>()?;
+                Ok(lines.join("\n"))
+            }
+            other => Ok(serde_json::to_string(&other)?),
+        }
+    } else if compact {
+        Ok(serde_json::to_string(&value)?)
+    } else {
+        Ok(serde_json::to_string_pretty(&value)?)
+    }
+}
+
 /// Runtime method metadata with string-based types.
 ///
 /// This is a simplified, serialization-friendly representation of method

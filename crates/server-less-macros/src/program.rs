@@ -71,6 +71,8 @@ pub(crate) fn expand_program(args: ProgramArgs, impl_block: ItemImpl) -> syn::Re
         name: args.name,
         version: args.version,
         about: args.about,
+        global: Vec::new(),
+        defaults: None,
     };
     let cli_tokens = cli::expand_cli(cli_args, impl_block.clone())?;
 

@@ -41,6 +41,12 @@ pub struct ParamInfo {
     pub ty: Type,
     /// Whether this is `Option<T>`
     pub is_optional: bool,
+    /// Whether this is `bool`
+    pub is_bool: bool,
+    /// Whether this is `Vec<T>`
+    pub is_vec: bool,
+    /// Inner type if `Vec<T>`
+    pub vec_inner: Option<Type>,
     /// Whether this looks like an ID (ends with _id or is named id)
     pub is_id: bool,
     /// Custom wire name (from #[param(name = "...")])
@@ -246,6 +252,9 @@ pub fn parse_params(
 
                 let ty = (*pat_type.ty).clone();
                 let is_optional = is_option_type(&ty);
+                let is_bool = is_bool_type(&ty);
+                let vec_inner = extract_vec_type(&ty);
+                let is_vec = vec_inner.is_some();
                 let is_id = is_id_param(&name);
 
                 // Parse #[param(...)] attributes
@@ -255,6 +264,9 @@ pub fn parse_params(
                     name,
                     ty,
                     is_optional,
+                    is_bool,
+                    is_vec,
+                    vec_inner,
                     is_id,
                     wire_name,
                     location,
@@ -388,6 +400,30 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
             }
         }
     }
+}
+
+/// Check if a type is `bool`
+pub fn is_bool_type(ty: &Type) -> bool {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && type_path.path.segments.len() == 1
+    {
+        return segment.ident == "bool";
+    }
+    false
+}
+
+/// Check if a type is `Vec<T>` and extract T
+pub fn extract_vec_type(ty: &Type) -> Option<Type> {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == "Vec"
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(GenericArgument::Type(inner)) = args.args.first()
+    {
+        return Some(inner.clone());
+    }
+    None
 }
 
 /// Check if a type is `Option<T>` and extract T

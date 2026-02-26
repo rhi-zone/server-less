@@ -83,6 +83,8 @@ pub(crate) struct CliArgs {
     pub name: Option<String>,
     pub version: Option<String>,
     pub about: Option<String>,
+    pub global: Vec<String>,
+    pub defaults: Option<String>,
 }
 
 impl Parse for CliArgs {
@@ -106,13 +108,28 @@ impl Parse for CliArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.about = Some(lit.value());
                 }
+                "global" => {
+                    let content;
+                    syn::bracketed!(content in input);
+                    while !content.is_empty() {
+                        let flag: syn::Ident = content.parse()?;
+                        args.global.push(flag.to_string());
+                        if content.peek(Token![,]) {
+                            content.parse::<Token![,]>()?;
+                        }
+                    }
+                }
+                "defaults" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.defaults = Some(lit.value());
+                }
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
                             "unknown argument `{other}`\n\
                              \n\
-                             Valid arguments: name, version, about\n\
+                             Valid arguments: name, version, about, global, defaults\n\
                              \n\
                              Example: #[cli(name = \"my-app\", version = \"1.0.0\", about = \"My CLI tool\")]"
                         ),
@@ -175,6 +192,12 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .unwrap_or_else(|| struct_name.to_string().to_kebab_case());
     let version = args.version.unwrap_or_else(|| "0.1.0".to_string());
     let about = args.about.unwrap_or_default();
+    let global_flags = args.global;
+    let has_defaults = args.defaults.is_some();
+    let defaults_fn_ident = args
+        .defaults
+        .as_ref()
+        .map(|name| syn::Ident::new(name, proc_macro2::Span::call_site()));
 
     let partitioned = partition_methods(&methods, has_cli_skip);
 
@@ -182,7 +205,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let leaf_subcommands: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_leaf_subcommand(m, has_qualified))
+        .map(|m| generate_leaf_subcommand(m, has_qualified, &global_flags, has_defaults))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate subcommands for static mounts
@@ -203,7 +226,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let leaf_match_arms: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_leaf_match_arm(m, has_qualified))
+        .map(|m| generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate match arms for static mounts
@@ -223,6 +246,47 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     // Strip #[cli(...)] attrs from the emitted impl block
     let clean_impl_block = strip_cli_attrs(&impl_block);
 
+    // Generate global flag args on root command
+    let global_flag_args: Vec<_> = global_flags
+        .iter()
+        .map(|flag| {
+            let kebab = flag.replace('_', "-");
+            quote! {
+                .arg(
+                    ::clap::Arg::new(#kebab)
+                        .long(#kebab)
+                        .action(::clap::ArgAction::SetTrue)
+                        .global(true)
+                        .help(concat!("Global flag: ", #kebab))
+                )
+            }
+        })
+        .collect();
+
+    // Built-in output formatting flags (always present)
+    let format_flags = quote! {
+        .arg(
+            ::clap::Arg::new("jsonl")
+                .long("jsonl")
+                .action(::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Output one JSON object per line (for arrays)")
+        )
+        .arg(
+            ::clap::Arg::new("compact")
+                .long("compact")
+                .action(::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Output compact JSON (no whitespace)")
+        )
+        .arg(
+            ::clap::Arg::new("jq")
+                .long("jq")
+                .global(true)
+                .help("Filter output through jq expression")
+        )
+    };
+
     Ok(quote! {
         #clean_impl_block
 
@@ -231,6 +295,8 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 ::clap::Command::new(#app_name)
                     .version(#version)
                     .about(#about)
+                    #(#global_flag_args)*
+                    #format_flags
                     #(.subcommand(#leaf_subcommands))*
                     #(.subcommand(#static_mount_subcommands))*
                     #(.subcommand(#slug_mount_subcommands))*
@@ -274,13 +340,27 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     })
 }
 
-fn generate_leaf_subcommand(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
+fn generate_leaf_subcommand(
+    method: &MethodInfo,
+    has_qualified: bool,
+    global_flags: &[String],
+    has_defaults: bool,
+) -> syn::Result<TokenStream2> {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
 
     // Filter out Context parameters - they're injected, not CLI args
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
-    let args: Vec<_> = regular_params.iter().map(|p| generate_arg(p)).collect();
+
+    // Generate args, skipping params that are global flags
+    let args: Vec<_> = regular_params
+        .iter()
+        .filter(|p| {
+            let kebab = p.name.to_string().to_kebab_case();
+            !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
+        })
+        .map(|p| generate_arg(p, global_flags, has_defaults))
+        .collect();
 
     Ok(quote! {
         ::clap::Command::new(#name)
@@ -345,19 +425,34 @@ fn generate_slug_mount_subcommand(
     })
 }
 
-fn generate_arg(param: &ParamInfo) -> TokenStream2 {
+fn generate_arg(param: &ParamInfo, _global_flags: &[String], has_defaults: bool) -> TokenStream2 {
     let name = param.name.to_string().to_kebab_case();
-    let is_optional = param.is_optional;
 
-    if param.is_id {
-        let required = !is_optional;
+    if param.is_bool {
+        quote! {
+            ::clap::Arg::new(#name)
+                .long(#name)
+                .action(::clap::ArgAction::SetTrue)
+                .help(concat!("Enable ", #name))
+        }
+    } else if param.is_vec {
+        quote! {
+            ::clap::Arg::new(#name)
+                .long(#name)
+                .action(::clap::ArgAction::Append)
+                .value_delimiter(',')
+                .required(false)
+                .help(concat!("Repeatable: ", #name))
+        }
+    } else if param.is_id {
+        let required = !param.is_optional;
         quote! {
             ::clap::Arg::new(#name)
                 .required(#required)
                 .index(1)
                 .help(concat!("The ", #name))
         }
-    } else if is_optional {
+    } else if param.is_optional {
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
@@ -365,16 +460,22 @@ fn generate_arg(param: &ParamInfo) -> TokenStream2 {
                 .help(concat!("Optional: ", #name))
         }
     } else {
+        let required = !has_defaults;
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
-                .required(true)
+                .required(#required)
                 .help(concat!("Required: ", #name))
         }
     }
 }
 
-fn generate_leaf_match_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
+fn generate_leaf_match_arm(
+    method: &MethodInfo,
+    has_qualified: bool,
+    global_flags: &[String],
+    defaults_fn_ident: &Option<syn::Ident>,
+) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
 
@@ -394,18 +495,51 @@ fn generate_leaf_match_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
     }
 
     // Generate regular parameter extractions
-    for p in regular_params {
+    for p in &regular_params {
         let name = &p.name;
         let name_str = p.name.to_string().to_kebab_case();
-        let ty = &p.ty;
 
-        if p.is_optional {
+        // Check if this param is a global flag (extract from root matches)
+        let is_global = global_flags.iter().any(|g| g.replace('_', "-") == name_str);
+
+        if p.is_bool {
+            if is_global {
+                // Global flags: clap propagates them into sub_matches
+                arg_extractions.push(quote! {
+                    let #name: bool = sub_matches.get_flag(#name_str);
+                });
+            } else {
+                arg_extractions.push(quote! {
+                    let #name: bool = sub_matches.get_flag(#name_str);
+                });
+            }
+        } else if p.is_vec {
+            arg_extractions.push(quote! {
+                let #name: Vec<String> = sub_matches
+                    .get_many::<String>(#name_str)
+                    .map(|vs| vs.cloned().collect())
+                    .unwrap_or_default();
+            });
+        } else if p.is_optional {
+            let ty = &p.ty;
             arg_extractions.push(quote! {
                 let #name: #ty = sub_matches
                     .get_one::<String>(#name_str)
                     .and_then(|s| s.parse().ok());
             });
+        } else if let Some(defaults_fn) = defaults_fn_ident {
+            let ty = &p.ty;
+            arg_extractions.push(quote! {
+                let #name: #ty = if let Some(__val) = sub_matches.get_one::<String>(#name_str) {
+                    __val.parse()?
+                } else if let Some(__default) = self.#defaults_fn(#name_str) {
+                    __default.parse()?
+                } else {
+                    return Err(format!("Missing required argument: {}", #name_str).into());
+                };
+            });
         } else {
+            let ty = &p.ty;
             arg_extractions.push(quote! {
                 let #name: #ty = sub_matches
                     .get_one::<String>(#name_str)
@@ -441,14 +575,24 @@ fn generate_leaf_match_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
         }
     };
 
+    // Extract output format flags
+    let format_extraction = quote! {
+        let __jsonl = sub_matches.get_flag("jsonl");
+        let __compact = sub_matches.get_flag("compact");
+        let __jq: Option<&String> = sub_matches.get_one::<String>("jq");
+    };
+
     let output = if method.return_info.is_unit {
         quote! { println!("Done"); }
     } else if method.return_info.is_result {
         quote! {
             match result {
                 Ok(value) => {
-                    let json = ::server_less::serde_json::to_string_pretty(&value)?;
-                    println!("{}", json);
+                    let __formatted = ::server_less::cli_format_output(
+                        ::server_less::serde_json::to_value(&value)?,
+                        __jsonl, __compact, __jq.map(|s| s.as_str()),
+                    )?;
+                    println!("{}", __formatted);
                 }
                 Err(err) => {
                     eprintln!("Error: {:?}", err);
@@ -460,8 +604,11 @@ fn generate_leaf_match_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
         quote! {
             match result {
                 Some(value) => {
-                    let json = ::server_less::serde_json::to_string_pretty(&value)?;
-                    println!("{}", json);
+                    let __formatted = ::server_less::cli_format_output(
+                        ::server_less::serde_json::to_value(&value)?,
+                        __jsonl, __compact, __jq.map(|s| s.as_str()),
+                    )?;
+                    println!("{}", __formatted);
                 }
                 None => {
                     eprintln!("Not found");
@@ -471,8 +618,11 @@ fn generate_leaf_match_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
         }
     } else {
         quote! {
-            let json = ::server_less::serde_json::to_string_pretty(&result)?;
-            println!("{}", json);
+            let __formatted = ::server_less::cli_format_output(
+                ::server_less::serde_json::to_value(&result)?,
+                __jsonl, __compact, __jq.map(|s| s.as_str()),
+            )?;
+            println!("{}", __formatted);
         }
     };
 
@@ -480,6 +630,7 @@ fn generate_leaf_match_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
         Some((#subcommand_name, sub_matches)) => {
             #(#arg_extractions)*
             #call
+            #format_extraction
             #output
             Ok(())
         }

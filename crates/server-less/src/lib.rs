@@ -147,6 +147,9 @@ pub use server_less_macros::cli;
 #[cfg(feature = "cli")]
 pub use server_less_core::CliSubcommand;
 
+#[cfg(feature = "cli")]
+pub use server_less_core::cli_format_output;
+
 #[cfg(feature = "mcp")]
 pub use server_less_core::McpNamespace;
 
