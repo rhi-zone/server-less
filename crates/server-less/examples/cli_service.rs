@@ -24,6 +24,12 @@ pub struct User {
     pub email: String,
 }
 
+impl std::fmt::Display for User {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} <{}>", self.name, self.email)
+    }
+}
+
 #[derive(Debug)]
 pub enum UserError {
     NotFound,

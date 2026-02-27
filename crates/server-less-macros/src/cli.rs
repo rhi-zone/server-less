@@ -69,7 +69,10 @@ use heck::ToKebabCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name, partition_methods};
+use server_less_parse::{
+    MethodInfo, ParamInfo, extract_map_type, extract_methods, extract_vec_type, get_impl_name,
+    is_unit_type, partition_methods,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 // Import Context helpers
@@ -164,6 +167,29 @@ fn has_cli_skip(method: &MethodInfo) -> bool {
         }
     }
     false
+}
+
+/// Extract `#[cli(display_with = "fn_name")]` from a method, if present.
+fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
+    for attr in &method.method.attrs {
+        if attr.path().is_ident("cli") {
+            let mut found = None;
+            let result = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("display_with") {
+                    let value = meta.value()?;
+                    let lit: syn::LitStr = value.parse()?;
+                    found = Some(lit.parse::<syn::Path>()?);
+                    Ok(())
+                } else {
+                    Err(meta.error("expected `display_with`"))
+                }
+            });
+            if result.is_ok() {
+                return found;
+            }
+        }
+    }
+    None
 }
 
 /// Strip `#[cli(...)]` attributes from methods in the impl block so they don't
@@ -736,47 +762,105 @@ fn generate_leaf_match_arm(
         let __jq: Option<&String> = sub_matches.get_one::<String>("jq");
     };
 
+    let display_with = get_display_with(method);
+
+    // Determine the effective inner type for default Display detection
+    let inner_ty = if method.return_info.is_result {
+        method.return_info.ok_type.as_ref()
+    } else if method.return_info.is_option {
+        method.return_info.some_type.as_ref()
+    } else {
+        method.return_info.ty.as_ref()
+    };
+
+    // Generate the display logic for a value binding
+    let gen_value_display = |value_ident: &syn::Ident| -> TokenStream2 {
+        if let Some(ref display_fn) = display_with {
+            return quote! {
+                let __display = self.#display_fn(&#value_ident);
+                println!("{}", __display);
+            };
+        }
+
+        // Default Display path by inner type
+        let default_display = if let Some(ty) = inner_ty {
+            if is_unit_type(ty) {
+                quote! { println!("Done"); }
+            } else if extract_vec_type(ty).is_some() {
+                quote! {
+                    for __item in &#value_ident {
+                        println!("{}", __item);
+                    }
+                }
+            } else if extract_map_type(ty).is_some() {
+                quote! {
+                    for (__k, __v) in &#value_ident {
+                        println!("{}: {}", __k, __v);
+                    }
+                }
+            } else {
+                quote! { println!("{}", #value_ident); }
+            }
+        } else {
+            quote! { println!("{}", #value_ident); }
+        };
+
+        quote! {
+            if __json || __jsonl || __jq.is_some() {
+                let __formatted = ::server_less::cli_format_output(
+                    ::server_less::serde_json::to_value(&#value_ident)?,
+                    __jsonl, __json, __jq.map(|s| s.as_str()),
+                )?;
+                println!("{}", __formatted);
+            } else {
+                #default_display
+            }
+        }
+    };
+
+    let value_ident = syn::Ident::new("value", proc_macro2::Span::call_site());
+
     let output = if method.return_info.is_unit {
         quote! { println!("Done"); }
     } else if method.return_info.is_result {
+        let display_code = gen_value_display(&value_ident);
         quote! {
             match result {
                 Ok(value) => {
-                    let __formatted = ::server_less::cli_format_output(
-                        ::server_less::serde_json::to_value(&value)?,
-                        __jsonl, __json, __jq.map(|s| s.as_str()),
-                    )?;
-                    println!("{}", __formatted);
+                    #display_code
                 }
                 Err(err) => {
-                    eprintln!("Error: {:?}", err);
+                    eprintln!("{}", err);
                     ::std::process::exit(1);
                 }
             }
         }
     } else if method.return_info.is_option {
+        let display_code = gen_value_display(&value_ident);
         quote! {
             match result {
                 Some(value) => {
-                    let __formatted = ::server_less::cli_format_output(
-                        ::server_less::serde_json::to_value(&value)?,
-                        __jsonl, __json, __jq.map(|s| s.as_str()),
-                    )?;
-                    println!("{}", __formatted);
+                    #display_code
                 }
                 None => {
-                    eprintln!("Not found");
-                    ::std::process::exit(1);
+                    if __json || __jsonl || __jq.is_some() {
+                        let __formatted = ::server_less::cli_format_output(
+                            ::server_less::serde_json::Value::Null,
+                            __jsonl, __json, __jq.map(|s| s.as_str()),
+                        )?;
+                        println!("{}", __formatted);
+                    } else {
+                        eprintln!("Not found");
+                        ::std::process::exit(1);
+                    }
                 }
             }
         }
     } else {
+        let result_ident = syn::Ident::new("result", proc_macro2::Span::call_site());
+        let display_code = gen_value_display(&result_ident);
         quote! {
-            let __formatted = ::server_less::cli_format_output(
-                ::server_less::serde_json::to_value(&result)?,
-                __jsonl, __json, __jq.map(|s| s.as_str()),
-            )?;
-            println!("{}", __formatted);
+            #display_code
         }
     };
 

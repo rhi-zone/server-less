@@ -426,6 +426,23 @@ pub fn extract_vec_type(ty: &Type) -> Option<Type> {
     None
 }
 
+/// Check if a type is `HashMap<K, V>` or `BTreeMap<K, V>` and extract K and V
+pub fn extract_map_type(ty: &Type) -> Option<(Type, Type)> {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && (segment.ident == "HashMap" || segment.ident == "BTreeMap")
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+    {
+        let mut iter = args.args.iter();
+        if let (Some(GenericArgument::Type(key)), Some(GenericArgument::Type(val))) =
+            (iter.next(), iter.next())
+        {
+            return Some((key.clone(), val.clone()));
+        }
+    }
+    None
+}
+
 /// Check if a type is `Option<T>` and extract T
 pub fn extract_option_type(ty: &Type) -> Option<Type> {
     if let Type::Path(type_path) = ty
