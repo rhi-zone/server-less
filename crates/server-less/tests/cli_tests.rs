@@ -814,3 +814,108 @@ fn test_params_json_bool_field() {
     let result = svc.cli_run_with(["pj-app", "--params-json", r#"{"flag":true}"#, "toggle"]);
     assert!(result.is_ok());
 }
+
+// ── Short flag and help text tests ────────────────────────────────────
+
+#[derive(Clone)]
+struct ShortFlagService;
+
+#[cli(name = "short-app")]
+impl ShortFlagService {
+    /// Greet someone
+    pub fn greet(
+        &self,
+        #[param(short = 'n', help = "Name of the person to greet")] name: String,
+        #[param(short = 'v')] verbose: bool,
+    ) -> String {
+        if verbose {
+            format!("Hello, {}! (verbose)", name)
+        } else {
+            format!("Hello, {}!", name)
+        }
+    }
+
+    /// Search with custom help
+    pub fn search(&self, #[param(help = "The search query to execute")] query: String) -> String {
+        format!("Searching for: {}", query)
+    }
+}
+
+#[test]
+fn test_short_flag_on_string_param() {
+    let cmd = ShortFlagService::cli_command();
+    let greet_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "greet")
+        .unwrap();
+
+    let name_arg = greet_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "name")
+        .unwrap();
+
+    assert_eq!(name_arg.get_short(), Some('n'));
+}
+
+#[test]
+fn test_short_flag_on_bool_param() {
+    let cmd = ShortFlagService::cli_command();
+    let greet_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "greet")
+        .unwrap();
+
+    let verbose_arg = greet_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "verbose")
+        .unwrap();
+
+    assert_eq!(verbose_arg.get_short(), Some('v'));
+}
+
+#[test]
+fn test_short_flag_dispatch() {
+    let svc = ShortFlagService;
+    let result = svc.cli_run_with(["short-app", "greet", "-n", "Alice", "-v"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_help_text_on_param() {
+    let cmd = ShortFlagService::cli_command();
+    let greet_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "greet")
+        .unwrap();
+
+    let name_arg = greet_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "name")
+        .unwrap();
+
+    assert_eq!(
+        name_arg.get_help().map(|h| h.to_string()),
+        Some("Name of the person to greet".to_string())
+    );
+}
+
+#[test]
+fn test_help_text_without_short_flag() {
+    let cmd = ShortFlagService::cli_command();
+    let search_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "search")
+        .unwrap();
+
+    let query_arg = search_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "query")
+        .unwrap();
+
+    assert_eq!(
+        query_arg.get_help().map(|h| h.to_string()),
+        Some("The search query to execute".to_string())
+    );
+    // No short flag set
+    assert_eq!(query_arg.get_short(), None);
+}

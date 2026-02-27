@@ -199,6 +199,12 @@ fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
     for item in &mut block.items {
         if let syn::ImplItem::Fn(method) = item {
             method.attrs.retain(|attr| !attr.path().is_ident("cli"));
+            // Strip #[param(...)] from function parameters
+            for input in &mut method.sig.inputs {
+                if let syn::FnArg::Typed(pat_type) = input {
+                    pat_type.attrs.retain(|attr| !attr.path().is_ident("param"));
+                }
+            }
         }
     }
     block
@@ -512,42 +518,69 @@ fn type_to_json_schema(ty: &Option<syn::Type>) -> TokenStream2 {
 fn generate_arg(param: &ParamInfo, _global_flags: &[String], _has_defaults: bool) -> TokenStream2 {
     let name = param.name.to_string().to_kebab_case();
 
+    let short = param.short_flag.map(|c| quote! { .short(#c) });
+
     if param.is_bool {
+        let help = match &param.help_text {
+            Some(text) => quote! { .help(#text) },
+            None => quote! { .help(concat!("Enable ", #name)) },
+        };
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
+                #short
                 .action(::clap::ArgAction::SetTrue)
-                .help(concat!("Enable ", #name))
+                #help
         }
     } else if param.is_vec {
+        let help = match &param.help_text {
+            Some(text) => quote! { .help(#text) },
+            None => quote! { .help(concat!("Repeatable: ", #name)) },
+        };
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
+                #short
                 .action(::clap::ArgAction::Append)
                 .value_delimiter(',')
                 .required(false)
-                .help(concat!("Repeatable: ", #name))
+                #help
         }
     } else if param.is_id {
+        let help = match &param.help_text {
+            Some(text) => quote! { .help(#text) },
+            None => quote! { .help(concat!("The ", #name)) },
+        };
         quote! {
             ::clap::Arg::new(#name)
+                #short
                 .required(false)
                 .index(1)
-                .help(concat!("The ", #name))
+                #help
         }
     } else if param.is_optional {
+        let help = match &param.help_text {
+            Some(text) => quote! { .help(#text) },
+            None => quote! { .help(concat!("Optional: ", #name)) },
+        };
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
+                #short
                 .required(false)
-                .help(concat!("Optional: ", #name))
+                #help
         }
     } else {
+        let help = match &param.help_text {
+            Some(text) => quote! { .help(#text) },
+            None => quote! { .help(concat!("Required: ", #name)) },
+        };
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
+                #short
                 .required(false)
-                .help(concat!("Required: ", #name))
+                #help
         }
     }
 }

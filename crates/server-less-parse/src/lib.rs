@@ -55,6 +55,10 @@ pub struct ParamInfo {
     pub location: Option<ParamLocation>,
     /// Default value as a string (from #[param(default = ...)])
     pub default_value: Option<String>,
+    /// Short flag character (from #[param(short = 'x')])
+    pub short_flag: Option<char>,
+    /// Custom help text (from #[param(help = "...")])
+    pub help_text: Option<String>,
 }
 
 /// Parameter location for HTTP requests
@@ -155,13 +159,23 @@ pub fn extract_docs(attrs: &[syn::Attribute]) -> Option<String> {
     }
 }
 
+/// Parsed result of `#[param(...)]` attributes.
+#[derive(Debug, Clone, Default)]
+pub struct ParsedParamAttrs {
+    pub wire_name: Option<String>,
+    pub location: Option<ParamLocation>,
+    pub default_value: Option<String>,
+    pub short_flag: Option<char>,
+    pub help_text: Option<String>,
+}
+
 /// Parse #[param(...)] attributes from a parameter
-pub fn parse_param_attrs(
-    attrs: &[syn::Attribute],
-) -> syn::Result<(Option<String>, Option<ParamLocation>, Option<String>)> {
+pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAttrs> {
     let mut wire_name = None;
     let mut location = None;
     let mut default_value = None;
+    let mut short_flag = None;
+    let mut help_text = None;
 
     for attr in attrs {
         if !attr.path().is_ident("param") {
@@ -207,23 +221,43 @@ pub fn parse_param_attrs(
             } else if meta.path.is_ident("header") {
                 location = Some(ParamLocation::Header);
                 Ok(())
+            }
+            // #[param(short = 'v')]
+            else if meta.path.is_ident("short") {
+                let value: syn::LitChar = meta.value()?.parse()?;
+                short_flag = Some(value.value());
+                Ok(())
+            }
+            // #[param(help = "description")]
+            else if meta.path.is_ident("help") {
+                let value: syn::LitStr = meta.value()?.parse()?;
+                help_text = Some(value.value());
+                Ok(())
             } else {
                 Err(meta.error(
                     "unknown attribute\n\
                      \n\
-                     Valid attributes: name, default, query, path, body, header\n\
+                     Valid attributes: name, default, query, path, body, header, short, help\n\
                      \n\
                      Examples:\n\
                      - #[param(name = \"q\")]\n\
                      - #[param(default = 10)]\n\
                      - #[param(query)]\n\
-                     - #[param(header, name = \"X-API-Key\")]",
+                     - #[param(header, name = \"X-API-Key\")]\n\
+                     - #[param(short = 'v')]\n\
+                     - #[param(help = \"Enable verbose output\")]",
                 ))
             }
         })?;
     }
 
-    Ok((wire_name, location, default_value))
+    Ok(ParsedParamAttrs {
+        wire_name,
+        location,
+        default_value,
+        short_flag,
+        help_text,
+    })
 }
 
 /// Parse function parameters (excluding self)
@@ -258,7 +292,7 @@ pub fn parse_params(
                 let is_id = is_id_param(&name);
 
                 // Parse #[param(...)] attributes
-                let (wire_name, location, default_value) = parse_param_attrs(&pat_type.attrs)?;
+                let parsed = parse_param_attrs(&pat_type.attrs)?;
 
                 params.push(ParamInfo {
                     name,
@@ -268,9 +302,11 @@ pub fn parse_params(
                     is_vec,
                     vec_inner,
                     is_id,
-                    wire_name,
-                    location,
-                    default_value,
+                    wire_name: parsed.wire_name,
+                    location: parsed.location,
+                    default_value: parsed.default_value,
+                    short_flag: parsed.short_flag,
+                    help_text: parsed.help_text,
                 });
             }
         }
