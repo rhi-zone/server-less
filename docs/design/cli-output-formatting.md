@@ -39,7 +39,7 @@ The macro already parses return types. It generates different output code depend
 | `()` | `println!("Done")` |
 | `Result<(), E>` | Ok: `println!("Done")`, Err: Display the error |
 | `Result<T, E>` | Ok: display T, Err: display E |
-| `Option<T>` | Some: display T, None: "Not found" + exit 1 |
+| `Option<T>` | Some: display T, None: "Not found" + exit 1 (with `--json`: `null`) |
 | `Vec<T>` | One item per line, each via Display |
 | `HashMap<K,V>`, `BTreeMap<K,V>` | `key: value` per line, each via Display |
 | anything else | `println!("{}", value)` (Display) |
@@ -50,6 +50,8 @@ Errors use `Display` (not `Debug`) since well-designed error types (miette, anyh
 
 When `--json`, `--jsonl`, or `--jq` is passed, all paths serialize via `serde_json::to_value()` and go through `cli_format_output`. This requires `Serialize` on the return type, which is already required today.
 
+`--jq` filtering uses the [jaq](https://github.com/01mf02/jaq) library (`jaq-core`, `jaq-std`, `jaq-json`) — no external `jq` binary needed. Consistent behavior across platforms, no subprocess overhead.
+
 ### display_with escape hatch
 
 For methods where the default doesn't fit:
@@ -57,17 +59,14 @@ For methods where the default doesn't fit:
 ```rust
 #[cli(display_with = "format_items")]
 pub fn list_items(&self) -> Vec<Item> { ... }
-```
 
-The function receives the value and an output context:
-
-```rust
-fn format_items(items: &Vec<Item>, ctx: &OutputContext) -> String {
-    // ctx carries compact, color, etc.
+// Method on &self — has access to whatever context the user stores
+fn format_items(&self, items: &Vec<Item>) -> String {
+    items.iter().map(|i| format!("  - {}", i.name)).collect::<Vec<_>>().join("\n")
 }
 ```
 
-This follows serde's `#[serde(serialize_with = "...")]` pattern — progressive disclosure. You discover it when you need it, not before.
+The function is a method on the same struct, so the user's struct *is* the context — no server-less-owned context type needed. This follows serde's `#[serde(serialize_with = "...")]` pattern — progressive disclosure. You discover it when you need it, not before.
 
 ### Why this works
 
