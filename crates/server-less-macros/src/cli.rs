@@ -86,7 +86,7 @@ pub(crate) struct CliArgs {
     pub name: Option<String>,
     pub version: Option<String>,
     pub about: Option<String>,
-    pub global: Vec<String>,
+    pub global: Vec<(String, Option<String>)>,
     pub defaults: Option<String>,
 }
 
@@ -116,7 +116,14 @@ impl Parse for CliArgs {
                     syn::bracketed!(content in input);
                     while !content.is_empty() {
                         let flag: syn::Ident = content.parse()?;
-                        args.global.push(flag.to_string());
+                        let help = if content.peek(Token![=]) {
+                            content.parse::<Token![=]>()?;
+                            let lit: syn::LitStr = content.parse()?;
+                            Some(lit.value())
+                        } else {
+                            None
+                        };
+                        args.global.push((flag.to_string(), help));
                         if content.peek(Token![,]) {
                             content.parse::<Token![,]>()?;
                         }
@@ -224,7 +231,11 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .unwrap_or_else(|| struct_name.to_string().to_kebab_case());
     let version = args.version.unwrap_or_else(|| "0.1.0".to_string());
     let about = args.about.unwrap_or_default();
-    let global_flags = args.global;
+    let global_flags_with_help = args.global;
+    let global_flags: Vec<String> = global_flags_with_help
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
     let has_defaults = args.defaults.is_some();
     let defaults_fn_ident = args
         .defaults
@@ -279,17 +290,21 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let clean_impl_block = strip_cli_attrs(&impl_block);
 
     // Generate global flag args on root command
-    let global_flag_args: Vec<_> = global_flags
+    let global_flag_args: Vec<_> = global_flags_with_help
         .iter()
-        .map(|flag| {
+        .map(|(flag, help)| {
             let kebab = flag.replace('_', "-");
+            let help_clause = help
+                .as_deref()
+                .map(|h| quote! { .help(#h) })
+                .unwrap_or_default();
             quote! {
                 .arg(
                     ::clap::Arg::new(#kebab)
                         .long(#kebab)
                         .action(::clap::ArgAction::SetTrue)
                         .global(true)
-                        .help(concat!("Global flag: ", #kebab))
+                        #help_clause
                 )
             }
         })

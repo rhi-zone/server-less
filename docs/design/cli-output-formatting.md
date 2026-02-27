@@ -107,6 +107,17 @@ impl MyService {
 
 This adds `--verbose` and `--debug` as `SetTrue` flags on *every* subcommand. They're automatically filtered from each subcommand's own argument list (so a method parameter named `verbose` won't conflict). Global flags are extracted from the parent `ArgMatches` before dispatching to the subcommand.
 
+Optional help text can be provided per flag:
+
+```rust
+#[cli(name = "myapp", global = [
+    pretty = "Format output as pretty-printed JSON",
+    compact = "Format output as compact JSON",
+])]
+```
+
+Without `= "..."`, the flag appears in `--help` with no description.
+
 ### `#[cli(defaults = "fn_name")]`
 
 Provides a fallback for required parameters that aren't supplied on the command line:
