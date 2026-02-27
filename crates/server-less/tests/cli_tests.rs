@@ -691,3 +691,127 @@ fn test_defaults_missing_non_defaulted_errors() {
     let result = svc.cli_run_with(["defaults-app", "greet"]);
     assert!(result.is_err());
 }
+
+// ── Schema & --params-json tests ──────────────────────────────────────
+
+#[test]
+fn test_schema_flags_present_on_root_command() {
+    let cmd = ItemService::cli_command();
+
+    assert!(
+        cmd.get_arguments()
+            .any(|a| a.get_id().as_str() == "input-schema")
+    );
+    assert!(
+        cmd.get_arguments()
+            .any(|a| a.get_id().as_str() == "output-schema")
+    );
+    assert!(
+        cmd.get_arguments()
+            .any(|a| a.get_id().as_str() == "params-json")
+    );
+}
+
+#[test]
+fn test_input_schema_dispatch() {
+    let svc = ItemService::new();
+    // --input-schema should print schema and return Ok (without running the method)
+    let result = svc.cli_run_with(["item-cli", "--input-schema", "create-item"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_output_schema_dispatch() {
+    let svc = ItemService::new();
+    let result = svc.cli_run_with(["item-cli", "--output-schema", "create-item"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_input_schema_no_params_method() {
+    let svc = ItemService::new();
+    // list-items has no params — schema should still work
+    let result = svc.cli_run_with(["item-cli", "--input-schema", "list-items"]);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_output_schema_option_return() {
+    let svc = ItemService::new();
+    // get-item returns Option<Item> — output schema should still work
+    let result = svc.cli_run_with(["item-cli", "--output-schema", "get-item"]);
+    assert!(result.is_ok());
+}
+
+// Use a service that records what it received to verify --params-json extraction
+#[derive(Clone)]
+struct ParamsJsonService {
+    received: std::sync::Arc<std::sync::Mutex<Option<(String, String)>>>,
+}
+
+impl ParamsJsonService {
+    fn new() -> Self {
+        Self {
+            received: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+}
+
+#[cli(name = "pj-app")]
+impl ParamsJsonService {
+    /// Create something
+    pub fn create(&self, name: String, count: u32) -> String {
+        *self.received.lock().unwrap() = Some((name.clone(), count.to_string()));
+        format!("{}:{}", name, count)
+    }
+
+    /// Toggle something
+    pub fn toggle(&self, flag: bool) -> String {
+        format!("{}", flag)
+    }
+}
+
+#[test]
+fn test_params_json_dispatch() {
+    let svc = ParamsJsonService::new();
+    let result = svc.cli_run_with([
+        "pj-app",
+        "--params-json",
+        r#"{"name":"alice","count":42}"#,
+        "create",
+    ]);
+    assert!(result.is_ok());
+    let received = svc.received.lock().unwrap();
+    assert_eq!(
+        received.as_ref().unwrap(),
+        &("alice".to_string(), "42".to_string())
+    );
+}
+
+#[test]
+fn test_params_json_missing_required_field_errors() {
+    let svc = ParamsJsonService::new();
+    // Missing "count" field
+    let result = svc.cli_run_with(["pj-app", "--params-json", r#"{"name":"alice"}"#, "create"]);
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("count"),
+        "error should mention the missing field: {}",
+        err_msg
+    );
+}
+
+#[test]
+fn test_params_json_invalid_json_errors() {
+    let svc = ParamsJsonService::new();
+    let result = svc.cli_run_with(["pj-app", "--params-json", "not json", "create"]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_params_json_bool_field() {
+    let svc = ParamsJsonService::new();
+    let result = svc.cli_run_with(["pj-app", "--params-json", r#"{"flag":true}"#, "toggle"]);
+    assert!(result.is_ok());
+}

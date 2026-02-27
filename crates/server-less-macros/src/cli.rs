@@ -285,6 +285,26 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 .global(true)
                 .help("Filter output through jq expression")
         )
+        .arg(
+            ::clap::Arg::new("input-schema")
+                .long("input-schema")
+                .action(::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Print JSON Schema of the subcommand's input parameters and exit")
+        )
+        .arg(
+            ::clap::Arg::new("output-schema")
+                .long("output-schema")
+                .action(::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Print JSON Schema of the subcommand's return type and exit")
+        )
+        .arg(
+            ::clap::Arg::new("params-json")
+                .long("params-json")
+                .global(true)
+                .help("Provide all parameters as a JSON object instead of individual flags")
+        )
     };
 
     Ok(quote! {
@@ -425,7 +445,45 @@ fn generate_slug_mount_subcommand(
     })
 }
 
-fn generate_arg(param: &ParamInfo, _global_flags: &[String], has_defaults: bool) -> TokenStream2 {
+/// Map a syn::Type to a JSON Schema `serde_json::json!(...)` token expression.
+///
+/// Mirrors the pattern in `jsonschema.rs::get_type_schema` but emits token
+/// expressions rather than strings so the schema is built at compile time.
+fn type_to_json_schema(ty: &Option<syn::Type>) -> TokenStream2 {
+    let Some(ty) = ty else {
+        return quote! { ::server_less::serde_json::json!({"type": "null"}) };
+    };
+
+    let type_str = quote!(#ty).to_string();
+
+    if type_str.contains("Vec<") || type_str.contains("Vec <") {
+        quote! { ::server_less::serde_json::json!({"type": "array", "items": {}}) }
+    } else if type_str.contains("Option<") || type_str.contains("Option <") {
+        quote! { ::server_less::serde_json::json!({"type": ["null", "object"]}) }
+    } else if type_str.contains("HashMap") || type_str.contains("BTreeMap") {
+        quote! { ::server_less::serde_json::json!({"type": "object", "additionalProperties": true}) }
+    } else if type_str.contains("String") || type_str.contains("str") {
+        quote! { ::server_less::serde_json::json!({"type": "string"}) }
+    } else if type_str.contains("i8")
+        || type_str.contains("i16")
+        || type_str.contains("i32")
+        || type_str.contains("i64")
+        || type_str.contains("u8")
+        || type_str.contains("u16")
+        || type_str.contains("u32")
+        || type_str.contains("u64")
+    {
+        quote! { ::server_less::serde_json::json!({"type": "integer"}) }
+    } else if type_str.contains("f32") || type_str.contains("f64") {
+        quote! { ::server_less::serde_json::json!({"type": "number"}) }
+    } else if type_str.contains("bool") {
+        quote! { ::server_less::serde_json::json!({"type": "boolean"}) }
+    } else {
+        quote! { ::server_less::serde_json::json!({"type": "object"}) }
+    }
+}
+
+fn generate_arg(param: &ParamInfo, _global_flags: &[String], _has_defaults: bool) -> TokenStream2 {
     let name = param.name.to_string().to_kebab_case();
 
     if param.is_bool {
@@ -445,10 +503,9 @@ fn generate_arg(param: &ParamInfo, _global_flags: &[String], has_defaults: bool)
                 .help(concat!("Repeatable: ", #name))
         }
     } else if param.is_id {
-        let required = !param.is_optional;
         quote! {
             ::clap::Arg::new(#name)
-                .required(#required)
+                .required(false)
                 .index(1)
                 .help(concat!("The ", #name))
         }
@@ -460,11 +517,10 @@ fn generate_arg(param: &ParamInfo, _global_flags: &[String], has_defaults: bool)
                 .help(concat!("Optional: ", #name))
         }
     } else {
-        let required = !has_defaults;
         quote! {
             ::clap::Arg::new(#name)
                 .long(#name)
-                .required(#required)
+                .required(false)
                 .help(concat!("Required: ", #name))
         }
     }
@@ -482,6 +538,51 @@ fn generate_leaf_match_arm(
     // Partition Context vs regular parameters
     let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
 
+    // ── Input schema (compile-time JSON) ──────────────────────────────
+    let input_schema = {
+        let mut props = Vec::new();
+        let mut required = Vec::new();
+        for p in &regular_params {
+            let name_str = p.name.to_string();
+            let schema = type_to_json_schema(&Some(p.ty.clone()));
+            props.push(quote! {
+                __props.insert(#name_str.to_string(), #schema);
+            });
+            if !p.is_optional && !p.is_bool {
+                required.push(quote! { #name_str });
+            }
+        }
+        quote! {
+            let mut __props = ::server_less::serde_json::Map::new();
+            #(#props)*
+            let __schema = ::server_less::serde_json::json!({
+                "type": "object",
+                "properties": ::server_less::serde_json::Value::Object(__props),
+                "required": [#(#required),*],
+            });
+            println!("{}", ::server_less::serde_json::to_string_pretty(&__schema)?);
+            return Ok(());
+        }
+    };
+
+    // ── Output schema (compile-time JSON) ─────────────────────────────
+    let output_ty = if method.return_info.is_result {
+        &method.return_info.ok_type
+    } else if method.return_info.is_option {
+        &method.return_info.some_type
+    } else if method.return_info.is_unit {
+        &None
+    } else {
+        &method.return_info.ty
+    };
+    let output_schema_expr = type_to_json_schema(output_ty);
+    let output_schema = quote! {
+        let __schema = #output_schema_expr;
+        println!("{}", ::server_less::serde_json::to_string_pretty(&__schema)?);
+        return Ok(());
+    };
+
+    // ── Param extraction: normal CLI args ─────────────────────────────
     let mut arg_extractions = Vec::new();
     let mut arg_names = Vec::new();
 
@@ -551,29 +652,82 @@ fn generate_leaf_match_arm(
         arg_names.push(quote! { #name });
     }
 
-    let call = if method.return_info.is_unit {
-        if method.is_async {
+    // ── Param extraction: --params-json ───────────────────────────────
+    let mut json_extractions = Vec::new();
+    let mut json_arg_names = Vec::new();
+
+    if context_param.is_some() {
+        let (_extraction, call) = generate_cli_context_extraction();
+        json_extractions.push(quote! {
+            let __ctx = #call;
+        });
+        json_arg_names.push(quote! { __ctx });
+    }
+
+    for p in &regular_params {
+        let name = &p.name;
+        let name_str = p.name.to_string();
+        let ty = &p.ty;
+
+        if p.is_bool {
+            json_extractions.push(quote! {
+                let #name: bool = __json_obj.get(#name_str)
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+            });
+        } else if p.is_optional {
+            json_extractions.push(quote! {
+                let #name: #ty = __json_obj.get(#name_str)
+                    .and_then(|v| ::server_less::serde_json::from_value(v.clone()).ok());
+            });
+        } else if p.is_vec {
+            json_extractions.push(quote! {
+                let #name: Vec<String> = __json_obj.get(#name_str)
+                    .map(|v| ::server_less::serde_json::from_value(v.clone()))
+                    .transpose()
+                    .map_err(|e| format!("Invalid value for '{}': {}", #name_str, e))?
+                    .unwrap_or_default();
+            });
+        } else {
+            json_extractions.push(quote! {
+                let #name: #ty = __json_obj.get(#name_str)
+                    .ok_or_else(|| format!("Missing required field '{}' in --params-json", #name_str))
+                    .and_then(|v| ::server_less::serde_json::from_value(v.clone())
+                        .map_err(|e| format!("Invalid value for '{}': {}", #name_str, e)))?;
+            });
+        }
+        json_arg_names.push(quote! { #name });
+    }
+
+    // ── Method call ───────────────────────────────────────────────────
+    let gen_call = |names: &[TokenStream2]| -> TokenStream2 {
+        if method.return_info.is_unit {
+            if method.is_async {
+                quote! {
+                    ::tokio::runtime::Runtime::new()
+                        .expect("Failed to create Tokio runtime")
+                        .block_on(self.#method_name(#(#names),*));
+                }
+            } else {
+                quote! {
+                    self.#method_name(#(#names),*);
+                }
+            }
+        } else if method.is_async {
             quote! {
-                ::tokio::runtime::Runtime::new()
+                let result = ::tokio::runtime::Runtime::new()
                     .expect("Failed to create Tokio runtime")
-                    .block_on(self.#method_name(#(#arg_names),*));
+                    .block_on(self.#method_name(#(#names),*));
             }
         } else {
             quote! {
-                self.#method_name(#(#arg_names),*);
+                let result = self.#method_name(#(#names),*);
             }
         }
-    } else if method.is_async {
-        quote! {
-            let result = ::tokio::runtime::Runtime::new()
-                .expect("Failed to create Tokio runtime")
-                .block_on(self.#method_name(#(#arg_names),*));
-        }
-    } else {
-        quote! {
-            let result = self.#method_name(#(#arg_names),*);
-        }
     };
+
+    let call = gen_call(&arg_names);
+    let json_call = gen_call(&json_arg_names);
 
     // Extract output format flags
     let format_extraction = quote! {
@@ -628,10 +782,31 @@ fn generate_leaf_match_arm(
 
     Ok(quote! {
         Some((#subcommand_name, sub_matches)) => {
-            #(#arg_extractions)*
-            #call
-            #format_extraction
-            #output
+            // Schema flags: print and exit without running the method
+            if sub_matches.get_flag("input-schema") {
+                #input_schema
+            }
+            if sub_matches.get_flag("output-schema") {
+                #output_schema
+            }
+
+            // --params-json: extract all params from JSON blob
+            if let Some(__params_json_str) = sub_matches.get_one::<String>("params-json") {
+                let __json_obj: ::server_less::serde_json::Value = ::server_less::serde_json::from_str(__params_json_str)
+                    .map_err(|e| format!("Invalid JSON in --params-json: {}", e))?;
+                let __json_obj = __json_obj.as_object()
+                    .ok_or_else(|| "Expected a JSON object for --params-json".to_string())?;
+                #(#json_extractions)*
+                #json_call
+                #format_extraction
+                #output
+            } else {
+                // Normal CLI arg extraction
+                #(#arg_extractions)*
+                #call
+                #format_extraction
+                #output
+            }
             Ok(())
         }
     })
