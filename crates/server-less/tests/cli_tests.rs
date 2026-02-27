@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use server_less::{CliSubcommand, cli};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct Item {
     id: String,
     name: String,

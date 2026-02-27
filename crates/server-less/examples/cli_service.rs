@@ -17,7 +17,7 @@
 use serde::{Deserialize, Serialize};
 use server_less::cli;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct User {
     pub id: String,
     pub name: String,

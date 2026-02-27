@@ -59,6 +59,8 @@ pub struct ParamInfo {
     pub short_flag: Option<char>,
     /// Custom help text (from #[param(help = "...")])
     pub help_text: Option<String>,
+    /// Whether this is a positional argument (from #[param(positional)] or is_id heuristic)
+    pub is_positional: bool,
 }
 
 /// Parameter location for HTTP requests
@@ -167,6 +169,7 @@ pub struct ParsedParamAttrs {
     pub default_value: Option<String>,
     pub short_flag: Option<char>,
     pub help_text: Option<String>,
+    pub positional: bool,
 }
 
 /// Parse #[param(...)] attributes from a parameter
@@ -176,6 +179,7 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
     let mut default_value = None;
     let mut short_flag = None;
     let mut help_text = None;
+    let mut positional = false;
 
     for attr in attrs {
         if !attr.path().is_ident("param") {
@@ -233,11 +237,16 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                 let value: syn::LitStr = meta.value()?.parse()?;
                 help_text = Some(value.value());
                 Ok(())
+            }
+            // #[param(positional)]
+            else if meta.path.is_ident("positional") {
+                positional = true;
+                Ok(())
             } else {
                 Err(meta.error(
                     "unknown attribute\n\
                      \n\
-                     Valid attributes: name, default, query, path, body, header, short, help\n\
+                     Valid attributes: name, default, query, path, body, header, short, help, positional\n\
                      \n\
                      Examples:\n\
                      - #[param(name = \"q\")]\n\
@@ -245,7 +254,8 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                      - #[param(query)]\n\
                      - #[param(header, name = \"X-API-Key\")]\n\
                      - #[param(short = 'v')]\n\
-                     - #[param(help = \"Enable verbose output\")]",
+                     - #[param(help = \"Enable verbose output\")]\n\
+                     - #[param(positional)]",
                 ))
             }
         })?;
@@ -257,6 +267,7 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
         default_value,
         short_flag,
         help_text,
+        positional,
     })
 }
 
@@ -294,6 +305,9 @@ pub fn parse_params(
                 // Parse #[param(...)] attributes
                 let parsed = parse_param_attrs(&pat_type.attrs)?;
 
+                // is_positional: explicit attribute takes priority, is_id heuristic as fallback
+                let is_positional = parsed.positional || is_id;
+
                 params.push(ParamInfo {
                     name,
                     ty,
@@ -302,6 +316,7 @@ pub fn parse_params(
                     is_vec,
                     vec_inner,
                     is_id,
+                    is_positional,
                     wire_name: parsed.wire_name,
                     location: parsed.location,
                     default_value: parsed.default_value,

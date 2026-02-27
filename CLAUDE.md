@@ -127,6 +127,7 @@ server-less/
 Detailed design docs live in `docs/design/`:
 - [Impl-First Design](docs/design/impl-first.md) - Protocol projections and conventions
 - [Extension Coordination](docs/design/extension-coordination.md) - How derives compose
+- [Param Attributes](docs/design/param-attributes.md) - `#[param]` cross-protocol design, clap alignment, positional ordering
 
 **When to write one:** Any decision where multiple genuinely viable alternatives were considered. The doc records what was chosen, what was rejected, and why — so future contributors (and future Claude sessions) don't re-litigate settled questions.
 

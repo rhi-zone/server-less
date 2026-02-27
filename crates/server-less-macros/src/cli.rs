@@ -546,14 +546,13 @@ fn generate_arg(param: &ParamInfo, _global_flags: &[String], _has_defaults: bool
                 .required(false)
                 #help
         }
-    } else if param.is_id {
+    } else if param.is_positional {
         let help = match &param.help_text {
             Some(text) => quote! { .help(#text) },
             None => quote! { .help(concat!("The ", #name)) },
         };
         quote! {
             ::clap::Arg::new(#name)
-                #short
                 .required(false)
                 .index(1)
                 #help
@@ -624,7 +623,7 @@ fn generate_leaf_match_arm(
         }
     };
 
-    // ── Output schema (compile-time JSON) ─────────────────────────────
+    // ── Output schema ──────────────────────────────────────────────────
     let output_ty = if method.return_info.is_result {
         &method.return_info.ok_type
     } else if method.return_info.is_option {
@@ -634,11 +633,30 @@ fn generate_leaf_match_arm(
     } else {
         &method.return_info.ty
     };
-    let output_schema_expr = type_to_json_schema(output_ty);
-    let output_schema = quote! {
-        let __schema = #output_schema_expr;
-        println!("{}", ::server_less::serde_json::to_string_pretty(&__schema)?);
-        return Ok(());
+    // When the `jsonschema` feature is enabled, emit a runtime schemars call so
+    // user-defined structs produce full field-level schemas. When disabled, fall
+    // back to the compile-time type-string heuristic (primitives only).
+    #[cfg(feature = "jsonschema")]
+    let output_schema = if let Some(ty) = output_ty {
+        quote! {
+            let __schema = ::server_less::cli_schema_for::<#ty>();
+            println!("{}", ::server_less::serde_json::to_string_pretty(&__schema)?);
+            return Ok(());
+        }
+    } else {
+        quote! {
+            println!("{{\"type\": \"null\"}}");
+            return Ok(());
+        }
+    };
+    #[cfg(not(feature = "jsonschema"))]
+    let output_schema = {
+        let output_schema_expr = type_to_json_schema(output_ty);
+        quote! {
+            let __schema = #output_schema_expr;
+            println!("{}", ::server_less::serde_json::to_string_pretty(&__schema)?);
+            return Ok(());
+        }
     };
 
     // ── Param extraction: normal CLI args ─────────────────────────────
@@ -808,15 +826,13 @@ fn generate_leaf_match_arm(
 
     // Generate the display logic for a value binding
     let gen_value_display = |value_ident: &syn::Ident| -> TokenStream2 {
-        if let Some(ref display_fn) = display_with {
-            return quote! {
+        // JSON flags always win; display_with only governs text output
+        let text_display = if let Some(ref display_fn) = display_with {
+            quote! {
                 let __display = self.#display_fn(&#value_ident);
                 println!("{}", __display);
-            };
-        }
-
-        // Default Display path by inner type
-        let default_display = if let Some(ty) = inner_ty {
+            }
+        } else if let Some(ty) = inner_ty {
             if is_unit_type(ty) {
                 quote! { println!("Done"); }
             } else if extract_vec_type(ty).is_some() {
@@ -846,7 +862,7 @@ fn generate_leaf_match_arm(
                 )?;
                 println!("{}", __formatted);
             } else {
-                #default_display
+                #text_display
             }
         }
     };

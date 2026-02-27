@@ -185,6 +185,17 @@ pub fn cli_format_output(
     }
 }
 
+/// Generate a JSON Schema for a type at runtime using schemars.
+///
+/// Called by `--output-schema` in `#[cli]`-generated code when the `jsonschema`
+/// feature is enabled. Users must `#[derive(schemars::JsonSchema)]` on their
+/// return types to use this.
+#[cfg(feature = "jsonschema")]
+pub fn cli_schema_for<T: schemars::JsonSchema>() -> serde_json::Value {
+    serde_json::to_value(schemars::schema_for!(T))
+        .unwrap_or_else(|_| serde_json::json!({"type": "object"}))
+}
+
 /// Runtime method metadata with string-based types.
 ///
 /// This is a simplified, serialization-friendly representation of method

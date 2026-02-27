@@ -59,7 +59,7 @@ smithy = ["server-less-macros/smithy"]
 openapi = ["server-less-macros/openapi", "server-less-openapi"]  # Standalone OpenAPI (no axum)
 openrpc = ["server-less-macros/openrpc"]
 asyncapi = ["server-less-macros/asyncapi"]
-jsonschema = ["server-less-macros/jsonschema"]
+jsonschema = ["server-less-macros/jsonschema", "server-less-core/jsonschema"]
 
 # Documentation generators (no runtime deps)
 markdown = ["server-less-macros/markdown"]
@@ -81,3 +81,4 @@ clap = "4"
 futures = "0.3"
 async-graphql = "7"
 async-graphql-axum = "7"
+schemars = "1"
