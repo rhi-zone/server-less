@@ -123,7 +123,7 @@ pub struct HttpMountPathInfo {
 ///
 /// - `jsonl`: one JSON object per line for array values
 /// - `json`: machine-readable JSON (no whitespace)
-/// - `jq`: filter through the `jq` binary
+/// - `jq`: filter using jaq (jq implemented in Rust, no external binary needed)
 /// - Default: pretty-printed JSON
 #[cfg(feature = "cli")]
 pub fn cli_format_output(
@@ -133,25 +133,40 @@ pub fn cli_format_output(
     jq: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     if let Some(filter) = jq {
-        let input = serde_json::to_string(&value)?;
-        let output = std::process::Command::new("jq")
-            .arg(filter)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .and_then(|mut child| {
-                use std::io::Write;
-                if let Some(ref mut stdin) = child.stdin {
-                    stdin.write_all(input.as_bytes())?;
-                }
-                child.wait_with_output()
-            })?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("jq failed: {stderr}").into());
+        use jaq_core::load::{Arena, File as JaqFile, Loader};
+        use jaq_core::{Compiler, Ctx, RcIter};
+        use jaq_json::Val;
+
+        let loader = Loader::new(jaq_std::defs().chain(jaq_json::defs()));
+        let arena = Arena::default();
+
+        let program = JaqFile {
+            code: filter,
+            path: (),
+        };
+
+        let modules = loader
+            .load(&arena, program)
+            .map_err(|errs| format!("jq parse error: {:?}", errs))?;
+
+        let filter_compiled = Compiler::default()
+            .with_funs(jaq_std::funs().chain(jaq_json::funs()))
+            .compile(modules)
+            .map_err(|errs| format!("jq compile error: {:?}", errs))?;
+
+        let val = Val::from(value);
+        let inputs = RcIter::new(core::iter::empty());
+        let out = filter_compiled.run((Ctx::new([], &inputs), val));
+
+        let mut results = Vec::new();
+        for result in out {
+            match result {
+                Ok(v) => results.push(v.to_string()),
+                Err(e) => return Err(format!("jq runtime error: {:?}", e).into()),
+            }
         }
-        Ok(String::from_utf8(output.stdout)?.trim_end().to_string())
+
+        Ok(results.join("\n"))
     } else if jsonl {
         match value {
             serde_json::Value::Array(items) => {

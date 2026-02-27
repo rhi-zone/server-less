@@ -633,17 +633,10 @@ fn test_json_flag_dispatch() {
 }
 
 #[test]
-fn test_jq_flag_dispatch_conditional() {
-    // Only test --jq if jq binary is available
-    if std::process::Command::new("jq")
-        .arg("--version")
-        .output()
-        .is_ok()
-    {
-        let svc = ItemService::new();
-        let result = svc.cli_run_with(["item-cli", "--jq", ".[0].name", "list-items"]);
-        assert!(result.is_ok());
-    }
+fn test_jq_flag_dispatch() {
+    let svc = ItemService::new();
+    let result = svc.cli_run_with(["item-cli", "--jq", ".[0].name", "list-items"]);
+    assert!(result.is_ok());
 }
 
 // ── Defaults hook tests ──────────────────────────────────────────────

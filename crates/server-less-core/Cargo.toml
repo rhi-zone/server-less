@@ -27,9 +27,12 @@ axum = { version = "0.8", default-features = false, features = ["ws"], optional 
 
 # CLI support (optional)
 clap = { version = "4", optional = true }
+jaq-core = { version = "2", optional = true }
+jaq-std = { version = "2", optional = true }
+jaq-json = { version = "1", features = ["serde_json"], optional = true }
 
 [features]
-cli = ["clap"]
+cli = ["clap", "jaq-core", "jaq-std", "jaq-json"]
 mcp = []
 jsonrpc = []
 http = ["axum"]
