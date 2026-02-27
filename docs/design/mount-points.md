@@ -1,6 +1,18 @@
 # Mount Points
 
-A mount point is a method that returns `&T` where `T: CliSubcommand`. The `#[cli]` macro detects these by return type and treats them as subcommand group delegation rather than leaf commands.
+A mount point is a method that returns `&T` where `T` implements a protocol's mount trait. The macro detects these by return type and treats them as delegation rather than leaf commands.
+
+The same `&T` return type convention works across all protocols:
+
+| Protocol | Trait | Effect |
+|----------|-------|--------|
+| CLI | `CliSubcommand` | Nested subcommand group |
+| HTTP | `HttpMount` | Path prefix delegation |
+| MCP | `McpNamespace` | Tool namespace delegation |
+| WebSocket | `WsMount` | WebSocket mount delegation |
+| JSON-RPC | `JsonRpcMount` | JSON-RPC method delegation |
+
+The examples below use CLI, but the pattern is the same for all protocols.
 
 ```rust
 #[cli(name = "app")]

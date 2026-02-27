@@ -844,83 +844,85 @@ let spec = Calculator::openrpc_json();
 
 ---
 
-## Current Status Summary
+## Iteration 23: Blessed Presets & Mount Points
 
-| Component | Status | Tests |
-|-----------|--------|-------|
-| MCP macro | ✅ Solid | 13 (+ E2E) |
-| HTTP macro | ✅ Enhanced | 14 (+ E2E) |
-| CLI macro | ✅ Solid | 6 (+ E2E) |
-| WS macro | ✅ Solid | 16 (+ E2E) |
-| JSON-RPC macro | ✅ Working | 11 |
-| OpenRPC spec | ✅ Working | 9 |
-| Serve macro | ✅ Working | 6 |
-| GraphQL macro | ✅ Working | 9 |
-| gRPC (impl + schema) | ✅ Working | 11 |
-| Cap'n Proto (impl + schema) | ✅ Working | 10 |
-| Thrift (impl + schema) | ✅ Working | 9 |
-| Error derive | ✅ Working | 10 |
-| Route attr | ✅ Working | - |
-| OpenAPI schemas | ✅ Working | - |
-| RPC utilities | ✅ Shared | - |
-| Feature gates | ✅ Working | - |
-| SSE streaming | ✅ Working | - |
-| Async support | ✅ Working | - |
-| Error messages | ✅ Improved | - |
-| Documentation | ✅ Updated | - |
-| **Total tests** | | **111** |
+**Goal:** Add blessed preset macros and cross-protocol mount point composition.
+
+**Blessed Presets:**
+- `#[server]` → `#[http]` + `#[serve(http)]`
+- `#[rpc]` → `#[jsonrpc]` + `#[openrpc]` + `#[serve(jsonrpc)]`
+- `#[tool]` → `#[mcp]` + `#[jsonschema]`
+- `#[program]` → `#[cli]` + `#[markdown]`
+
+**Mount Points:**
+- `CliSubcommand` — nested CLI subcommand groups via `&T` return type
+- `HttpMount` — HTTP path prefix delegation
+- `McpNamespace` — MCP tool namespace delegation
+- `WsMount` — WebSocket mount delegation
+- `JsonRpcMount` — JSON-RPC mount delegation
+
+See [blessed-presets.md](./blessed-presets.md) and [mount-points.md](./mount-points.md).
 
 ---
 
-## Future Iterations
+## Iteration 24: CLI Output Formatting
 
-(To be filled as we go)
+**Goal:** Display-first CLI output with opt-in machine-readable modes.
 
-### Schema-based Protocols (Design Challenge)
+**Features:**
+- Default output via `Display` (not JSON)
+- `--json` / `--jsonl` global flags for machine-readable output
+- `--jq <expr>` — in-process jq filtering via `jaq` library (no external binary)
+- `--input-schema` / `--output-schema` — JSON Schema introspection via `schemars`
+- `--params-json <json>` — pass all parameters as JSON
+- `display_with` escape hatch for custom per-method formatting
+- JSON passthrough: `--json` takes precedence over `display_with`
 
-Cap'n Proto and Protobuf/gRPC are **schema-first** protocols, which inverts server-less's impl-first approach:
+See [cli-output-formatting.md](./cli-output-formatting.md).
 
-| Approach | Impl-first (current) | Schema-first |
-|----------|---------------------|--------------|
-| Flow | Rust impl → protocol | .proto/.capnp → Rust |
-| Examples | HTTP, MCP, WS, CLI | gRPC, Cap'n Proto |
+---
 
-**Design decision: Bidirectional**
+## Iteration 25: Param Attributes
 
-Support both directions - impl-first AND schema-first:
+**Goal:** Cross-protocol parameter customization via `#[param]`.
 
-```rust
-// Direction 1: Impl-first (generate schema)
-#[grpc]
-impl MyService {
-    fn get_user(&self, id: String) -> User { }
-}
-// Generates: service.proto, grpc_router(), etc.
+**Features:**
+- `#[param(positional)]` — CLI positional args (beyond the `_id` heuristic)
+- `#[param(short = 'x')]` — short CLI flags
+- `#[param(help = "...")]` — custom help text
+- `#[param(name = "...")]` — wire name override
+- `#[param(default = ...)]` — default values
+- `#[param(query/path/body/header)]` — HTTP parameter placement
 
-// Direction 2: Schema-first (validate against schema)
-#[grpc(schema = "service.proto")]
-impl MyService {
-    // Macro validates methods match schema
-    // Compile error if method signature doesn't match
-}
+See [param-attributes.md](./param-attributes.md).
 
-// Direction 3: Schema-first with trait generation
-#[derive(GrpcService)]
-#[grpc(schema = "service.proto")]
-struct MyService;
-// Generates: trait MyServiceRpc { fn get_user(...) }
-// User implements trait, gets type safety from schema
-```
+---
 
-**Why bidirectional:**
-- Impl-first for rapid prototyping, internal services
-- Schema-first for interop with existing systems, contract-first teams
-- Progressive: start impl-first, export schema, switch to schema-first when stabilized
+## Current Status Summary
 
-**Philosophy: We're not here to judge, just to help.**
-Users have their own workflows, constraints, and preferences. Server-less supports them, not the other way around.
-
-**Protocols to explore:**
-- gRPC (protobuf) - streaming, error codes, widely used
-- Cap'n Proto - zero-copy, RPC built-in, mentioned in origin story
-- Thrift - if there's demand
+| Component | Status |
+|-----------|--------|
+| MCP macro | ✅ Solid |
+| HTTP macro | ✅ Enhanced |
+| CLI macro | ✅ Enhanced |
+| WS macro | ✅ Solid |
+| JSON-RPC macro | ✅ Working |
+| GraphQL macro | ✅ Working |
+| gRPC schema | ✅ Working |
+| Cap'n Proto schema | ✅ Working |
+| Thrift schema | ✅ Working |
+| Connect schema | ✅ Working |
+| Smithy schema | ✅ Working |
+| AsyncAPI spec | ✅ Working |
+| OpenRPC spec | ✅ Working |
+| JSON Schema | ✅ Working |
+| Markdown docs | ✅ Working |
+| Serve macro | ✅ Working |
+| Error derive | ✅ Working |
+| Route attr | ✅ Working |
+| Param attr | ✅ Working |
+| OpenAPI composition | ✅ Working |
+| Blessed presets | ✅ Working |
+| Mount points | ✅ Working |
+| CLI output formatting | ✅ Working |
+| **Total tests** | **450** |

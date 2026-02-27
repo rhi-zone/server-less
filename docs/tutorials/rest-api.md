@@ -17,7 +17,7 @@ Add Server-less to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-server-less = { git = "https://github.com/rhi-zone/server-less" }
+server-less = "0.1"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 ```
@@ -223,9 +223,9 @@ impl BlogService {
 Use Server-less error types for proper HTTP status codes:
 
 ```rust
-use server_less::Server-lessError;
+use server_less::ServerlessError;
 
-#[derive(Debug, Server-lessError)]
+#[derive(Debug, ServerlessError)]
 pub enum BlogError {
     #[error(code = NotFound, message = "Post not found")]
     PostNotFound,

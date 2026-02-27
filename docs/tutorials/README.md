@@ -142,9 +142,9 @@ impl Service {
 ### Error Handling
 
 ```rust
-use server_less::Server-lessError;
+use server_less::ServerlessError;
 
-#[derive(Debug, Server-lessError)]
+#[derive(Debug, ServerlessError)]
 enum MyError {
     #[error(code = NotFound, message = "User not found")]
     UserNotFound,

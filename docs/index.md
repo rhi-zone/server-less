@@ -23,7 +23,7 @@ features:
     details: HTTP, CLI, MCP, WebSocket, GraphQL, gRPC, and more. All feature-gated and composable.
 
   - icon: ✅
-    title: 171 Tests Passing
+    title: 450 Tests Passing
     details: Comprehensive test coverage with zero failures. Production-ready core protocols.
 
   - icon: 📦
@@ -95,25 +95,30 @@ Generate API documentation:
 - `#[jsonschema]` - JSON Schema definitions
 - `#[markdown]` - Human-readable API docs
 
-### Utilities (3)
-- `#[derive(Server-lessError)]` - Error code inference + HTTP status mapping
+### Blessed Presets (4)
+Batteries-included shortcuts:
+- `#[server]` → `#[http]` + `#[serve(http)]`
+- `#[rpc]` → `#[jsonrpc]` + `#[openrpc]` + `#[serve(jsonrpc)]`
+- `#[tool]` → `#[mcp]` + `#[jsonschema]`
+- `#[program]` → `#[cli]` + `#[markdown]`
+
+### Utilities
+- `#[derive(ServerlessError)]` - Error code inference + HTTP status mapping
 - `#[serve]` - Compose multiple protocol routers
-- `#[route]` - Per-method attribute overrides
+- `#[route]` - Per-method HTTP overrides
+- `#[param]` - Per-parameter cross-protocol customization
 
 ## Project Status
 
-**Current: Foundation ✅**
-- 18 macros implemented
-- 329 tests passing, 0 failures
-- Complete design documentation
-- Working examples for all major protocols
+**Current: v0.1.0 — Foundation ✅**
+- 18 macros implemented across 6 crates
+- 450 tests passing, 0 failures
+- Blessed presets: `#[server]`, `#[rpc]`, `#[tool]`, `#[program]`
+- Mount points for nested subcommand composition
+- CLI output formatting with `--json`, `--jq`, `--output-schema`
+- Published on [crates.io](https://crates.io/crates/server-less)
 
-**Next: Polish & Refinement**
-- GraphQL type mapping fixes
-- Better error handling
-- Improved documentation
-
-See [ROADMAP.md](https://github.com/rhi-zone/server-less/blob/master/ROADMAP.md) for details.
+See [TODO.md](https://github.com/rhi-zone/server-less/blob/master/TODO.md) for the backlog.
 
 ## Design Philosophy
 
@@ -137,20 +142,20 @@ Related projects:
 
 ## Getting Started
 
-1. **[Design Philosophy](/design/impl-first)** - Understand the impl-first approach
-2. **[Extension Coordination](/design/extension-coordination)** - How macros compose
-3. **[Implementation Notes](/design/implementation-notes)** - Technical decisions
-4. **[Iteration Log](/design/iteration-log)** - Evolution and design history
+1. **[REST API Tutorial](/tutorials/rest-api)** - Build a blog API in 30 minutes
+2. **[Multi-Protocol Tutorial](/tutorials/multi-protocol)** - Expose one service over HTTP, CLI, MCP, and more
+3. **[Design Philosophy](/design/impl-first)** - Understand the impl-first approach
+4. **[Param Attributes](/design/param-attributes)** - `#[param]` cross-protocol customization
 
 ## Installation
 
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-server-less = { git = "https://github.com/rhi-zone/server-less" }
+server-less = "0.1"
 
 # Or select specific features
-server-less = { git = "https://github.com/rhi-zone/server-less", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { version = "0.1", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ## Contributing

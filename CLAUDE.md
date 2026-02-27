@@ -125,9 +125,28 @@ server-less/
 ## Design Documents
 
 Detailed design docs live in `docs/design/`:
-- [Impl-First Design](docs/design/impl-first.md) - Protocol projections and conventions
-- [Extension Coordination](docs/design/extension-coordination.md) - How derives compose
+
+**Core design:**
+- [Impl-First Design](docs/design/impl-first.md) - Protocol projections, naming conventions, return types
+- [Inference vs Configuration](docs/design/inference-vs-configuration.md) - Full reference for all inference rules and overrides
 - [Param Attributes](docs/design/param-attributes.md) - `#[param]` cross-protocol design, clap alignment, positional ordering
+- [Error Mapping](docs/design/error-mapping.md) - `#[derive(ServerlessError)]` inference and protocol dispatch
+
+**Composition & coordination:**
+- [Extension Coordination](docs/design/extension-coordination.md) - How derives compose via `Serve`
+- [Parse-Time Coordination](docs/design/parse-time-coordination.md) - Why compile-time inspection over runtime registries
+- [Protocol Naming](docs/design/protocol-naming.md) - `PascalCase` derive → `snake_case` method convention
+- [Blessed Presets](docs/design/blessed-presets.md) - `#[server]`, `#[rpc]`, `#[tool]`, `#[program]` presets
+
+**Feature-specific:**
+- [CLI Output Formatting](docs/design/cli-output-formatting.md) - Display default, `--json`/`--jq`/`--output-schema`
+- [Mount Points](docs/design/mount-points.md) - Nested subcommand composition via `&T` return types
+- [OpenAPI Composition](docs/design/openapi-composition.md) - Multi-protocol OpenAPI spec composition
+
+**Process:**
+- [Open Questions](docs/design/open-questions.md) - Unresolved design questions
+- [Iteration Log](docs/design/iteration-log.md) - Development history
+- [Implementation Notes](docs/design/implementation-notes.md) - Early implementation snapshot (2025-01-20, historic)
 
 **When to write one:** Any decision where multiple genuinely viable alternatives were considered. The doc records what was chosen, what was rejected, and why — so future contributors (and future Claude sessions) don't re-litigate settled questions.
 

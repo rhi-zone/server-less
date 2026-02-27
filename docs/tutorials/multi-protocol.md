@@ -26,7 +26,7 @@ Becomes available as:
 
 ```toml
 [dependencies]
-server-less = { git = "https://github.com/rhi-zone/server-less", features = ["full"] }
+server-less = { version = "0.1", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 ```
@@ -306,7 +306,7 @@ impl TaskService { /* ... */ }
 #[tokio::main]
 async fn main() {
     let service = TaskService::new();
-    let matches = TaskService::cli_app().get_matches();
+    let matches = TaskService::cli_command().get_matches();
     service.cli_run(&matches);
 }
 ```
@@ -385,9 +385,9 @@ pub fn create_task(&self, req: HttpRequest) -> HttpResponse { }
 ### 2. Use Result Types for Errors
 
 ```rust
-use server_less::Server-lessError;
+use server_less::ServerlessError;
 
-#[derive(Debug, Server-lessError)]
+#[derive(Debug, ServerlessError)]
 enum TaskError {
     #[error(code = NotFound)]
     TaskNotFound,

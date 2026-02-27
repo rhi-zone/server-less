@@ -168,7 +168,7 @@ Prioritized backlog of pending features and improvements.
 
 - [x] Add `trybuild` compile-fail tests (3 fixtures: missing_self, invalid_http_arg, duplicate_route)
 - [x] Add unit tests for `server-less-parse` (35 tests) and `server-less-rpc` (39 tests)
-- [ ] Add HTTP round-trip tests via `axum::TestClient`
+- [x] Add HTTP round-trip tests via `axum::TestClient` ✅
 - [x] Implement `http_mount_openapi_paths()` (populates from method info at macro expansion time)
 - [x] Wire up CLI context injection (was already wired — removed stale `#[allow(dead_code)]`)
 - [x] Replace `.unwrap()` with `.expect("BUG: ...")` in generated code (ws.rs, openapi_gen.rs)

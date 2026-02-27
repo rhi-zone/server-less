@@ -52,6 +52,15 @@ When `--json`, `--jsonl`, or `--jq` is passed, all paths serialize via `serde_js
 
 `--jq` filtering uses the [jaq](https://github.com/01mf02/jaq) library (`jaq-core`, `jaq-std`, `jaq-json`) — no external `jq` binary needed. Consistent behavior across platforms, no subprocess overhead.
 
+### Schema introspection
+
+Two global flags allow programmatic discovery of command shapes:
+
+- `--input-schema` — prints the JSON Schema of the subcommand's input parameters and exits
+- `--output-schema` — prints the JSON Schema of the return type and exits
+
+When the `jsonschema` feature is enabled and the return type implements `schemars::JsonSchema`, `--output-schema` uses schemars for accurate schema generation. Otherwise it falls back to a heuristic based on the parsed return type.
+
 ### display_with escape hatch
 
 For methods where the default doesn't fit:
@@ -67,6 +76,8 @@ fn format_items(&self, items: &Vec<Item>) -> String {
 ```
 
 The function is a method on the same struct, so the user's struct *is* the context — no server-less-owned context type needed. This follows serde's `#[serde(serialize_with = "...")]` pattern — progressive disclosure. You discover it when you need it, not before.
+
+When `--json`, `--jsonl`, or `--jq` is passed alongside `display_with`, the JSON path takes precedence — the value is serialized via serde, not the custom formatter. This ensures machine-readable output is always structurally consistent regardless of display customization.
 
 ### Why this works
 

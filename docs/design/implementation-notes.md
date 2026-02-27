@@ -1,5 +1,7 @@
 # Implementation Notes
 
+> **Historic snapshot (2025-01-20).** These notes capture the state after the first three macros (MCP, HTTP, CLI) were implemented. Many items listed as TODO here have since been completed. See the [iteration log](./iteration-log.md) for the full development history.
+
 Notes from implementing the first set of server-less macros.
 
 ## What Works (2025-01-20)
