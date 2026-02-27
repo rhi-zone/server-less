@@ -1,26 +1,11 @@
-//! Example demonstrating parameter customization concepts.
+//! Example demonstrating parameter inference and customization.
 //!
-//! The `#[param(...)]` attribute for fine-grained parameter control requires
-//! nightly Rust with `#![feature(register_tool)]`. This example shows the
-//! patterns without the attribute syntax.
+//! The `#[param(...)]` attribute is consumed by the proc macro at compile time
+//! and works on stable Rust. It is fully supported with `#[cli]` (which strips
+//! the attributes from emitted code). For `#[http]`, the inference rules handle
+//! most cases without explicit attributes — see docs/design/param-attributes.md.
 //!
-//! With nightly, you could write:
-//! ```ignore
-//! #![feature(register_tool)]
-//! #![register_tool(param)]
-//!
-//! #[http]
-//! impl SearchService {
-//!     pub fn search(
-//!         &self,
-//!         #[param(name = "q")] query: String,
-//!         #[param(default = 0)] offset: u32,
-//!         #[param(default = 20)] limit: u32,
-//!     ) -> Vec<SearchResult> { /* ... */ }
-//! }
-//! ```
-//!
-//! On stable Rust, the default inference rules handle most cases:
+//! This example demonstrates the inference rules:
 //! - `id` / `*_id` params become path parameters
 //! - GET methods use query params, POST/PUT/PATCH use body params
 //! - `Option<T>` params are optional
@@ -30,6 +15,7 @@
 //! # Then:
 //! curl 'http://localhost:3000/search?query=rust&limit=5'
 //! curl http://localhost:3000/items/42
+//! curl -X POST http://localhost:3000/items -d '{"name":"widget"}'
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -55,7 +41,7 @@ impl SearchService {
         }]
     }
 
-    /// Get item by ID (item_id inferred as path param)
+    /// Get item by ID (item_id inferred as path param via is_id heuristic)
     pub fn get_item(&self, item_id: u32) -> Option<String> {
         if item_id == 42 {
             Some("The answer".into())

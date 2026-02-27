@@ -29,9 +29,9 @@ Some attributes are protocol-specific:
 | `query`, `path`, `body`, `header` | HTTP only | Override parameter location |
 | `short = 'x'` | CLI only | Add a short flag |
 | `positional` | CLI only | Make the argument positional |
-| `name = "..."` | All | Override the wire name |
+| `name = "..."` | HTTP, OpenAPI | Override the wire name (CLI ignores this; use `#[cli(name)]` for CLI) |
 | `help = "..."` | All | Description text |
-| `default = ...` | All | Default value |
+| `default = ...` | HTTP, OpenAPI | Default value (CLI uses `#[cli(defaults)]` separately) |
 
 Protocol-specific attributes on non-matching derives are silently ignored — `short`
 has no meaning in HTTP and doesn't affect HTTP code generation.
@@ -97,6 +97,8 @@ pub fn copy(
 
 The function signature is the source of truth. No redundant annotations needed.
 
+> **Note:** Multiple positional arguments on a single command (like the `copy` example above) are not yet implemented — the positional index is currently hardcoded to 1. The design is settled, but the codegen needs updating to assign sequential indices. For now, only one positional argument per command works correctly.
+
 ## The `is_id` Heuristic
 
 Parameters named `id`, `user_id`, `post_id`, etc. (ending in `_id` or named `id`)
@@ -110,3 +112,8 @@ pub fn get_user(&self, user_id: String) -> Option<User>
 
 `#[param(positional)]` is the explicit version, preferred when the heuristic doesn't
 apply or when you want to be self-documenting.
+
+## See Also
+
+- [CLI Output Formatting](cli-output-formatting.md) — `display_with`, `--json`/`--jq`, `defaults`
+- [Route & Response Attributes](route-response-attrs.md) — `#[route]` and `#[response]` for HTTP overrides

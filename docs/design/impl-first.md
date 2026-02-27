@@ -154,7 +154,7 @@ Each protocol derive maps errors appropriately:
 Conventions work 80% of the time. Override when needed:
 
 ```rust
-#[http(path = "/api/v1/users", method = "POST")]
+#[route(path = "/api/v1/users", method = "POST")]
 fn register(&self, ...) -> User  // wouldn't infer POST from "register"
 
 #[cli(name = "add")]

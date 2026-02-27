@@ -140,6 +140,7 @@ Detailed design docs live in `docs/design/`:
 
 **Feature-specific:**
 - [CLI Output Formatting](docs/design/cli-output-formatting.md) - Display default, `--json`/`--jq`/`--output-schema`
+- [Route & Response Attributes](docs/design/route-response-attrs.md) - `#[route]` and `#[response]` HTTP overrides
 - [Mount Points](docs/design/mount-points.md) - Nested subcommand composition via `&T` return types
 - [OpenAPI Composition](docs/design/openapi-composition.md) - Multi-protocol OpenAPI spec composition
 

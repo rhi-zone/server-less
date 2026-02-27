@@ -79,6 +79,59 @@ The function is a method on the same struct, so the user's struct *is* the conte
 
 When `--json`, `--jsonl`, or `--jq` is passed alongside `display_with`, the JSON path takes precedence — the value is serialized via serde, not the custom formatter. This ensures machine-readable output is always structurally consistent regardless of display customization.
 
+### `--params-json`
+
+All subcommands accept `--params-json <JSON>`, which provides every parameter as a single JSON object instead of individual flags:
+
+```bash
+# These are equivalent:
+myapp create-user --name "Alice" --email "alice@example.com"
+myapp create-user --params-json '{"name": "Alice", "email": "alice@example.com"}'
+```
+
+Keys are the snake_case parameter names (matching the Rust function signature, not the kebab-case CLI flag names). Values are strings that get `.parse()`d into the target type, matching how individual CLI flags work.
+
+`--params-json` composes with output formatting flags — you can combine it with `--json`, `--jq`, etc. This is particularly useful for scripting, where constructing a JSON object is often easier than escaping shell arguments.
+
+### `#[cli(global = [...])]`
+
+Declares global boolean flags that propagate to all subcommands:
+
+```rust
+#[cli(name = "myapp", global = [verbose, debug])]
+impl MyService {
+    pub fn list_items(&self) -> Vec<Item> { ... }
+    pub fn get_item(&self, item_id: String) -> Option<Item> { ... }
+}
+```
+
+This adds `--verbose` and `--debug` as `SetTrue` flags on *every* subcommand. They're automatically filtered from each subcommand's own argument list (so a method parameter named `verbose` won't conflict). Global flags are extracted from the parent `ArgMatches` before dispatching to the subcommand.
+
+### `#[cli(defaults = "fn_name")]`
+
+Provides a fallback for required parameters that aren't supplied on the command line:
+
+```rust
+#[cli(defaults = "get_defaults")]
+impl MyService {
+    pub fn connect(&self, host: String, port: u16) -> String { ... }
+
+    fn get_defaults(&self, key: &str) -> Option<String> {
+        match key {
+            "host" => Some("localhost".to_string()),
+            "port" => Some("8080".to_string()),
+            _ => None,
+        }
+    }
+}
+```
+
+**Signature:** `fn(&self, key: &str) -> Option<String>` — the `key` is the kebab-case parameter name (e.g., `"host"`, `"port"`). Return `Some(value)` to provide a default, `None` to leave it required.
+
+The returned string is `.parse()`d into the target type, so `"8080"` becomes `8080u16`. This happens after CLI parsing but before method dispatch — if the user provides an explicit value, the defaults function is never called for that parameter.
+
+This differs from `#[param(default = ...)]`: `#[param(default)]` is a compile-time constant baked into the generated code (and affects HTTP/OpenAPI too), while `#[cli(defaults)]` is a runtime function with access to `&self` — it can read config files, environment variables, or any other state.
+
 ### Why this works
 
 - **Display covers most types naturally.** Primitives, String, error types, and user structs that are meant for human consumption already impl Display.
