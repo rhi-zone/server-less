@@ -273,11 +273,11 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 .help("Output one JSON object per line (for arrays)")
         )
         .arg(
-            ::clap::Arg::new("compact")
-                .long("compact")
+            ::clap::Arg::new("json")
+                .long("json")
                 .action(::clap::ArgAction::SetTrue)
                 .global(true)
-                .help("Output compact JSON (no whitespace)")
+                .help("Output machine-readable JSON")
         )
         .arg(
             ::clap::Arg::new("jq")
@@ -578,7 +578,7 @@ fn generate_leaf_match_arm(
     // Extract output format flags
     let format_extraction = quote! {
         let __jsonl = sub_matches.get_flag("jsonl");
-        let __compact = sub_matches.get_flag("compact");
+        let __json = sub_matches.get_flag("json");
         let __jq: Option<&String> = sub_matches.get_one::<String>("jq");
     };
 
@@ -590,7 +590,7 @@ fn generate_leaf_match_arm(
                 Ok(value) => {
                     let __formatted = ::server_less::cli_format_output(
                         ::server_less::serde_json::to_value(&value)?,
-                        __jsonl, __compact, __jq.map(|s| s.as_str()),
+                        __jsonl, __json, __jq.map(|s| s.as_str()),
                     )?;
                     println!("{}", __formatted);
                 }
@@ -606,7 +606,7 @@ fn generate_leaf_match_arm(
                 Some(value) => {
                     let __formatted = ::server_less::cli_format_output(
                         ::server_less::serde_json::to_value(&value)?,
-                        __jsonl, __compact, __jq.map(|s| s.as_str()),
+                        __jsonl, __json, __jq.map(|s| s.as_str()),
                     )?;
                     println!("{}", __formatted);
                 }
@@ -620,7 +620,7 @@ fn generate_leaf_match_arm(
         quote! {
             let __formatted = ::server_less::cli_format_output(
                 ::server_less::serde_json::to_value(&result)?,
-                __jsonl, __compact, __jq.map(|s| s.as_str()),
+                __jsonl, __json, __jq.map(|s| s.as_str()),
             )?;
             println!("{}", __formatted);
         }

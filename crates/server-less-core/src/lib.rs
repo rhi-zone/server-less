@@ -122,14 +122,14 @@ pub struct HttpMountPathInfo {
 /// Format CLI output according to output flags.
 ///
 /// - `jsonl`: one JSON object per line for array values
-/// - `compact`: compact JSON (no whitespace)
+/// - `json`: machine-readable JSON (no whitespace)
 /// - `jq`: filter through the `jq` binary
 /// - Default: pretty-printed JSON
 #[cfg(feature = "cli")]
 pub fn cli_format_output(
     value: serde_json::Value,
     jsonl: bool,
-    compact: bool,
+    json: bool,
     jq: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     if let Some(filter) = jq {
@@ -163,7 +163,7 @@ pub fn cli_format_output(
             }
             other => Ok(serde_json::to_string(&other)?),
         }
-    } else if compact {
+    } else if json {
         Ok(serde_json::to_string(&value)?)
     } else {
         Ok(serde_json::to_string_pretty(&value)?)

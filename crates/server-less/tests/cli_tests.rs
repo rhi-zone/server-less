@@ -608,10 +608,7 @@ fn test_format_flags_present() {
     let cmd = ItemService::cli_command();
 
     assert!(cmd.get_arguments().any(|a| a.get_id().as_str() == "jsonl"));
-    assert!(
-        cmd.get_arguments()
-            .any(|a| a.get_id().as_str() == "compact")
-    );
+    assert!(cmd.get_arguments().any(|a| a.get_id().as_str() == "json"));
     assert!(cmd.get_arguments().any(|a| a.get_id().as_str() == "jq"));
 }
 
@@ -623,9 +620,9 @@ fn test_jsonl_flag_dispatch() {
 }
 
 #[test]
-fn test_compact_flag_dispatch() {
+fn test_json_flag_dispatch() {
     let svc = ItemService::new();
-    let result = svc.cli_run_with(["item-cli", "--compact", "list-items"]);
+    let result = svc.cli_run_with(["item-cli", "--json", "list-items"]);
     assert!(result.is_ok());
 }
 
