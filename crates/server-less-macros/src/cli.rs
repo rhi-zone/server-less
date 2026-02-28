@@ -920,6 +920,24 @@ fn generate_leaf_match_arm(
                 }
             }
         }
+    } else if method.return_info.is_iterator {
+        // Streaming path: avoid collecting the whole iterator into memory.
+        // --json and --jq collect first (documented as unsafe for infinite iterators).
+        // Default and --jsonl stream one JSON line per item.
+        quote! {
+            if __json || __jq.is_some() {
+                let __collected: Vec<_> = result.collect();
+                let __formatted = ::server_less::cli_format_output(
+                    ::server_less::serde_json::to_value(&__collected)?,
+                    false, __json, __jq.map(|s| s.as_str()),
+                )?;
+                println!("{}", __formatted);
+            } else {
+                for __item in result {
+                    println!("{}", ::server_less::serde_json::to_string(&__item)?);
+                }
+            }
+        }
     } else {
         let result_ident = syn::Ident::new("result", proc_macro2::Span::call_site());
         let display_code = gen_value_display(&result_ident);

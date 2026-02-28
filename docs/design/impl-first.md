@@ -107,7 +107,8 @@ The return type is the **API contract**:
 | `Result<T, E>` | Success or typed error | 200 or error from E | stdout or stderr |
 | `()` | Success, no data | 204 No Content | silent |
 | `Vec<T>` | Collection (collected) | 200 + JSON array | JSON array |
-| `impl Stream<T>` | Streaming | SSE/WebSocket | newline-delimited |
+| `impl Iterator<Item=T>` | Lazy sequence | SSE (via `stream::iter`) | newline-delimited (streamed) |
+| `impl Stream<Item=T>` | Async streaming | SSE/WebSocket | newline-delimited |
 
 ### Streaming
 

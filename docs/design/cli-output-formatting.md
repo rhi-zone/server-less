@@ -41,6 +41,7 @@ The macro already parses return types. It generates different output code depend
 | `Result<T, E>` | Ok: display T, Err: display E |
 | `Option<T>` | Some: display T, None: "Not found" + exit 1 (with `--json`: `null`) |
 | `Vec<T>` | One item per line, each via Display |
+| `impl Iterator<Item=T>` | Streams one JSON line per item (same as `--jsonl`) |
 | `HashMap<K,V>`, `BTreeMap<K,V>` | `key: value` per line, each via Display |
 | anything else | `println!("{}", value)` (Display) |
 
@@ -49,6 +50,17 @@ Errors use `Display` (not `Debug`) since well-designed error types (miette, anyh
 ### JSON output (opt-in)
 
 When `--json`, `--jsonl`, or `--jq` is passed, all paths serialize via `serde_json::to_value()` and go through `cli_format_output`. This requires `Serialize` on the return type, which is already required today.
+
+**Exception: `impl Iterator<Item=T>`** — iterators are streamed to avoid unbounded memory use:
+
+| Flag | Behavior |
+|---|---|
+| default (no flags) | Stream JSONL: one `serde_json::to_string` line per item |
+| `--jsonl` | Same as default |
+| `--json` | Collect all items into a `Vec`, serialize as JSON array. **Unsafe for infinite iterators** — will exhaust memory. |
+| `--jq` | Collect all items, serialize as array, apply jq filter. Same caveat. |
+
+For truly infinite sequences use `impl Stream<Item=T>` instead, which is fully async and backpressure-aware.
 
 `--jq` filtering uses the [jaq](https://github.com/01mf02/jaq) library (`jaq-core`, `jaq-std`, `jaq-json`) — no external `jq` binary needed. Consistent behavior across platforms, no subprocess overhead.
 

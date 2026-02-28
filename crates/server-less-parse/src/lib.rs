@@ -93,6 +93,10 @@ pub struct ReturnInfo {
     pub is_stream: bool,
     /// The stream item type if is_stream
     pub stream_item: Option<Type>,
+    /// Whether it's impl Iterator<Item=T>
+    pub is_iterator: bool,
+    /// The iterator item type if is_iterator
+    pub iterator_item: Option<Type>,
     /// Whether the return type is a reference (&T)
     pub is_reference: bool,
     /// The inner type T if returning &T
@@ -343,6 +347,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
             is_unit: true,
             is_stream: false,
             stream_item: None,
+            is_iterator: false,
+            iterator_item: None,
             is_reference: false,
             reference_inner: None,
         },
@@ -361,6 +367,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: false,
                     is_stream: false,
                     stream_item: None,
+                    is_iterator: false,
+                    iterator_item: None,
                     is_reference: false,
                     reference_inner: None,
                 };
@@ -378,6 +386,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: false,
                     is_stream: false,
                     stream_item: None,
+                    is_iterator: false,
+                    iterator_item: None,
                     is_reference: false,
                     reference_inner: None,
                 };
@@ -395,6 +405,27 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: false,
                     is_stream: true,
                     stream_item: Some(item),
+                    is_iterator: false,
+                    iterator_item: None,
+                    is_reference: false,
+                    reference_inner: None,
+                };
+            }
+
+            // Check for impl Iterator<Item=T>
+            if let Some(item) = extract_iterator_item(&ty) {
+                return ReturnInfo {
+                    ty: Some(ty),
+                    ok_type: None,
+                    err_type: None,
+                    some_type: None,
+                    is_result: false,
+                    is_option: false,
+                    is_unit: false,
+                    is_stream: false,
+                    stream_item: None,
+                    is_iterator: true,
+                    iterator_item: Some(item),
                     is_reference: false,
                     reference_inner: None,
                 };
@@ -412,6 +443,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: true,
                     is_stream: false,
                     stream_item: None,
+                    is_iterator: false,
+                    iterator_item: None,
                     is_reference: false,
                     reference_inner: None,
                 };
@@ -430,6 +463,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                     is_unit: false,
                     is_stream: false,
                     stream_item: None,
+                    is_iterator: false,
+                    iterator_item: None,
                     is_reference: true,
                     reference_inner: Some(inner),
                 };
@@ -446,6 +481,8 @@ pub fn parse_return_type(output: &ReturnType) -> ReturnInfo {
                 is_unit: false,
                 is_stream: false,
                 stream_item: None,
+                is_iterator: false,
+                iterator_item: None,
                 is_reference: false,
                 reference_inner: None,
             }
@@ -536,6 +573,28 @@ pub fn extract_stream_item(ty: &Type) -> Option<Type> {
             if let syn::TypeParamBound::Trait(trait_bound) = bound
                 && let Some(segment) = trait_bound.path.segments.last()
                 && segment.ident == "Stream"
+                && let PathArguments::AngleBracketed(args) = &segment.arguments
+            {
+                for arg in &args.args {
+                    if let GenericArgument::AssocType(assoc) = arg
+                        && assoc.ident == "Item"
+                    {
+                        return Some(assoc.ty.clone());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Check if a type is impl Iterator<Item=T> and extract T
+pub fn extract_iterator_item(ty: &Type) -> Option<Type> {
+    if let Type::ImplTrait(impl_trait) = ty {
+        for bound in &impl_trait.bounds {
+            if let syn::TypeParamBound::Trait(trait_bound) = bound
+                && let Some(segment) = trait_bound.path.segments.last()
+                && segment.ident == "Iterator"
                 && let PathArguments::AngleBracketed(args) = &segment.arguments
             {
                 for arg in &args.args {

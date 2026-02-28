@@ -674,6 +674,24 @@ fn generate_response_handling(
                 }
             }
         }
+    } else if ret.is_iterator {
+        quote! {
+            {
+                use ::server_less::futures::StreamExt;
+                let iter = #call;
+                let stream = ::server_less::futures::stream::iter(iter);
+                let boxed_stream = Box::pin(stream);
+                ::axum::response::sse::Sse::new(
+                    boxed_stream.map(|item| {
+                        Ok::<_, std::convert::Infallible>(
+                            ::axum::response::sse::Event::default()
+                                .json_data(item)
+                                .expect("BUG: failed to serialize SSE event as JSON — Iterator item type must implement serde::Serialize")
+                        )
+                    })
+                )
+            }
+        }
     } else if ret.is_stream {
         quote! {
             {
