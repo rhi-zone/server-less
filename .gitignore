@@ -14,3 +14,12 @@ docs/.vitepress/dist/
 .idea/
 .vscode/
 *.swp
+
+# Normalize
+.normalize/*
+!.normalize/config.toml
+!.normalize/duplicate-functions-allow
+!.normalize/duplicate-types-allow
+!.normalize/hotspots-allow
+!.normalize/large-files-allow
+!.normalize/memory/
