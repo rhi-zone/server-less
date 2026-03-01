@@ -125,14 +125,19 @@ Boolean flags are `SetTrue` because the alternative — requiring `--verbose tru
 
 `_id` parameters become positional because a command with a single identifier argument reads better as `myapp get-user 42` than `myapp get-user --user-id 42`.
 
-### Override: `#[cli(skip)]`
+### Override: `#[cli(skip)]` and `#[cli(hidden)]`
 
-Exclude a method from the CLI entirely:
+Exclude a method from the CLI entirely, or keep it accessible but hide it from help and shell completions:
 
 ```rust
 #[cli(skip)]
-fn internal_method(&self, ...)  // not exposed as a subcommand
+fn internal_method(&self, ...)  // not exposed as a subcommand at all
+
+#[cli(hidden)]
+fn debug_dump(&self, ...)  // subcommand exists but doesn't appear in --help
 ```
+
+`#[cli(default, hidden)]` is a common combination: a method that's the fallback action for a subcommand group but isn't listed in help output.
 
 ### Override: method-level CLI name
 
@@ -155,6 +160,33 @@ Examples where inference would surprise users:
 
 The guiding test: **would a developer reading the function signature immediately understand the generated behavior?** If yes, infer. If no, require explicit config.
 
+## Cross-Protocol Skip and Hidden
+
+When a method should be excluded from every protocol at once, use `#[server(skip)]` instead of repeating per-protocol attributes:
+
+```rust
+// Instead of:
+#[cli(skip)]
+#[route(skip)]
+// ... and so on for every protocol
+fn internal(&self, ...) { ... }
+
+// Write:
+#[server(skip)]
+fn internal(&self, ...) { ... }
+```
+
+Similarly, `#[server(hidden)]` exposes a method but suppresses it from protocol-level discoverability — CLI help/completions, OpenAPI spec, etc.:
+
+```rust
+#[server(hidden)]
+fn debug_dump(&self, ...) { ... }
+// reachable as a subcommand, but not listed in --help
+// excluded from the OpenAPI spec
+```
+
+Per-protocol attributes (`#[cli(skip)]`, `#[route(skip)]`, etc.) still work for finer control — `#[server(skip)]` is a convenience, not a replacement.
+
 ## Private Methods
 
 Methods starting with `_` are excluded from all protocol projections unconditionally. No attribute needed:
@@ -163,7 +195,7 @@ Methods starting with `_` are excluded from all protocol projections uncondition
 fn _helper(&self, ...)  // never exposed — not HTTP, not CLI, not MCP
 ```
 
-This is a Rust naming convention (leading underscore = private/internal) applied consistently. It's more discoverable than a `#[route(skip)] #[cli(skip)] #[mcp(skip)]` pile.
+This is a Rust naming convention (leading underscore = private/internal) applied consistently. It's more ergonomic than a `#[server(skip)]` on every internal helper, and it composes with the explicit attribute: `_` for truly private implementation details, `#[server(skip)]` when the method name shouldn't start with an underscore but still shouldn't be exposed.
 
 ## Prior Art
 
