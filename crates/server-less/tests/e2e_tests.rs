@@ -427,10 +427,17 @@ fn test_all_protocols_agree_on_sqrt() {
 // Each protocol needs its own struct (macros are not stacked; each transforms
 // its impl block independently).
 
+struct SkipCli;
+
 #[cli(name = "skip-cli")]
 impl SkipCli {
     fn visible(&self) -> String {
         "visible".to_string()
+    }
+
+    #[cli(skip)]
+    fn cli_only_skip(&self) -> String {
+        "cli_only_skip".to_string()
     }
 
     #[server(skip)]
@@ -443,8 +450,6 @@ impl SkipCli {
         "debug".to_string()
     }
 }
-
-struct SkipCli;
 
 #[derive(Clone)]
 struct SkipMcp;
@@ -482,6 +487,25 @@ fn test_server_skip_excluded_from_cli() {
     let names: Vec<_> = cmd.get_subcommands().map(|c| c.get_name()).collect();
     assert!(names.contains(&"visible"), "visible should be present");
     assert!(!names.contains(&"internal"), "internal should be skipped");
+    assert!(
+        !names.contains(&"cli-only-skip"),
+        "cli_only_skip should be skipped"
+    );
+}
+
+#[test]
+fn test_cli_skip_leaf_still_dispatches_visible() {
+    let svc = SkipCli;
+    assert!(svc.cli_run_with(["skip-cli", "visible"]).is_ok());
+}
+
+#[test]
+fn test_cli_hidden_still_dispatches() {
+    let svc = SkipCli;
+    assert!(
+        svc.cli_run_with(["skip-cli", "debug"]).is_ok(),
+        "hidden subcommand should still be callable"
+    );
 }
 
 #[test]
@@ -512,6 +536,14 @@ fn test_server_skip_not_callable_via_mcp() {
 }
 
 #[test]
+fn test_mcp_visible_still_callable_alongside_skip() {
+    let svc = SkipMcp;
+    let result = svc.mcp_call("visible", serde_json::json!({}));
+    assert!(result.is_ok(), "visible should still be callable");
+    assert_eq!(result.unwrap(), serde_json::json!("visible"));
+}
+
+#[test]
 fn test_server_skip_not_callable_via_ws() {
     let svc = SkipWs;
     let response = svc
@@ -522,4 +554,14 @@ fn test_server_skip_not_callable_via_ws() {
         json["error"].is_object(),
         "internal should be unknown via WS"
     );
+}
+
+#[test]
+fn test_ws_visible_still_callable_alongside_skip() {
+    let svc = SkipWs;
+    let response = svc
+        .ws_handle_message(r#"{"method": "visible", "params": {}}"#)
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+    assert_eq!(json["result"], "visible");
 }
