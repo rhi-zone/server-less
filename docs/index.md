@@ -110,9 +110,9 @@ Batteries-included shortcuts:
 
 ## Project Status
 
-**Current: v0.1.0 — Foundation ✅**
+**Current: v0.2.0 ✅**
 - 18 macros implemented across 6 crates
-- 450 tests passing, 0 failures
+- 466 tests passing, 0 failures
 - Blessed presets: `#[server]`, `#[rpc]`, `#[tool]`, `#[program]`
 - Mount points for nested subcommand composition
 - CLI output formatting with `--json`, `--jq`, `--output-schema`
@@ -152,10 +152,10 @@ Related projects:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-server-less = "0.1"
+server-less = "0.2"
 
 # Or select specific features
-server-less = { version = "0.1", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { version = "0.2", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ## Contributing

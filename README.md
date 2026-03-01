@@ -1,6 +1,6 @@
 # server-less
 
-[![Tests](https://img.shields.io/badge/tests-329%20passing-brightgreen)](https://github.com/rhi-zone/server-less)
+[![Tests](https://img.shields.io/badge/tests-466%20passing-brightgreen)](https://github.com/rhi-zone/server-less)
 [![Rust](https://img.shields.io/badge/rust-2024%20edition-blue)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -128,10 +128,10 @@ Generate API documentation and contracts:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-server-less = { git = "https://github.com/rhi-zone/server-less" }
+server-less = "0.2"
 
 # Or select specific features
-server-less = { git = "https://github.com/rhi-zone/server-less", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { version = "0.2", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ### Available Features
