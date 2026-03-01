@@ -287,7 +287,7 @@ server-less/
 
 ## Part of RHI
 
-Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem - tools for building composable systems.
+Server-less is part of the [RHI](https://rhi.zone/) ecosystem - tools for building composable systems.
 
 
 ## Contributing

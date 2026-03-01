@@ -162,7 +162,7 @@ cargo expand       # Inspect macro expansion
 
 ## Part of RHI
 
-Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem.
+Server-less is part of the [RHI](https://rhi.zone/) ecosystem.
 
 ## Feature Gating
 
