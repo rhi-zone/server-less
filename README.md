@@ -185,53 +185,29 @@ The generated code automatically wraps your stream in SSE format with proper eve
 
 ## Roadmap
 
-### Current - Foundation ✅
-- [x] Core runtime protocols (HTTP, CLI, MCP, WebSocket, JSON-RPC, GraphQL)
-- [x] Schema generators (gRPC, Cap'n Proto, Thrift, Smithy, Connect)
-- [x] Specification generators (OpenRPC, AsyncAPI, JSON Schema, Markdown)
-- [x] Error derive macro with HTTP status mapping
-- [x] Serve macro for multi-protocol composition
-- [x] **187 passing integration tests** ✨
-- [x] Complete design documentation and tutorials
-- [x] Working examples for all major protocols
+### v0.2 — Shipped ✅
+- Runtime protocols: HTTP, CLI, MCP, WebSocket, JSON-RPC, GraphQL
+- Schema generators: gRPC, Cap'n Proto, Thrift, Smithy, Connect
+- Spec generators: OpenRPC, AsyncAPI, JSON Schema, Markdown docs
+- `#[derive(ServerlessError)]` with per-protocol status mapping
+- Blessed presets: `#[server]`, `#[rpc]`, `#[tool]`, `#[program]`
+- Mount points for nested subcommand/route composition
+- `#[route]` / `#[response]` HTTP overrides
+- `#[param(positional)]`, `#[param(short)]`, `#[param(query)]`
+- `#[server(skip)]`, `#[server(hidden)]`, `#[cli(default)]`
+- CLI output: Display default, `--json`, `--jq`, `--output-schema`
+- Iterator / SSE streaming return types
+- **466 passing tests**
 
-### Recently Completed - Polish & Refinement ✅
-- [x] **GraphQL improvements**: Array/object type mapping fixed
-- [x] **Error handling**: Proper Result types in schema validation
-- [x] **SSE streaming**: Server-Sent Events support
-- [x] **Documentation**: Inline docs for all macros with examples
-- [x] **Attribute customization**: `#[route(method="POST", path="/custom", skip, hidden)]`
-- [x] **Helpful error messages**: All macros provide actionable hints
-- [x] **Compile-time validation**: HTTP path validation, duplicate route detection
+### Up Next
+- WebSocket server-push patterns
+- Middleware / hooks for cross-cutting concerns (auth, rate limiting, logging)
+- IDE code action hints
 
-### Next - Advanced Features
-- [ ] **Response customization**: `#[response(status = 201)]`
-- [ ] **Parameter customization**: `#[param(query, name = "q")]`
-- [ ] **WebSocket bidirectional**: Server-push patterns
-- [ ] **OpenAPI separation**: Extract as standalone macro
-
-### Medium Term - Developer Experience
-- [ ] Improved error messages with better span information
-- [ ] Code action support (IDE integration hints)
-- [ ] Middleware/hooks pattern for cross-cutting concerns
-- [ ] Hot reloading support for development
-- [ ] Schema validation at compile time
-- [ ] Performance benchmarks vs hand-written code
-
-### Long Term - Advanced Features
-- [ ] API versioning support
-- [ ] Rate limiting derive macro
-- [ ] Authentication/authorization hooks
-- [ ] Request/response transformation layers
-- [ ] Schema sharing across protocols
-- [ ] Multi-language client generation (TypeScript, Python)
-
-### Eventually - Stability & Ecosystem
-- [ ] API stability guarantees
-- [ ] Production battle-testing
-- [ ] Performance optimization
-- [ ] Long-term support commitment
-- [ ] Extension ecosystem
+### Later
+- API versioning
+- Multi-language client generation (TypeScript, Python)
+- Production hardening and stability guarantees
 
 ## Philosophy
 
