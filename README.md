@@ -289,10 +289,6 @@ server-less/
 
 Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem - tools for building composable systems.
 
-Related projects:
-- **Lotus** - Object store (uses server-less for server setup)
-- **Spore** - Lua runtime with LLM integration
-- **Hypha** - Async runtime primitives
 
 ## Contributing
 

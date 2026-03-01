@@ -6,7 +6,7 @@ Behavioral rules for Claude Code in the server-less repository.
 
 **server-less** is a collection of composable derive macros for Rust. The name is literal: write less server code. It's about minimizing boilerplate while keeping full control.
 
-**Published on [crates.io](https://crates.io/crates/server-less)** as 6 crates: `server-less`, `server-less-core`, `server-less-macros`, `server-less-parse`, `server-less-rpc`, `server-less-openapi`. All at v0.1.0 (early, in active development).
+**Published on [crates.io](https://crates.io/crates/server-less)** as 6 crates: `server-less`, `server-less-core`, `server-less-macros`, `server-less-parse`, `server-less-rpc`, `server-less-openapi`. All at v0.2.0 (early, in active development).
 
 **Origin story:** While building Lotus (an object store), we wanted derive macros for server setup - websocket servers, JSON-RPC, Cap'n Proto, etc. Rather than building one-off solutions, we decided to create a repo for "random derive macros for the silliest stuff ever" - but designed properly for composability. The name "server-less" emphasizes the pragmatic goal: write less code to build servers.
 
@@ -162,10 +162,7 @@ cargo expand       # Inspect macro expansion
 
 ## Part of RHI
 
-Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem. Related projects:
-- **Lotus** - Object store (uses server-less for server setup)
-- **Spore** - Lua runtime with LLM integration
-- **Hypha** - Async runtime primitives
+Server-less is part of the [Rhizome](https://rhi.zone/) ecosystem.
 
 ## Feature Gating
 
