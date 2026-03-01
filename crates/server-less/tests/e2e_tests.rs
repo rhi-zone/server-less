@@ -7,7 +7,7 @@
 //! apply macros to generate protocol handlers, and verify the results match.
 
 use serde::{Deserialize, Serialize};
-use server_less::{cli, http, mcp, ws};
+use server_less::{cli, http, mcp, server, ws};
 
 // ============================================================================
 // Reference Implementation
@@ -418,4 +418,108 @@ fn test_all_protocols_agree_on_sqrt() {
         .unwrap();
     let ws_json: serde_json::Value = serde_json::from_str(&ws_response).unwrap();
     assert_eq!(ws_json["result"].as_i64().unwrap(), expected);
+}
+
+// ============================================================================
+// #[server(skip)] and #[server(hidden)] Tests
+// ============================================================================
+
+// Each protocol needs its own struct (macros are not stacked; each transforms
+// its impl block independently).
+
+#[cli(name = "skip-cli")]
+impl SkipCli {
+    fn visible(&self) -> String {
+        "visible".to_string()
+    }
+
+    #[server(skip)]
+    fn internal(&self) -> String {
+        "internal".to_string()
+    }
+
+    #[server(hidden)]
+    fn debug(&self) -> String {
+        "debug".to_string()
+    }
+}
+
+struct SkipCli;
+
+#[derive(Clone)]
+struct SkipMcp;
+
+#[mcp]
+impl SkipMcp {
+    fn visible(&self) -> String {
+        "visible".to_string()
+    }
+
+    #[server(skip)]
+    fn internal(&self) -> String {
+        "internal".to_string()
+    }
+}
+
+#[derive(Clone)]
+struct SkipWs;
+
+#[ws]
+impl SkipWs {
+    fn visible(&self) -> String {
+        "visible".to_string()
+    }
+
+    #[server(skip)]
+    fn internal(&self) -> String {
+        "internal".to_string()
+    }
+}
+
+#[test]
+fn test_server_skip_excluded_from_cli() {
+    let cmd = SkipCli::cli_command();
+    let names: Vec<_> = cmd.get_subcommands().map(|c| c.get_name()).collect();
+    assert!(names.contains(&"visible"), "visible should be present");
+    assert!(!names.contains(&"internal"), "internal should be skipped");
+}
+
+#[test]
+fn test_server_hidden_present_but_hidden_in_cli() {
+    let cmd = SkipCli::cli_command();
+    let debug_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "debug")
+        .expect("debug should still be a subcommand");
+    assert!(debug_cmd.is_hide_set(), "debug should be hidden from help");
+}
+
+#[test]
+fn test_server_skip_excluded_from_mcp() {
+    let tool_names: Vec<_> = SkipMcp::mcp_tool_names().to_vec();
+    assert!(tool_names.contains(&"visible"), "visible should be a tool");
+    assert!(
+        !tool_names.contains(&"internal"),
+        "internal should be skipped"
+    );
+}
+
+#[test]
+fn test_server_skip_not_callable_via_mcp() {
+    let svc = SkipMcp;
+    let result = svc.mcp_call("internal", serde_json::json!({}));
+    assert!(result.is_err(), "internal should not be callable via MCP");
+}
+
+#[test]
+fn test_server_skip_not_callable_via_ws() {
+    let svc = SkipWs;
+    let response = svc
+        .ws_handle_message(r#"{"method": "internal", "params": {}}"#)
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+    assert!(
+        json["error"].is_object(),
+        "internal should be unknown via WS"
+    );
 }
