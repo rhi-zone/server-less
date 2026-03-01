@@ -19,4 +19,4 @@ documentation = "https://docs.rs/server-less"
 readme = "README.md"
 keywords = ["macros", "derive", "server", "rpc", "openapi"]
 categories = ["web-programming", "development-tools::procedural-macro-plugins"]
-rust-version = "1.85"
+rust-version = "1.89"

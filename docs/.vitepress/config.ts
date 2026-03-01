@@ -24,8 +24,21 @@ export default withMermaid(
           {
             text: 'Design',
             items: [
+              { text: 'Overview', link: '/design/' },
               { text: 'Impl-First', link: '/design/impl-first' },
+              { text: 'Inference vs Configuration', link: '/design/inference-vs-configuration' },
+              { text: 'Param Attributes', link: '/design/param-attributes' },
+              { text: 'Error Mapping', link: '/design/error-mapping' },
               { text: 'Extension Coordination', link: '/design/extension-coordination' },
+              { text: 'Parse-Time Coordination', link: '/design/parse-time-coordination' },
+              { text: 'Protocol Naming', link: '/design/protocol-naming' },
+              { text: 'Blessed Presets', link: '/design/blessed-presets' },
+              { text: 'CLI Output Formatting', link: '/design/cli-output-formatting' },
+              { text: 'Route & Response Attrs', link: '/design/route-response-attrs' },
+              { text: 'Mount Points', link: '/design/mount-points' },
+              { text: 'OpenAPI Composition', link: '/design/openapi-composition' },
+              { text: 'Open Questions', link: '/design/open-questions' },
+              { text: 'Iteration Log', link: '/design/iteration-log' },
               { text: 'Implementation Notes', link: '/design/implementation-notes' },
             ]
           },
