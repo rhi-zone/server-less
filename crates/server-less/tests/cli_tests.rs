@@ -1022,3 +1022,29 @@ fn test_cli_default_hidden_still_dispatches_without_subcommand() {
     let app = DefaultHidden;
     assert!(app.cli_run_with(["default-hidden-app"]).is_ok());
 }
+
+// Regression: #[cli(default, display_with = "...")] in a single attribute must work.
+// Previously get_display_with bailed on unknown keys like `default`, returning None
+// even when display_with was present in the same attribute.
+struct DefaultWithDisplay;
+
+impl DefaultWithDisplay {
+    fn fmt_status(&self, s: &String) -> String {
+        format!("status: {s}")
+    }
+}
+
+#[cli(name = "default-display-app")]
+impl DefaultWithDisplay {
+    /// Default action with custom display
+    #[cli(default, display_with = "fmt_status")]
+    fn status(&self) -> String {
+        "ok".to_string()
+    }
+}
+
+#[test]
+fn test_cli_default_and_display_with_combined() {
+    let app = DefaultWithDisplay;
+    assert!(app.cli_run_with(["default-display-app"]).is_ok());
+}

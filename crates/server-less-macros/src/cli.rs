@@ -241,7 +241,12 @@ fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
                     found = Some(lit.parse::<syn::Path>()?);
                     Ok(())
                 } else {
-                    Err(meta.error("expected `display_with`"))
+                    // Skip unrecognized keys; they're handled elsewhere.
+                    // Consume the value if present (key = ...) or skip bare flags.
+                    if meta.input.peek(Token![=]) {
+                        let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                    }
+                    Ok(())
                 }
             });
             if result.is_ok() {
