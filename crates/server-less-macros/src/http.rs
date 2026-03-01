@@ -149,6 +149,8 @@ use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
 
+use crate::server_attrs::has_server_skip;
+
 // Import Context helpers
 use crate::context::{
     generate_http_context_extraction, has_qualified_context, partition_context_params,
@@ -264,7 +266,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
         let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
-        if overrides.skip {
+        if overrides.skip || has_server_skip(method) {
             continue;
         }
 

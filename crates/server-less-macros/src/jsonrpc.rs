@@ -55,6 +55,7 @@
 //! // {"jsonrpc": "2.0", "result": 8, "id": 1}
 //! ```
 
+use crate::server_attrs::has_server_skip;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
@@ -109,7 +110,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
     let path = args.path.unwrap_or_else(|| "/rpc".to_string());
 
-    let partitioned = partition_methods(&methods, |_| false);
+    let partitioned = partition_methods(&methods, has_server_skip);
 
     let dispatch_arms_async: Vec<_> = partitioned
         .leaf

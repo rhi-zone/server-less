@@ -79,6 +79,7 @@ use syn::{ItemImpl, Token, parse::Parse};
 use crate::context::{
     generate_cli_context_extraction, has_qualified_context, partition_context_params,
 };
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 
 /// Arguments for the #[cli] attribute
 #[derive(Default)]
@@ -156,19 +157,49 @@ impl Parse for CliArgs {
     }
 }
 
-/// Check if a method has `#[cli(skip)]` attribute.
+/// Check if a method has `#[cli(skip)]` or `#[server(skip)]`.
 fn has_cli_skip(method: &MethodInfo) -> bool {
+    if has_server_skip(method) {
+        return true;
+    }
     for attr in &method.method.attrs {
         if attr.path().is_ident("cli") {
-            // Try parsing as #[cli(skip)]
-            let result = attr.parse_nested_meta(|meta| {
+            let mut found = false;
+            let _ = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("skip") {
-                    Ok(())
-                } else {
-                    Err(meta.error("expected `skip`"))
+                    found = true;
                 }
+                if meta.input.peek(syn::Token![=]) {
+                    let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                }
+                Ok(())
             });
-            if result.is_ok() {
+            if found {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Check if a method has `#[cli(hidden)]` or `#[server(hidden)]`.
+fn has_cli_hidden(method: &MethodInfo) -> bool {
+    if has_server_hidden(method) {
+        return true;
+    }
+    for attr in &method.method.attrs {
+        if attr.path().is_ident("cli") {
+            let mut found = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("hidden") {
+                    found = true;
+                }
+                if meta.input.peek(syn::Token![=]) {
+                    let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
+            if found {
                 return true;
             }
         }
@@ -199,13 +230,15 @@ fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
     None
 }
 
-/// Strip `#[cli(...)]` attributes from methods in the impl block so they don't
-/// appear in the emitted user code.
+/// Strip `#[cli(...)]` and `#[server(...)]` attributes from methods in the
+/// impl block so they don't appear in the emitted user code.
 fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
     let mut block = impl_block.clone();
     for item in &mut block.items {
         if let syn::ImplItem::Fn(method) = item {
-            method.attrs.retain(|attr| !attr.path().is_ident("cli"));
+            method
+                .attrs
+                .retain(|attr| !attr.path().is_ident("cli") && !attr.path().is_ident("server"));
             // Strip #[param(...)] from function parameters
             for input in &mut method.sig.inputs {
                 if let syn::FnArg::Typed(pat_type) = input {
@@ -248,21 +281,29 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let leaf_subcommands: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_leaf_subcommand(m, has_qualified, &global_flags, has_defaults))
+        .map(|m| {
+            generate_leaf_subcommand(
+                m,
+                has_qualified,
+                &global_flags,
+                has_defaults,
+                has_cli_hidden(m),
+            )
+        })
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate subcommands for static mounts
     let static_mount_subcommands: Vec<_> = partitioned
         .static_mounts
         .iter()
-        .map(|m| generate_static_mount_subcommand(m))
+        .map(|m| generate_static_mount_subcommand(m, has_cli_hidden(m)))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate subcommands for slug mounts
     let slug_mount_subcommands: Vec<_> = partitioned
         .slug_mounts
         .iter()
-        .map(|m| generate_slug_mount_subcommand(m, has_qualified))
+        .map(|m| generate_slug_mount_subcommand(m, has_qualified, has_cli_hidden(m)))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate match arms for leaf methods
@@ -412,9 +453,11 @@ fn generate_leaf_subcommand(
     has_qualified: bool,
     global_flags: &[String],
     has_defaults: bool,
+    hidden: bool,
 ) -> syn::Result<TokenStream2> {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
+    let hide = hidden.then(|| quote! { .hide(true) });
 
     // Filter out Context parameters - they're injected, not CLI args
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
@@ -432,14 +475,19 @@ fn generate_leaf_subcommand(
     Ok(quote! {
         ::clap::Command::new(#name)
             .about(#about)
+            #hide
             #(.arg(#args))*
     })
 }
 
-fn generate_static_mount_subcommand(method: &MethodInfo) -> syn::Result<TokenStream2> {
+fn generate_static_mount_subcommand(
+    method: &MethodInfo,
+    hidden: bool,
+) -> syn::Result<TokenStream2> {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
     let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
 
     Ok(quote! {
         {
@@ -448,6 +496,7 @@ fn generate_static_mount_subcommand(method: &MethodInfo) -> syn::Result<TokenStr
             if !#about.is_empty() {
                 __cmd = __cmd.about(#about);
             }
+            #hide
             __cmd
         }
     })
@@ -456,10 +505,12 @@ fn generate_static_mount_subcommand(method: &MethodInfo) -> syn::Result<TokenStr
 fn generate_slug_mount_subcommand(
     method: &MethodInfo,
     has_qualified: bool,
+    hidden: bool,
 ) -> syn::Result<TokenStream2> {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
     let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
 
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
 
@@ -486,6 +537,7 @@ fn generate_slug_mount_subcommand(
             if !#about.is_empty() {
                 __cmd = __cmd.about(#about);
             }
+            #hide
             #(__cmd = __cmd.arg(#slug_args);)*
             __cmd
         }

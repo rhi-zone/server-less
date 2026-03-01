@@ -54,6 +54,7 @@
 //!
 //! Also implements `McpNamespace` trait for composition.
 
+use crate::server_attrs::has_server_skip;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
@@ -114,7 +115,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         format!("{}_", namespace)
     };
 
-    let partitioned = partition_methods(&methods, |_| false);
+    let partitioned = partition_methods(&methods, has_server_skip);
 
     // Generate tool definitions for leaf methods
     let leaf_tool_definitions: Vec<_> = partitioned

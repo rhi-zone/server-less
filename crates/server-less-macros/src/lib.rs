@@ -89,6 +89,8 @@ mod thrift;
 #[cfg(feature = "ws")]
 mod ws;
 
+mod server_attrs;
+
 // Blessed preset modules
 #[cfg(feature = "cli")]
 mod program;
@@ -1425,6 +1427,13 @@ pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // When applied to a method inside an impl block (e.g. `#[server(skip)]`),
+    // pass through unchanged.  The enclosing protocol macro reads these
+    // attributes from the ItemImpl tokens; `#[server]` just needs to not error.
+    let item2: proc_macro2::TokenStream = item.clone().into();
+    if syn::parse2::<ItemImpl>(item2).is_err() {
+        return item;
+    }
     let args = parse_macro_input!(attr as server::ServerArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
 

@@ -153,6 +153,7 @@
 //! }
 //! ```
 
+use crate::server_attrs::has_server_skip;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name, partition_methods};
@@ -327,7 +328,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
     let path = args.path.unwrap_or_else(|| "/ws".to_string());
 
-    let partitioned = partition_methods(&methods, |_| false);
+    let partitioned = partition_methods(&methods, has_server_skip);
 
     // Generate dispatch match arms (sync and async versions) for leaf methods only
     let dispatch_arms_sync: Vec<_> = partitioned
