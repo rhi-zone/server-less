@@ -2,45 +2,15 @@
 
 Design questions that need real use cases to drive decisions.
 
-## Default Action on Subcommand Groups
+### Default Action on Subcommand Groups
 
-A subcommand group (method returning `&T`) currently only works as a parent — `app foo bar` dispatches into `FooService`, but `app foo` alone is an error. Sometimes you want both: `app foo` runs a default action, and `app foo bar` dispatches to a subcommand.
+**Resolved: `#[cli(default)]` attribute.**
 
-Proposed: `#[cli(default)]` marks one method as the action to run when no subcommand is given. This works uniformly at any level — the root command or any subcommand group.
+`#[cli(default)]` marks a method as the action to run when no subcommand is given, at any level (root command or subcommand group). The marked method is both a normal subcommand and the fallback — `app status` and `app` are equivalent.
 
-```rust
-#[cli(name = "analyze")]
-impl AnalyzeCommands {
-    // `normalize analyze` and `normalize analyze health` are equivalent
-    #[cli(default)]
-    fn health(&self) -> HealthReport { ... }
-
-    fn schema(&self) -> SchemaReport { ... }
-}
-
-#[cli(name = "normalize")]
-impl Normalize {
-    // `normalize` alone runs this instead of printing help
-    #[cli(default)]
-    fn run(&self) -> String { ... }
-
-    fn analyze(&self) -> &AnalyzeCommands { &self.analyze }
-}
-```
-
-`#[cli(default)]` on a named method means it is both a normal subcommand *and* the fallback when none is given — the two invocations are equivalent. It doesn't have to be a dedicated `run` method; marking any existing subcommand as default is the common case.
-
-### Positional fallback
-
-When a default action has positional params, unrecognized tokens fall through to it automatically. So `app foo thing` first checks whether `thing` matches a subcommand; if not, it's passed as the positional `name` arg to `run`. No extra attribute needed — this falls out of "try subcommand first, then satisfy positionals."
-
-**Precedence:** subcommands take priority over positional args by default. `--` forces positional interpretation (`app foo -- bar`). The underlying clap knob (`subcommand_precedence_over_arg`) can be exposed as an opt-in override for the rare case where you want the opposite, but the default should match user expectation (a known subcommand name is never silently swallowed as a string arg).
-
-**Flag scoping:** flags pass to the default action. `normalize analyze --verbose` is equivalent to `normalize analyze health --verbose` — consistent with the two invocations being equivalent.
-
-**Hidden subcommands:** `#[cli(hidden)]` exposes a subcommand but omits it from help and completions. Combines naturally with `default`: `#[cli(default, hidden)]` means the fallback works but `health` doesn't appear in `normalize analyze --help`. This is CLI-specific — HTTP has no concept of "in help"; use `#[route(skip)]` there instead.
-
-**Non-pub visibility:** Rust visibility (`pub`/non-`pub`) should not implicitly control CLI exposure. The `#[cli]` impl block is already opt-in — putting a method there means you want it exposed. Use `#[cli(skip)]` to exclude a method, or simply don't include internal helpers in the `#[cli]` impl block.
+- **Flag scoping:** flags pass through to the default action via hidden parent-level args; `app --flag` equals `app status --flag`.
+- **Hidden default:** `#[cli(default, hidden)]` makes the fallback work without `status` appearing in `--help`.
+- **Peer subcommands:** unaffected — other subcommands continue to work normally.
 
 ## Bidirectional Streaming
 
