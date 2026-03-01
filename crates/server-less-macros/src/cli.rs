@@ -182,6 +182,28 @@ fn has_cli_skip(method: &MethodInfo) -> bool {
     false
 }
 
+/// Check if a method has `#[cli(default)]`.
+fn has_cli_default(method: &MethodInfo) -> bool {
+    for attr in &method.method.attrs {
+        if attr.path().is_ident("cli") {
+            let mut found = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("default") {
+                    found = true;
+                }
+                if meta.input.peek(syn::Token![=]) {
+                    let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
+            if found {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Check if a method has `#[cli(hidden)]` or `#[server(hidden)]`.
 fn has_cli_hidden(method: &MethodInfo) -> bool {
     if has_server_hidden(method) {
@@ -306,11 +328,50 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .map(|m| generate_slug_mount_subcommand(m, has_qualified, has_cli_hidden(m)))
         .collect::<syn::Result<Vec<_>>>()?;
 
+    // Find the default action (if any) — the method marked #[cli(default)].
+    // It still appears as a normal subcommand AND runs when no subcommand is given.
+    let default_method = partitioned.leaf.iter().find(|m| has_cli_default(m));
+
+    // Hidden parent-level args for the default action so that flags like
+    // `app --flag` are parsed even when no subcommand is specified.
+    let default_parent_args: Vec<TokenStream2> = if let Some(dm) = default_method {
+        let (_, regular_params) = partition_context_params(&dm.params, has_qualified)?;
+        regular_params
+            .iter()
+            .filter(|p| {
+                let kebab = p.name.to_string().to_kebab_case();
+                !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
+            })
+            .map(|p| {
+                let arg = generate_arg(p, &global_flags, has_defaults);
+                quote! { #arg.hide(true) }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    // None arm: runs the default action when no subcommand is given.
+    // `sub_matches = matches` so the same dispatch body works unchanged.
+    let default_none_arm: Option<TokenStream2> = if let Some(dm) = default_method {
+        Some(generate_leaf_match_arm(
+            dm,
+            has_qualified,
+            &global_flags,
+            &defaults_fn_ident,
+            true,
+        )?)
+    } else {
+        None
+    };
+
     // Generate match arms for leaf methods
     let leaf_match_arms: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident))
+        .map(|m| {
+            generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false)
+        })
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate match arms for static mounts
@@ -405,6 +466,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                     .about(#about)
                     #(#global_flag_args)*
                     #format_flags
+                    #(.arg(#default_parent_args))*
                     #(.subcommand(#leaf_subcommands))*
                     #(.subcommand(#static_mount_subcommands))*
                     #(.subcommand(#slug_mount_subcommands))*
@@ -415,6 +477,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                     #(#leaf_match_arms)*
                     #(#static_mount_arms)*
                     #(#slug_mount_arms)*
+                    #default_none_arm
                     _ => {
                         Self::cli_command().print_help()?;
                         Ok(())
@@ -656,6 +719,10 @@ fn generate_leaf_match_arm(
     has_qualified: bool,
     global_flags: &[String],
     defaults_fn_ident: &Option<syn::Ident>,
+    // When true: generates `None =>` arm (default action, no subcommand given)
+    // with `let sub_matches = matches;` so the body is identical.
+    // When false: generates the normal `Some(("name", sub_matches)) =>` arm.
+    none_arm: bool,
 ) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
@@ -998,34 +1065,49 @@ fn generate_leaf_match_arm(
         }
     };
 
-    Ok(quote! {
-        Some((#subcommand_name, sub_matches)) => {
-            // Schema flags: print and exit without running the method
-            if sub_matches.get_flag("input-schema") {
-                #input_schema
-            }
-            if sub_matches.get_flag("output-schema") {
-                #output_schema
-            }
+    let arm_body = quote! {
+        // Schema flags: print and exit without running the method
+        if sub_matches.get_flag("input-schema") {
+            #input_schema
+        }
+        if sub_matches.get_flag("output-schema") {
+            #output_schema
+        }
 
-            // --params-json: extract all params from JSON blob
-            if let Some(__params_json_str) = sub_matches.get_one::<String>("params-json") {
-                let __json_obj: ::server_less::serde_json::Value = ::server_less::serde_json::from_str(__params_json_str)
-                    .map_err(|e| format!("Invalid JSON in --params-json: {}", e))?;
-                let __json_obj = __json_obj.as_object()
-                    .ok_or_else(|| "Expected a JSON object for --params-json".to_string())?;
-                #(#json_extractions)*
-                #json_call
-                #format_extraction
-                #output
-            } else {
-                // Normal CLI arg extraction
-                #(#arg_extractions)*
-                #call
-                #format_extraction
-                #output
+        // --params-json: extract all params from JSON blob
+        if let Some(__params_json_str) = sub_matches.get_one::<String>("params-json") {
+            let __json_obj: ::server_less::serde_json::Value = ::server_less::serde_json::from_str(__params_json_str)
+                .map_err(|e| format!("Invalid JSON in --params-json: {}", e))?;
+            let __json_obj = __json_obj.as_object()
+                .ok_or_else(|| "Expected a JSON object for --params-json".to_string())?;
+            #(#json_extractions)*
+            #json_call
+            #format_extraction
+            #output
+        } else {
+            // Normal CLI arg extraction
+            #(#arg_extractions)*
+            #call
+            #format_extraction
+            #output
+        }
+        Ok(())
+    };
+
+    Ok(if none_arm {
+        // Default action: no subcommand given — bind `sub_matches` to the
+        // parent's ArgMatches (which holds the hidden default-action args).
+        quote! {
+            None => {
+                let sub_matches = matches;
+                #arm_body
             }
-            Ok(())
+        }
+    } else {
+        quote! {
+            Some((#subcommand_name, sub_matches)) => {
+                #arm_body
+            }
         }
     })
 }

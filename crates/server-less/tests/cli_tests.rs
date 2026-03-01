@@ -919,3 +919,106 @@ fn test_help_text_without_short_flag() {
     // No short flag set
     assert_eq!(query_arg.get_short(), None);
 }
+
+// ============================================================================
+// #[cli(default)] tests
+// ============================================================================
+
+struct DefaultApp;
+
+#[cli(name = "default-app")]
+impl DefaultApp {
+    /// Run the default action
+    #[cli(default)]
+    fn status(&self) -> String {
+        "ok".to_string()
+    }
+
+    /// A peer subcommand
+    fn version(&self) -> String {
+        "1.0".to_string()
+    }
+}
+
+struct DefaultWithArgs;
+
+#[cli(name = "default-args-app")]
+impl DefaultWithArgs {
+    /// Default action with a flag
+    #[cli(default)]
+    fn run(&self, verbose: bool) -> String {
+        if verbose {
+            "verbose".to_string()
+        } else {
+            "quiet".to_string()
+        }
+    }
+
+    fn other(&self) -> String {
+        "other".to_string()
+    }
+}
+
+struct DefaultHidden;
+
+#[cli(name = "default-hidden-app")]
+impl DefaultHidden {
+    /// Default action, hidden from help
+    #[cli(default, hidden)]
+    fn run(&self) -> String {
+        "run".to_string()
+    }
+
+    fn other(&self) -> String {
+        "other".to_string()
+    }
+}
+
+#[test]
+fn test_cli_default_runs_when_no_subcommand() {
+    let app = DefaultApp;
+    assert!(app.cli_run_with(["default-app"]).is_ok());
+}
+
+#[test]
+fn test_cli_default_subcommand_still_works_explicitly() {
+    let app = DefaultApp;
+    assert!(app.cli_run_with(["default-app", "status"]).is_ok());
+}
+
+#[test]
+fn test_cli_peer_subcommand_still_works() {
+    let app = DefaultApp;
+    assert!(app.cli_run_with(["default-app", "version"]).is_ok());
+}
+
+#[test]
+fn test_cli_default_flag_passed_without_subcommand() {
+    let app = DefaultWithArgs;
+    assert!(app.cli_run_with(["default-args-app", "--verbose"]).is_ok());
+}
+
+#[test]
+fn test_cli_default_flag_passed_with_explicit_subcommand() {
+    let app = DefaultWithArgs;
+    assert!(
+        app.cli_run_with(["default-args-app", "run", "--verbose"])
+            .is_ok()
+    );
+}
+
+#[test]
+fn test_cli_default_hidden_not_in_help() {
+    let cmd = DefaultHidden::cli_command();
+    let run_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "run")
+        .unwrap();
+    assert!(run_cmd.is_hide_set());
+}
+
+#[test]
+fn test_cli_default_hidden_still_dispatches_without_subcommand() {
+    let app = DefaultHidden;
+    assert!(app.cli_run_with(["default-hidden-app"]).is_ok());
+}
