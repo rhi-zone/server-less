@@ -1048,3 +1048,70 @@ fn test_cli_default_and_display_with_combined() {
     let app = DefaultWithDisplay;
     assert!(app.cli_run_with(["default-display-app"]).is_ok());
 }
+
+#[test]
+fn test_cli_default_args_visible_at_root_level() {
+    // Args from the default method should appear in the root command's --help,
+    // not be hidden. `--verbose` belongs to `run` (the default), so it must be
+    // a visible arg on the root command as well.
+    let cmd = DefaultWithArgs::cli_command();
+    let verbose_arg = cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "verbose");
+    assert!(
+        verbose_arg.is_some(),
+        "`--verbose` should be registered on the root command"
+    );
+    assert!(
+        !verbose_arg.unwrap().is_hide_set(),
+        "`--verbose` should be visible in root --help"
+    );
+}
+
+// ============================================================================
+// Multiple positional arguments
+// ============================================================================
+
+struct MultiPositionalService;
+
+#[cli(name = "multi-pos-app")]
+impl MultiPositionalService {
+    /// Copy src to dst
+    pub fn copy(
+        &self,
+        #[param(positional)] src: String,
+        #[param(positional)] dst: String,
+    ) -> String {
+        format!("{src} -> {dst}")
+    }
+}
+
+#[test]
+fn test_multiple_positional_args_have_distinct_indices() {
+    let cmd = MultiPositionalService::cli_command();
+    let copy_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "copy")
+        .unwrap();
+
+    let src_arg = copy_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "src")
+        .unwrap();
+    let dst_arg = copy_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "dst")
+        .unwrap();
+
+    assert_eq!(src_arg.get_index(), Some(1), "src should be index 1");
+    assert_eq!(dst_arg.get_index(), Some(2), "dst should be index 2");
+}
+
+#[test]
+fn test_multiple_positional_args_dispatch() {
+    let svc = MultiPositionalService;
+    assert!(
+        svc.cli_run_with(["multi-pos-app", "copy", "a.txt", "b.txt"])
+            .is_ok()
+    );
+}

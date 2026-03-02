@@ -337,19 +337,28 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     // It still appears as a normal subcommand AND runs when no subcommand is given.
     let default_method = partitioned.leaf.iter().find(|m| has_cli_default(m));
 
-    // Hidden parent-level args for the default action so that flags like
-    // `app --flag` are parsed even when no subcommand is specified.
+    // Parent-level args for the default action so that flags like
+    // `app --flag` are parsed (and shown in `app --help`) when no subcommand is specified.
     let default_parent_args: Vec<TokenStream2> = if let Some(dm) = default_method {
         let (_, regular_params) = partition_context_params(&dm.params, has_qualified)?;
-        regular_params
+        let filtered: Vec<_> = regular_params
             .iter()
             .filter(|p| {
                 let kebab = p.name.to_string().to_kebab_case();
                 !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
             })
+            .collect();
+        let mut pos_idx = 0usize;
+        filtered
+            .iter()
             .map(|p| {
-                let arg = generate_arg(p, &global_flags, has_defaults);
-                quote! { #arg.hide(true) }
+                let idx = if p.is_positional {
+                    pos_idx += 1;
+                    Some(pos_idx)
+                } else {
+                    None
+                };
+                generate_arg(p, &global_flags, has_defaults, idx)
             })
             .collect()
     } else {
@@ -531,13 +540,25 @@ fn generate_leaf_subcommand(
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
 
     // Generate args, skipping params that are global flags
-    let args: Vec<_> = regular_params
+    let filtered: Vec<_> = regular_params
         .iter()
         .filter(|p| {
             let kebab = p.name.to_string().to_kebab_case();
             !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
         })
-        .map(|p| generate_arg(p, global_flags, has_defaults))
+        .collect();
+    let mut pos_idx = 0usize;
+    let args: Vec<_> = filtered
+        .iter()
+        .map(|p| {
+            let idx = if p.is_positional {
+                pos_idx += 1;
+                Some(pos_idx)
+            } else {
+                None
+            };
+            generate_arg(p, global_flags, has_defaults, idx)
+        })
         .collect();
 
     Ok(quote! {
@@ -650,7 +671,12 @@ fn type_to_json_schema(ty: &Option<syn::Type>) -> TokenStream2 {
     }
 }
 
-fn generate_arg(param: &ParamInfo, _global_flags: &[String], _has_defaults: bool) -> TokenStream2 {
+fn generate_arg(
+    param: &ParamInfo,
+    _global_flags: &[String],
+    _has_defaults: bool,
+    positional_index: Option<usize>,
+) -> TokenStream2 {
     let name = param.name.to_string().to_kebab_case();
 
     let short = param.short_flag.map(|c| quote! { .short(#c) });
@@ -682,6 +708,7 @@ fn generate_arg(param: &ParamInfo, _global_flags: &[String], _has_defaults: bool
                 #help
         }
     } else if param.is_positional {
+        let idx = positional_index.unwrap_or(1);
         let help = match &param.help_text {
             Some(text) => quote! { .help(#text) },
             None => quote! { .help(concat!("The ", #name)) },
@@ -689,7 +716,7 @@ fn generate_arg(param: &ParamInfo, _global_flags: &[String], _has_defaults: bool
         quote! {
             ::clap::Arg::new(#name)
                 .required(false)
-                .index(1)
+                .index(#idx)
                 #help
         }
     } else if param.is_optional {
