@@ -196,6 +196,105 @@ pub fn cli_schema_for<T: schemars::JsonSchema>() -> serde_json::Value {
         .unwrap_or_else(|_| serde_json::json!({"type": "object"}))
 }
 
+/// A clap [`TypedValueParser`] that uses [`schemars::JsonSchema`] to surface
+/// enum variants as possible values, and [`std::str::FromStr`] for actual parsing.
+///
+/// When `T` is an enum deriving `JsonSchema`, its variants appear in `--help`
+/// output and clap's error messages with no extra derives on the user type.
+/// For non-enum types (e.g. `String`, `u32`), this is a transparent pass-through
+/// to `FromStr`.
+///
+/// Used automatically by `#[cli]`-generated code when both the `cli` and
+/// `jsonschema` features are enabled.
+#[cfg(all(feature = "cli", feature = "jsonschema"))]
+#[derive(Clone)]
+pub struct SchemaValueParser<T: Clone + Send + Sync + 'static> {
+    /// Enum variant names as `'static` str. We leak each string once at
+    /// parser-construction time (command build, not per-parse), which is
+    /// acceptable for a CLI binary: the leak is bounded (a few bytes per
+    /// variant) and the memory is reclaimed when the process exits.
+    variants: Option<std::sync::Arc<[&'static str]>>,
+    _marker: std::marker::PhantomData<T>,
+}
+
+#[cfg(all(feature = "cli", feature = "jsonschema"))]
+impl<T> Default for SchemaValueParser<T>
+where
+    T: schemars::JsonSchema + std::str::FromStr + Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(all(feature = "cli", feature = "jsonschema"))]
+impl<T> SchemaValueParser<T>
+where
+    T: schemars::JsonSchema + std::str::FromStr + Clone + Send + Sync + 'static,
+{
+    pub fn new() -> Self {
+        let variants = extract_enum_variants::<T>().map(|strings| {
+            let leaked: Vec<&'static str> = strings
+                .into_iter()
+                .map(|s| Box::leak(s.into_boxed_str()) as &'static str)
+                .collect();
+            leaked.into()
+        });
+        Self {
+            variants,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+#[cfg(all(feature = "cli", feature = "jsonschema"))]
+fn extract_enum_variants<T: schemars::JsonSchema>() -> Option<Vec<String>> {
+    let schema_value = serde_json::to_value(schemars::schema_for!(T)).ok()?;
+    let enum_values = schema_value.get("enum")?.as_array()?;
+    let variants: Vec<String> = enum_values
+        .iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect();
+    if variants.is_empty() {
+        None
+    } else {
+        Some(variants)
+    }
+}
+
+#[cfg(all(feature = "cli", feature = "jsonschema"))]
+impl<T> ::clap::builder::TypedValueParser for SchemaValueParser<T>
+where
+    T: schemars::JsonSchema + std::str::FromStr + Clone + Send + Sync + 'static,
+{
+    type Value = T;
+
+    fn parse_ref(
+        &self,
+        _cmd: &::clap::Command,
+        _arg: Option<&::clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<T, ::clap::Error> {
+        let s = value
+            .to_str()
+            .ok_or_else(|| ::clap::Error::new(::clap::error::ErrorKind::InvalidUtf8))?;
+        s.parse::<T>()
+            .map_err(|_| ::clap::Error::new(::clap::error::ErrorKind::InvalidValue))
+    }
+
+    fn possible_values(
+        &self,
+    ) -> Option<Box<dyn Iterator<Item = ::clap::builder::PossibleValue> + '_>> {
+        let variants = self.variants.as_ref()?;
+        Some(Box::new(
+            variants
+                .iter()
+                .copied()
+                .map(::clap::builder::PossibleValue::new),
+        ))
+    }
+}
+
 /// Runtime method metadata with string-based types.
 ///
 /// This is a simplified, serialization-friendly representation of method

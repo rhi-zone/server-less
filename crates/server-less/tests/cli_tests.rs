@@ -1115,3 +1115,92 @@ fn test_multiple_positional_args_dispatch() {
             .is_ok()
     );
 }
+
+// ============================================================================
+// Enum parameter: possible values surfaced from JsonSchema
+// ============================================================================
+
+#[cfg(feature = "jsonschema")]
+mod enum_param_tests {
+    use super::*;
+
+    #[derive(
+        Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+    )]
+    #[serde(rename_all = "snake_case")]
+    enum Status {
+        Active,
+        Inactive,
+        Pending,
+    }
+
+    impl std::fmt::Display for Status {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Status::Active => write!(f, "active"),
+                Status::Inactive => write!(f, "inactive"),
+                Status::Pending => write!(f, "pending"),
+            }
+        }
+    }
+
+    impl std::str::FromStr for Status {
+        type Err = String;
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match s {
+                "active" => Ok(Status::Active),
+                "inactive" => Ok(Status::Inactive),
+                "pending" => Ok(Status::Pending),
+                other => Err(format!("unknown status: {other}")),
+            }
+        }
+    }
+
+    struct StatusService;
+
+    #[cli(name = "status-app")]
+    impl StatusService {
+        /// Filter items by status
+        pub fn filter(&self, status: Status) -> String {
+            format!("filtered by {status}")
+        }
+    }
+
+    #[test]
+    fn test_enum_arg_has_possible_values() {
+        let cmd = StatusService::cli_command();
+        let filter_cmd = cmd
+            .get_subcommands()
+            .find(|c| c.get_name() == "filter")
+            .unwrap();
+        let status_arg = filter_cmd
+            .get_arguments()
+            .find(|a| a.get_id().as_str() == "status")
+            .unwrap();
+
+        let pvs = status_arg.get_possible_values();
+        let possible: Vec<&str> = pvs.iter().map(|pv| pv.get_name()).collect();
+
+        assert!(
+            possible.contains(&"active"),
+            "expected 'active' in possible values, got: {possible:?}"
+        );
+        assert!(
+            possible.contains(&"inactive"),
+            "expected 'inactive' in possible values, got: {possible:?}"
+        );
+        assert!(
+            possible.contains(&"pending"),
+            "expected 'pending' in possible values, got: {possible:?}"
+        );
+    }
+
+    #[test]
+    fn test_enum_arg_dispatches_correctly() {
+        let svc = StatusService;
+        assert!(
+            svc.cli_run_with(["status-app", "filter", "--status", "active"])
+                .is_ok()
+        );
+    }
+}

@@ -70,8 +70,8 @@ use heck::ToKebabCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use server_less_parse::{
-    MethodInfo, ParamInfo, extract_map_type, extract_methods, extract_vec_type, get_impl_name,
-    is_unit_type, partition_methods,
+    MethodInfo, ParamInfo, extract_map_type, extract_methods, extract_option_type,
+    extract_vec_type, get_impl_name, is_unit_type, partition_methods,
 };
 use syn::{ItemImpl, Token, parse::Parse};
 
@@ -681,6 +681,25 @@ fn generate_arg(
 
     let short = param.short_flag.map(|c| quote! { .short(#c) });
 
+    // Compute the leaf type for the value parser (strip Vec<> / Option<> wrappers).
+    // SchemaValueParser<T> requires T: JsonSchema + FromStr; for non-enum types it
+    // is a transparent pass-through, so emitting it unconditionally is harmless.
+    #[cfg(feature = "jsonschema")]
+    let value_parser = if param.is_bool {
+        quote! {}
+    } else {
+        let inner: syn::Type = if param.is_vec {
+            param.vec_inner.clone().unwrap_or_else(|| param.ty.clone())
+        } else if param.is_optional {
+            extract_option_type(&param.ty).unwrap_or_else(|| param.ty.clone())
+        } else {
+            param.ty.clone()
+        };
+        quote! { .value_parser(::server_less::SchemaValueParser::<#inner>::new()) }
+    };
+    #[cfg(not(feature = "jsonschema"))]
+    let value_parser = quote! {};
+
     if param.is_bool {
         let help = match &param.help_text {
             Some(text) => quote! { .help(#text) },
@@ -705,6 +724,7 @@ fn generate_arg(
                 .action(::clap::ArgAction::Append)
                 .value_delimiter(',')
                 .required(false)
+                #value_parser
                 #help
         }
     } else if param.is_positional {
@@ -717,6 +737,7 @@ fn generate_arg(
             ::clap::Arg::new(#name)
                 .required(false)
                 .index(#idx)
+                #value_parser
                 #help
         }
     } else if param.is_optional {
@@ -729,6 +750,7 @@ fn generate_arg(
                 .long(#name)
                 #short
                 .required(false)
+                #value_parser
                 #help
         }
     } else {
@@ -741,6 +763,7 @@ fn generate_arg(
                 .long(#name)
                 #short
                 .required(false)
+                #value_parser
                 #help
         }
     }
@@ -858,6 +881,19 @@ fn generate_leaf_match_arm(
                 });
             }
         } else if p.is_vec {
+            // When jsonschema is active, the value_parser stores inner type T directly.
+            // Otherwise, values are stored as String and parsed here.
+            #[cfg(feature = "jsonschema")]
+            {
+                let inner = p.vec_inner.as_ref().unwrap_or(&p.ty);
+                arg_extractions.push(quote! {
+                    let #name = sub_matches
+                        .get_many::<#inner>(#name_str)
+                        .map(|vs| vs.cloned().collect())
+                        .unwrap_or_default();
+                });
+            }
+            #[cfg(not(feature = "jsonschema"))]
             arg_extractions.push(quote! {
                 let #name: Vec<String> = sub_matches
                     .get_many::<String>(#name_str)
@@ -866,6 +902,17 @@ fn generate_leaf_match_arm(
             });
         } else if p.is_optional {
             let ty = &p.ty;
+            // When jsonschema is active, value is stored as inner T; wrap in Option.
+            #[cfg(feature = "jsonschema")]
+            {
+                let inner = extract_option_type(&p.ty).unwrap_or_else(|| p.ty.clone());
+                arg_extractions.push(quote! {
+                    let #name: #ty = sub_matches
+                        .get_one::<#inner>(#name_str)
+                        .cloned();
+                });
+            }
+            #[cfg(not(feature = "jsonschema"))]
             arg_extractions.push(quote! {
                 let #name: #ty = sub_matches
                     .get_one::<String>(#name_str)
@@ -873,6 +920,19 @@ fn generate_leaf_match_arm(
             });
         } else if let Some(defaults_fn) = defaults_fn_ident {
             let ty = &p.ty;
+            // When jsonschema is active, successfully parsed values are stored as T.
+            // The defaults path still parses from a string.
+            #[cfg(feature = "jsonschema")]
+            arg_extractions.push(quote! {
+                let #name: #ty = if let Some(__val) = sub_matches.get_one::<#ty>(#name_str) {
+                    __val.clone()
+                } else if let Some(__default) = self.#defaults_fn(#name_str) {
+                    __default.parse()?
+                } else {
+                    return Err(format!("Missing required argument: {}", #name_str).into());
+                };
+            });
+            #[cfg(not(feature = "jsonschema"))]
             arg_extractions.push(quote! {
                 let #name: #ty = if let Some(__val) = sub_matches.get_one::<String>(#name_str) {
                     __val.parse()?
@@ -884,6 +944,15 @@ fn generate_leaf_match_arm(
             });
         } else {
             let ty = &p.ty;
+            // When jsonschema is active, value is stored as T by the value_parser.
+            #[cfg(feature = "jsonschema")]
+            arg_extractions.push(quote! {
+                let #name: #ty = sub_matches
+                    .get_one::<#ty>(#name_str)
+                    .cloned()
+                    .ok_or_else(|| format!("Missing required argument: {}", #name_str))?;
+            });
+            #[cfg(not(feature = "jsonschema"))]
             arg_extractions.push(quote! {
                 let #name: #ty = sub_matches
                     .get_one::<String>(#name_str)
