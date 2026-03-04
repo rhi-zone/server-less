@@ -20,3 +20,6 @@ readme = "README.md"
 keywords = ["macros", "derive", "server", "rpc", "openapi"]
 categories = ["web-programming", "development-tools::procedural-macro-plugins"]
 rust-version = "1.89"
+
+[profile.dev]
+debug = 0
