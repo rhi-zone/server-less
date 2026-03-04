@@ -27,9 +27,9 @@ axum = { version = "0.8", default-features = false, features = ["ws"], optional 
 
 # CLI support (optional)
 clap = { version = "4", optional = true }
-jaq-core = { version = "2", optional = true }
-jaq-std = { version = "2", optional = true }
-jaq-json = { version = "1", features = ["serde_json"], optional = true }
+jaq-core = { version = "3.0.0-beta", optional = true }
+jaq-std = { version = "3.0.0-beta", optional = true }
+jaq-json = { version = "2.0.0-beta", features = ["serde"], optional = true }
 
 # JSON Schema generation (optional)
 schemars = { version = "1", optional = true }

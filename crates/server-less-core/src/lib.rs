@@ -134,7 +134,7 @@ pub fn cli_format_output(
 ) -> Result<String, Box<dyn std::error::Error>> {
     if let Some(filter) = jq {
         use jaq_core::load::{Arena, File as JaqFile, Loader};
-        use jaq_core::{Compiler, Ctx, RcIter};
+        use jaq_core::{Compiler, Ctx, Vars, data, unwrap_valr};
         use jaq_json::Val;
 
         let loader = Loader::new(jaq_std::defs().chain(jaq_json::defs()));
@@ -154,9 +154,9 @@ pub fn cli_format_output(
             .compile(modules)
             .map_err(|errs| format!("jq compile error: {:?}", errs))?;
 
-        let val = Val::from(value);
-        let inputs = RcIter::new(core::iter::empty());
-        let out = filter_compiled.run((Ctx::new([], &inputs), val));
+        let val: Val = serde_json::from_value(value)?;
+        let ctx = Ctx::<data::JustLut<Val>>::new(&filter_compiled.lut, Vars::new([]));
+        let out = filter_compiled.id.run((ctx, val)).map(unwrap_valr);
 
         let mut results = Vec::new();
         for result in out {
