@@ -404,6 +404,48 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .map(|m| generate_slug_mount_arm(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
+    // Build subcommand documentation
+    let subcommand_docs: Vec<String> = partitioned
+        .leaf
+        .iter()
+        .filter(|m| !has_cli_hidden(m))
+        .map(|m| {
+            let name = m.name.to_string().to_kebab_case();
+            match &m.docs {
+                Some(doc) => format!("- `{name}` — {doc}"),
+                None => format!("- `{name}`"),
+            }
+        })
+        .chain(
+            partitioned
+                .static_mounts
+                .iter()
+                .filter(|m| !has_cli_hidden(m))
+                .map(|m| {
+                    let name = m.name.to_string().to_kebab_case();
+                    format!("- `{name}` (subcommand group)")
+                }),
+        )
+        .chain(
+            partitioned
+                .slug_mounts
+                .iter()
+                .filter(|m| !has_cli_hidden(m))
+                .map(|m| {
+                    let name = m.name.to_string().to_kebab_case();
+                    format!("- `{name} <arg>` (subcommand group)")
+                }),
+        )
+        .collect();
+    let cli_command_doc = if subcommand_docs.is_empty() {
+        "Create a clap Command for this CLI.".to_string()
+    } else {
+        format!(
+            "Create a clap Command for this CLI.\n\n# Subcommands\n\n{}",
+            subcommand_docs.join("\n")
+        )
+    };
+
     // Strip #[cli(...)] attrs from the emitted impl block
     let clean_impl_block = strip_cli_attrs(&impl_block);
 
@@ -503,7 +545,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         }
 
         impl #struct_name {
-            /// Create a clap Command for this CLI
+            #[doc = #cli_command_doc]
             pub fn cli_command() -> ::clap::Command {
                 <Self as ::server_less::CliSubcommand>::cli_command()
             }

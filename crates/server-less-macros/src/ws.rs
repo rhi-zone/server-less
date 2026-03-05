@@ -350,6 +350,42 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         .map(|m| m.name.to_string())
         .collect();
 
+    // Build method documentation
+    let ws_method_doc_entries: Vec<String> = partitioned
+        .leaf
+        .iter()
+        .map(|m| {
+            let name = m.name.to_string();
+            match &m.docs {
+                Some(doc) => format!("- `{name}` — {doc}"),
+                None => format!("- `{name}`"),
+            }
+        })
+        .collect();
+    let has_ws_mounts =
+        !partitioned.static_mounts.is_empty() || !partitioned.slug_mounts.is_empty();
+    let ws_methods_doc = if ws_method_doc_entries.is_empty() && !has_ws_mounts {
+        "Get available WebSocket JSON-RPC method names.".to_string()
+    } else {
+        let mount_note = if has_ws_mounts {
+            "\n\nAlso includes methods from mounted sub-services."
+        } else {
+            ""
+        };
+        format!(
+            "Get available WebSocket JSON-RPC method names.\n\n# Methods\n\n{}{}",
+            ws_method_doc_entries.join("\n"),
+            mount_note
+        )
+    };
+    let ws_router_doc = format!(
+        "Create an axum Router with WebSocket endpoint at `{}`.\n\n\
+         Exposes {} method{}.",
+        path,
+        method_names.len(),
+        if method_names.len() == 1 { "" } else { "s" }
+    );
+
     // Generate mount dispatch arms and method names
     let mount_dispatch_sync: Vec<_> = partitioned
         .static_mounts
@@ -547,7 +583,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         }
 
         impl #struct_name {
-            /// Get available WebSocket method names
+            #[doc = #ws_methods_doc]
             pub fn ws_methods() -> Vec<&'static str> {
                 let mut names: Vec<&'static str> = vec![#(#method_names),*];
                 #(#mount_method_names)*
@@ -686,7 +722,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 }
             }
 
-            /// Create an axum Router with WebSocket endpoint
+            #[doc = #ws_router_doc]
             pub fn ws_router(self) -> ::axum::Router
             where
                 Self: Clone + Send + Sync + 'static,

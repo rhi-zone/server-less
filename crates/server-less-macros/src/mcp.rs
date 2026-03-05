@@ -187,6 +187,34 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         )
         .collect();
 
+    // Build tool documentation
+    let tool_doc_entries: Vec<String> = partitioned
+        .leaf
+        .iter()
+        .map(|m| {
+            let name = format!("{}{}", namespace_prefix, m.name);
+            match &m.docs {
+                Some(doc) => format!("- `{name}` — {doc}"),
+                None => format!("- `{name}`"),
+            }
+        })
+        .collect();
+    let has_mounts = !partitioned.static_mounts.is_empty() || !partitioned.slug_mounts.is_empty();
+    let mcp_tools_doc = if tool_doc_entries.is_empty() && !has_mounts {
+        "Get the list of available MCP tool definitions.".to_string()
+    } else {
+        let mount_note = if has_mounts {
+            "\n\nAlso includes tools from mounted sub-services."
+        } else {
+            ""
+        };
+        format!(
+            "Get the list of available MCP tool definitions.\n\n# Tools\n\n{}{}",
+            tool_doc_entries.join("\n"),
+            mount_note
+        )
+    };
+
     Ok(quote! {
         #impl_block
 
@@ -217,7 +245,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         }
 
         impl #struct_name {
-            /// Get the list of available MCP tool definitions
+            #[doc = #mcp_tools_doc]
             pub fn mcp_tools() -> Vec<::server_less::serde_json::Value> {
                 let mut tools = vec![
                     #(#leaf_tool_definitions),*

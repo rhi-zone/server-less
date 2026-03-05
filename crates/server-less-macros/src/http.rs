@@ -260,6 +260,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let mut routes = Vec::new();
     let mut openapi_methods = Vec::new();
     let mut mount_path_entries = Vec::new();
+    let mut route_docs: Vec<String> = Vec::new();
     // Maps normalized route signature (e.g., "GET /users/{*}") to (method_name, original_path)
     let mut route_signatures: std::collections::HashMap<String, (String, String)> =
         std::collections::HashMap::new();
@@ -335,7 +336,11 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
             return Err(syn::Error::new_spanned(&method.method.sig, hint_msg));
         }
-        route_signatures.insert(route_sig, (method.name.to_string(), full_path.clone()));
+        route_signatures.insert(
+            route_sig.clone(),
+            (method.name.to_string(), full_path.clone()),
+        );
+        route_docs.push(format!("- `{}`", route_sig));
 
         let handler = generate_handler(&struct_name, method, &response_overrides, has_qualified)?;
         handlers.push(handler);
@@ -366,11 +371,26 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
     }
 
+    // Build route documentation
+    let router_doc = if route_docs.is_empty() {
+        "Create an axum Router for this service.".to_string()
+    } else {
+        format!(
+            "Create an axum Router for this service.\n\n# Routes\n\n{}",
+            route_docs.join("\n")
+        )
+    };
+
     // Generate OpenAPI paths method (always available for composition)
     let openapi_paths_fn =
         crate::openapi_gen::generate_openapi_paths(&prefix, &openapi_methods, has_qualified)?;
+    let openapi_paths_doc = format!(
+        "Get OpenAPI paths for this service ({} route{}).",
+        route_docs.len(),
+        if route_docs.len() == 1 { "" } else { "s" }
+    );
     let openapi_paths_method = quote! {
-        /// Get OpenAPI paths for this service (for composition with OpenApiBuilder)
+        #[doc = #openapi_paths_doc]
         pub fn http_openapi_paths() -> ::std::vec::Vec<::server_less::OpenApiPath> {
             #openapi_paths_fn
         }
@@ -380,8 +400,14 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let openapi_method = if generate_openapi {
         let openapi_fn =
             generate_openapi_spec(&struct_name, &prefix, &openapi_methods, has_qualified)?;
+        let openapi_doc = format!(
+            "Get OpenAPI 3.0 specification for this service.\n\n\
+             Covers {} route{}. Use `http_openapi_paths()` for composable path fragments.",
+            route_docs.len(),
+            if route_docs.len() == 1 { "" } else { "s" }
+        );
         quote! {
-            /// Get OpenAPI specification for this service
+            #[doc = #openapi_doc]
             pub fn openapi_spec() -> ::server_less::serde_json::Value {
                 #openapi_fn
             }
@@ -410,7 +436,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
 
         impl #struct_name {
-            /// Create an axum Router for this service
+            #[doc = #router_doc]
             pub fn http_router(self) -> ::axum::Router
             where
                 Self: Clone + Send + Sync + 'static,

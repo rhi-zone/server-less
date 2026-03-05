@@ -179,11 +179,32 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
         // Protocol-aware mode: merge paths from detected protocols
         let merges = protocols.generate_merges();
 
+        let mut detected_list = Vec::new();
+        if protocols.http {
+            detected_list.push("HTTP");
+        }
+        if protocols.jsonrpc {
+            detected_list.push("JSON-RPC");
+        }
+        if protocols.ws {
+            detected_list.push("WebSocket");
+        }
+        if protocols.graphql {
+            detected_list.push("GraphQL");
+        }
+        let openapi_doc = format!(
+            "Get combined OpenAPI 3.0 specification.\n\n\
+             Composed from {} protocol{}: {}.",
+            detected_list.len(),
+            if detected_list.len() == 1 { "" } else { "s" },
+            detected_list.join(", ")
+        );
+
         Ok(quote! {
             #impl_block
 
             impl #struct_name {
-                /// Get combined OpenAPI specification from all detected protocols
+                #[doc = #openapi_doc]
                 pub fn openapi_spec() -> ::server_less::serde_json::Value {
                     ::server_less::OpenApiBuilder::new()
                         .title(#struct_name_str)
@@ -215,11 +236,17 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
         let openapi_fn =
             generate_openapi_spec(&struct_name, &prefix, &openapi_methods, has_qualified)?;
 
+        let standalone_doc = format!(
+            "Get OpenAPI 3.0 specification for this service ({} endpoint{}).",
+            openapi_methods.len(),
+            if openapi_methods.len() == 1 { "" } else { "s" }
+        );
+
         Ok(quote! {
             #impl_block
 
             impl #struct_name {
-                /// Get OpenAPI specification for this service
+                #[doc = #standalone_doc]
                 pub fn openapi_spec() -> ::server_less::serde_json::Value {
                     #openapi_fn
                 }
