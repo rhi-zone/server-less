@@ -112,7 +112,10 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
              enum MyError {{\n\
                  #[error(code = NotFound)]\n\
                  NotFound,\n\
-             }}",
+             }}\n\
+             \n\
+             ServerlessError maps to HTTP status codes (e.g. code = 404) and \
+             JSON-RPC error codes automatically across protocols.",
         ));
     };
 

@@ -90,7 +90,11 @@ impl Parse for McpArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: namespace"),
+                        format!(
+                            "unknown argument `{other}`. Valid arguments: namespace\n\
+                             \n\
+                             Related: #[tool] preset (MCP + JSON Schema), #[jsonschema] (standalone schema)"
+                        ),
                     ));
                 }
             }

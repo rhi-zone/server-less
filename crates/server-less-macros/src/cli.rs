@@ -142,7 +142,9 @@ impl Parse for CliArgs {
                              \n\
                              Valid arguments: name, version, about, global, defaults\n\
                              \n\
-                             Example: #[cli(name = \"my-app\", version = \"1.0.0\", about = \"My CLI tool\")]"
+                             Example: #[cli(name = \"my-app\", version = \"1.0.0\", about = \"My CLI tool\")]\n\
+                             \n\
+                             Related: #[program] preset (CLI + markdown docs), #[markdown] (standalone docs)"
                         ),
                     ));
                 }

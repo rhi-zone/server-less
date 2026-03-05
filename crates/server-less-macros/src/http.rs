@@ -211,7 +211,9 @@ impl Parse for HttpArgs {
                              Valid arguments: prefix, openapi\n\
                              Examples:\n\
                              - #[http(prefix = \"/api/v1\")]\n\
-                             - #[http(openapi = false)]"
+                             - #[http(openapi = false)]\n\
+                             \n\
+                             Related: #[serve] (multi-protocol), #[openapi] (standalone API docs), #[server] (blessed preset)"
                         ),
                     ));
                 }
