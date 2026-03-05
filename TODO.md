@@ -151,6 +151,7 @@ How do implementors know what server-less can do, at the moment they need it?
 ### Development Tools
 
 - [ ] Hot reloading exploration
+- [ ] `cargo serverless` subcommand — revisit when ecosystem is bigger. Main use case: bird's-eye view across a workspace ("what's exposed where?"). Current discovery mechanisms (SERVER_LESS_DEBUG, enriched errors, dynamic rustdoc) cover the single-service case well enough at v0.2.
 
 ### Performance
 
