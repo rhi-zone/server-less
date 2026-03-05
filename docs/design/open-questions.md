@@ -108,6 +108,56 @@ Worth adopting as conventions for generated CLIs:
 
 **Needs:** Real CLI use case beyond toy examples to determine priority.
 
+## Generic Method Instantiation
+
+server-less generates protocol bindings from concrete methods. Generic methods are invisible — there's no way to turn `fn get<T: Resource>(&self, id: Id) -> T` into CLI subcommands or HTTP routes without knowing the concrete types.
+
+### Motivation
+
+If server-less is a tool to type arbitrary APIs, this is a gap. Real services have generic methods — CRUD over entity types, format converters, batch processors. Today you'd write N concrete wrapper methods manually, which defeats the point of the derive.
+
+### Proposed Design: `#[server(instantiate(...))]`
+
+```rust
+#[server]
+impl MyService {
+    #[server(instantiate(
+        T = User, name = "user";
+        T = Project, name = "project";
+        T = Team, name = "team";
+    ))]
+    pub fn get<T: Resource>(&self, id: Id) -> T {
+        self.store.get::<T>(id)
+    }
+}
+```
+
+The proc macro performs syntactic type substitution on the method signature for each instantiation, generating concrete wrapper methods that feed into the existing protocol pipelines:
+
+- CLI: `get-user`, `get-project`, `get-team` subcommands
+- HTTP: `GET /user/:id`, `GET /project/:id`, `GET /team/:id`
+- Schema: each instantiation gets its own `--output-schema` reflecting the concrete return type
+
+### Implementation Sketch
+
+1. `extract_methods()` detects generic methods (non-empty `sig.generics`)
+2. Parse `#[server(instantiate(...))]` for concrete type lists
+3. For each instantiation: syntactic substitution on param types + return type, generate wrapper method with the given `name`
+4. Feed synthetic methods into existing protocol pipelines
+
+### Open Questions
+
+- **Multi-param generics:** `fn convert<From, To>()` — the `T = Foo` syntax doesn't scale. Maybe `From = Json, To = Yaml, name = "json-to-yaml"`.
+- **Associated types:** `config: T::Config` requires the proc macro to resolve associated types through trait bounds — syntactic substitution alone may not suffice. May need `config_type = FooConfig` as an explicit param.
+- **Where clauses:** Complex bounds like `where T: Resource + Send + 'static` — syntactic substitution handles these, but nested bounds with associated types don't.
+- **Naming:** Type name lowercased (`User` → `user`) as automatic fallback, or always require explicit `name`?
+
+### Status
+
+Speculative design. The original use case (normalize's analyze commands with a `Metric<E>` trait) turned out to not benefit from this — the metric implementations are too heterogeneous to share a generic interface. The general concept is sound for services with genuinely uniform operations across types, but no concrete consumer exists yet.
+
+**Needs:** A real use case where someone has a generic Rust API and wants server-less to generate typed bindings for each instantiation.
+
 ## Middleware Ordering
 
 When composing multiple extensions, does order matter? How to control it?
