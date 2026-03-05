@@ -117,19 +117,39 @@ Prioritized backlog of pending features and improvements.
 - [ ] Error code mapping (Rust errors → gRPC status codes)
 - [ ] Metadata/header support
 
-### Better Diagnostics
+### Implementor DX — Capability Discovery
 
-- [ ] "Did you mean X?" suggestions for typos
+How do implementors know what server-less can do, at the moment they need it?
+
+**Compiler-driven discovery (highest priority):**
+- [ ] Contextual hints when macros detect patterns they can help with
+  - e.g., `#[http]` sees `&SubService` return → note about mount points
+  - e.g., method returns `Result<_, E>` but no `ServerlessError` → hint about error mapping
+  - e.g., multiple protocol attrs without `#[openapi]` → hint about OpenAPI composition
+- [ ] "Did you mean X?" suggestions for attribute typos
 - [ ] "Add `async` to use `.await`" hints
 - [ ] Show snippet of generated code in complex errors
+
+**Inline examples in diagnostics:**
+- [ ] Error messages include short code snippets showing the fix
+- [ ] Warnings include "try this:" with corrected attribute usage
+
+**Introspection tooling:**
+- [ ] `cargo serverless explain <topic>` CLI — dumps available attributes, inferred behaviors
+- [ ] `SERVER_LESS_DEBUG=1` env var prints generated code to stderr
+- [ ] `#[http(debug = true)]` verbose request/response logging
+- [ ] `#[http(trace = true)]` parameter extraction tracing
+
+**Capability-oriented docs (lower priority):**
+- [ ] Capability index page organized by goal, not by macro
+- [ ] VitePress "how-to" cookbook layer mapping goals → solutions
+
+**Other diagnostics:**
 - [ ] Warn about unused parameters
 - [ ] Warn about methods that could be `&self` instead of `&mut self`
 
 ### Development Tools
 
-- [ ] `#[http(debug = true)]` verbose request/response logging
-- [ ] `#[http(trace = true)]` parameter extraction tracing
-- [ ] Print generated code to stderr with env var `SERVER_LESS_DEBUG=1`
 - [ ] Hot reloading exploration
 
 ### Performance

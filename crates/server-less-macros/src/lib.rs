@@ -11,6 +11,20 @@ use syn::ItemEnum;
 use syn::ItemStruct;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
 
+/// When `SERVER_LESS_DEBUG=1` is set at build time, print the generated token
+/// stream to stderr so implementors can inspect macro output without `cargo expand`.
+fn debug_emit(macro_name: &str, type_name: &str, tokens: &TokenStream2) {
+    if std::env::var("SERVER_LESS_DEBUG").is_ok() {
+        eprintln!("--- server-less: #[{macro_name}] on {type_name} ---");
+        eprintln!("{tokens}");
+        eprintln!("--- end #[{macro_name}] on {type_name} ---");
+    }
+}
+
+fn type_name(ty: &syn::Type) -> String {
+    quote::quote!(#ty).to_string()
+}
+
 /// Strip the first `impl` block from a token stream.
 ///
 /// Preset macros call multiple expand functions, each of which emits the
@@ -307,9 +321,13 @@ mod tool;
 pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as http::HttpArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match http::expand_http(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("http", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -370,9 +388,13 @@ pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as openapi::OpenApiArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match openapi::expand_openapi(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("openapi", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -415,9 +437,13 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as cli::CliArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match cli::expand_cli(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("cli", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -476,9 +502,13 @@ pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as mcp::McpArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match mcp::expand_mcp(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("mcp", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -563,9 +593,13 @@ pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as ws::WsArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match ws::expand_ws(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("ws", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -610,9 +644,13 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as jsonrpc::JsonRpcArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match jsonrpc::expand_jsonrpc(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("jsonrpc", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -646,9 +684,13 @@ pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as openrpc::OpenRpcArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match openrpc::expand_openrpc(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("openrpc", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -685,9 +727,13 @@ pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as markdown::MarkdownArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match markdown::expand_markdown(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("markdown", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -724,9 +770,13 @@ pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as asyncapi::AsyncApiArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match asyncapi::expand_asyncapi(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("asyncapi", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -757,9 +807,13 @@ pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn connect(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as connect::ConnectArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match connect::expand_connect(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("connect", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -796,9 +850,13 @@ pub fn connect(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as grpc::GrpcArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match grpc::expand_grpc(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("grpc", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -835,9 +893,13 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as capnp::CapnpArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match capnp::expand_capnp(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("capnp", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -874,9 +936,13 @@ pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as thrift::ThriftArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match thrift::expand_thrift(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("thrift", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -914,9 +980,13 @@ pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn smithy(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as smithy::SmithyArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match smithy::expand_smithy(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("smithy", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -952,9 +1022,13 @@ pub fn smithy(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as jsonschema::JsonSchemaArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match jsonschema::expand_jsonschema(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("jsonschema", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1083,9 +1157,13 @@ pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as graphql::GraphqlArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match graphql::expand_graphql(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("graphql", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1132,9 +1210,13 @@ pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn graphql_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item_enum = parse_macro_input!(item as ItemEnum);
+    let name = item_enum.ident.to_string();
 
     match graphql_enum::expand_graphql_enum(item_enum) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("graphql_enum", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1182,9 +1264,13 @@ pub fn graphql_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn graphql_input(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item_struct = parse_macro_input!(item as ItemStruct);
+    let name = item_struct.ident.to_string();
 
     match graphql_input::expand_graphql_input(item_struct) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("graphql_input", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1223,9 +1309,13 @@ pub fn graphql_input(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn serve(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as http::ServeArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match http::expand_serve(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("serve", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1436,9 +1526,13 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     let args = parse_macro_input!(attr as server::ServerArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match server::expand_server(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("server", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1474,9 +1568,13 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as rpc_preset::RpcArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match rpc_preset::expand_rpc(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("rpc", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1510,9 +1608,13 @@ pub fn rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as tool::ToolArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match tool::expand_tool(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("tool", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1551,9 +1653,13 @@ pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn program(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as program::ProgramArgs);
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let name = type_name(&impl_block.self_ty);
 
     match program::expand_program(args, impl_block) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("program", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -1590,9 +1696,13 @@ pub fn program(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(ServerlessError, attributes(error))]
 pub fn serverless_error(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident.to_string();
 
     match error::expand_serverless_error(input) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            debug_emit("ServerlessError", &name, &tokens);
+            tokens.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
