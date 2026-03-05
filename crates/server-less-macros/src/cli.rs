@@ -296,6 +296,10 @@ fn build_group_order(
 /// impl block so they don't appear in the emitted user code.
 fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
     let mut block = impl_block.clone();
+    // Strip #[server(...)] from impl-level attrs (e.g. groups(...))
+    block
+        .attrs
+        .retain(|attr| !attr.path().is_ident("server"));
     for item in &mut block.items {
         if let syn::ImplItem::Fn(method) = item {
             method

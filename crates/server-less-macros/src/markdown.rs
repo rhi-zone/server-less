@@ -134,8 +134,14 @@ pub(crate) fn expand_markdown(
         methods_section,
     );
 
+    // Strip #[server(...)] from impl-level attrs (e.g. groups(...))
+    let mut clean_impl = impl_block;
+    clean_impl
+        .attrs
+        .retain(|attr| !attr.path().is_ident("server"));
+
     Ok(quote! {
-        #impl_block
+        #clean_impl
 
         impl #struct_name {
             /// Get the API documentation in Markdown format.

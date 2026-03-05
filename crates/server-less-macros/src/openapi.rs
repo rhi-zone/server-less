@@ -248,8 +248,14 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
             if openapi_methods.len() == 1 { "" } else { "s" }
         );
 
+        // Strip #[server(...)] from impl-level attrs (e.g. groups(...))
+        let mut clean_impl = impl_block;
+        clean_impl
+            .attrs
+            .retain(|attr| !attr.path().is_ident("server"));
+
         Ok(quote! {
-            #impl_block
+            #clean_impl
 
             impl #struct_name {
                 #[doc = #standalone_doc]
