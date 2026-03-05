@@ -70,8 +70,8 @@ use heck::ToKebabCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use server_less_parse::{
-    MethodInfo, ParamInfo, extract_map_type, extract_methods, extract_option_type,
-    extract_vec_type, get_impl_name, is_unit_type, partition_methods,
+    MethodInfo, ParamInfo, extract_groups, extract_map_type, extract_methods, extract_option_type,
+    extract_vec_type, get_impl_name, is_unit_type, partition_methods, resolve_method_group,
 };
 use syn::{ItemImpl, Token, parse::Parse};
 
@@ -259,6 +259,23 @@ fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
     None
 }
 
+/// Build an ordered list of unique group display names from methods, preserving first-seen order.
+fn build_group_order(
+    methods: &[&MethodInfo],
+    registry: &Option<server_less_parse::GroupRegistry>,
+) -> syn::Result<Vec<String>> {
+    let mut seen = std::collections::HashSet::new();
+    let mut order = Vec::new();
+    for m in methods {
+        if let Some(display) = resolve_method_group(m, registry)?
+            && seen.insert(display.clone())
+        {
+            order.push(display);
+        }
+    }
+    Ok(order)
+}
+
 /// Strip `#[cli(...)]` and `#[server(...)]` attributes from methods in the
 /// impl block so they don't appear in the emitted user code.
 fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
@@ -306,20 +323,45 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
 
     let partitioned = partition_methods(&methods, has_cli_skip);
 
-    // Generate subcommands for leaf methods
-    let leaf_subcommands: Vec<_> = partitioned
-        .leaf
-        .iter()
-        .map(|m| {
-            generate_leaf_subcommand(
-                m,
-                has_qualified,
-                &global_flags,
-                has_defaults,
-                has_cli_hidden(m),
-            )
-        })
-        .collect::<syn::Result<Vec<_>>>()?;
+    // Resolve method groups (Tier 1: inline strings, Tier 2: registry IDs)
+    let group_registry = extract_groups(&impl_block)?;
+    let group_order = build_group_order(&partitioned.leaf, &group_registry)?;
+
+    // Generate subcommands grouped by heading:
+    // ungrouped first, then each group in declaration/first-seen order.
+    let leaf_subcommands_grouped = {
+        let mut tokens: Vec<TokenStream2> = Vec::new();
+        // Ungrouped methods first
+        for m in &partitioned.leaf {
+            if resolve_method_group(m, &group_registry)?.is_none() {
+                let cmd = generate_leaf_subcommand(
+                    m,
+                    has_qualified,
+                    &global_flags,
+                    has_defaults,
+                    has_cli_hidden(m),
+                )?;
+                tokens.push(quote! { .subcommand(#cmd) });
+            }
+        }
+        // Grouped methods, in order
+        for group in &group_order {
+            tokens.push(quote! { .subcommand_help_heading(#group) });
+            for m in &partitioned.leaf {
+                if resolve_method_group(m, &group_registry)?.as_deref() == Some(group.as_str()) {
+                    let cmd = generate_leaf_subcommand(
+                        m,
+                        has_qualified,
+                        &global_flags,
+                        has_defaults,
+                        has_cli_hidden(m),
+                    )?;
+                    tokens.push(quote! { .subcommand(#cmd) });
+                }
+            }
+        }
+        tokens
+    };
 
     // Generate subcommands for static mounts
     let static_mount_subcommands: Vec<_> = partitioned
@@ -525,7 +567,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                     #(#global_flag_args)*
                     #format_flags
                     #(.arg(#default_parent_args))*
-                    #(.subcommand(#leaf_subcommands))*
+                    #(#leaf_subcommands_grouped)*
                     #(.subcommand(#static_mount_subcommands))*
                     #(.subcommand(#slug_mount_subcommands))*
             }

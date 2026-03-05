@@ -64,7 +64,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, extract_groups, extract_methods, get_impl_name, resolve_method_group};
 use syn::{ItemImpl, Token, parse::Parse};
 
 use crate::context::has_qualified_context;
@@ -220,14 +220,20 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
         let has_qualified = has_qualified_context(&methods);
         let prefix = args.prefix.unwrap_or_default();
 
+        let group_registry = extract_groups(&impl_block)?;
         let mut openapi_methods: Vec<(MethodInfo, RouteOverride, ResponseOverride)> = Vec::new();
 
         for method in &methods {
-            let overrides = RouteOverride::parse_from_attrs(&method.method.attrs)?;
+            let mut overrides = RouteOverride::parse_from_attrs(&method.method.attrs)?;
             let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
             if overrides.skip || overrides.hidden {
                 continue;
+            }
+
+            // Prepend group display name to OpenAPI tags
+            if let Some(group_name) = resolve_method_group(method, &group_registry)? {
+                overrides.tags.insert(0, group_name);
             }
 
             openapi_methods.push((method.clone(), overrides, response_overrides));

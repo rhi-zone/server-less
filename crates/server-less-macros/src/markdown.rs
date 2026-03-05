@@ -46,7 +46,9 @@ use heck::ToTitleCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{
+    MethodInfo, ParamInfo, extract_groups, extract_methods, get_impl_name, resolve_method_group,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 /// Arguments for the #[markdown] attribute
@@ -107,23 +109,29 @@ pub(crate) fn expand_markdown(
         .unwrap_or_else(|| format!("{} API", struct_name_str));
     let show_types = args.types;
 
-    let method_docs: Vec<String> = methods
-        .iter()
-        .map(|m| generate_method_doc(m, show_types))
-        .collect();
+    // Partition methods by group
+    let group_registry = extract_groups(&impl_block)?;
+    let groups = partition_by_group(&methods, &group_registry)?;
+
+    let mut methods_section = String::new();
+    for (group_name, group_methods) in &groups {
+        if let Some(name) = group_name {
+            methods_section.push_str(&format!("## {}\n\n", name));
+        } else {
+            methods_section.push_str("## Methods\n\n");
+        }
+        let docs: Vec<String> = group_methods
+            .iter()
+            .map(|m| generate_method_doc(m, show_types))
+            .collect();
+        methods_section.push_str(&docs.join("\n---\n\n"));
+    }
 
     let markdown = format!(
-        r#"# {}
-
-{}
-
-## Methods
-
-{}
-"#,
+        "# {}\n\n{}\n\n{}",
         title,
-        generate_overview(&struct_name_str, &methods),
-        method_docs.join("\n---\n\n")
+        generate_overview(&struct_name_str, &methods, &groups),
+        methods_section,
     );
 
     Ok(quote! {
@@ -143,7 +151,40 @@ pub(crate) fn expand_markdown(
     })
 }
 
-fn generate_overview(name: &str, methods: &[MethodInfo]) -> String {
+/// Partition methods by resolved group name, maintaining declaration/first-seen order.
+/// Ungrouped methods appear first with `None` as the key.
+fn partition_by_group<'a>(
+    methods: &'a [MethodInfo],
+    registry: &Option<server_less_parse::GroupRegistry>,
+) -> syn::Result<Vec<(Option<String>, Vec<&'a MethodInfo>)>> {
+    let mut groups: Vec<(Option<String>, Vec<&MethodInfo>)> = Vec::new();
+
+    for method in methods {
+        let group = resolve_method_group(method, registry)?;
+
+        if let Some(pos) = groups.iter().position(|(g, _)| *g == group) {
+            groups[pos].1.push(method);
+        } else {
+            groups.push((group, vec![method]));
+        }
+    }
+
+    // Move ungrouped (None) to the front if it isn't already
+    if let Some(pos) = groups.iter().position(|(g, _)| g.is_none())
+        && pos != 0
+    {
+        let ungrouped = groups.remove(pos);
+        groups.insert(0, ungrouped);
+    }
+
+    Ok(groups)
+}
+
+fn generate_overview(
+    name: &str,
+    methods: &[MethodInfo],
+    groups: &[(Option<String>, Vec<&MethodInfo>)],
+) -> String {
     let method_count = methods.len();
     let has_async = methods.iter().any(|m| m.is_async);
 
@@ -156,6 +197,19 @@ fn generate_overview(name: &str, methods: &[MethodInfo]) -> String {
 
     if has_async {
         overview.push_str(" Some methods are async.");
+    }
+
+    let named_groups: Vec<&str> = groups
+        .iter()
+        .filter_map(|(g, _)| g.as_deref())
+        .collect();
+    if !named_groups.is_empty() {
+        overview.push_str(&format!(
+            " Organized into {} group{}: {}.",
+            named_groups.len(),
+            if named_groups.len() == 1 { "" } else { "s" },
+            named_groups.join(", "),
+        ));
     }
 
     overview
