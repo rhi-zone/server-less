@@ -30,6 +30,19 @@ pub struct MethodInfo {
     pub return_info: ReturnInfo,
     /// Whether the method is async
     pub is_async: bool,
+    /// Group assignment from `#[server(group = "...")]`
+    pub group: Option<String>,
+}
+
+/// Registry of declared method groups from `#[server(groups(...))]`.
+///
+/// When present on an impl block, method `group` values are resolved as IDs
+/// against this registry. When absent, `group` values are literal display names.
+#[derive(Debug, Clone)]
+pub struct GroupRegistry {
+    /// Ordered list of (id, display_name) pairs.
+    /// Ordering determines display order in help output and documentation.
+    pub groups: Vec<(String, String)>,
 }
 
 /// Parsed parameter information
@@ -130,6 +143,9 @@ impl MethodInfo {
         // Parse return type
         let return_info = parse_return_type(&method.sig.output);
 
+        // Extract group from #[server(group = "...")]
+        let group = extract_server_group(&method.attrs);
+
         Ok(Some(Self {
             method: method.clone(),
             name,
@@ -137,6 +153,7 @@ impl MethodInfo {
             params,
             return_info,
             is_async,
+            group,
         }))
     }
 }
@@ -162,6 +179,115 @@ pub fn extract_docs(attrs: &[syn::Attribute]) -> Option<String> {
         None
     } else {
         Some(docs.join("\n"))
+    }
+}
+
+/// Extract the `group` value from `#[server(group = "...")]` on a method.
+fn extract_server_group(attrs: &[syn::Attribute]) -> Option<String> {
+    for attr in attrs {
+        if attr.path().is_ident("server") {
+            let mut group = None;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("group") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    group = Some(s.value());
+                } else if meta.input.peek(syn::Token![=]) {
+                    // Consume other `key = value` pairs without error.
+                    let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
+            if group.is_some() {
+                return group;
+            }
+        }
+    }
+    None
+}
+
+/// Extract the group registry from `#[server(groups(...))]` on an impl block.
+///
+/// Returns `None` if no `groups(...)` attribute is present.
+/// Returns ordered `(id, display_name)` pairs matching declaration order.
+pub fn extract_groups(impl_block: &ItemImpl) -> syn::Result<Option<GroupRegistry>> {
+    for attr in &impl_block.attrs {
+        if attr.path().is_ident("server") {
+            let mut groups = Vec::new();
+            let mut found_groups = false;
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("groups") {
+                    found_groups = true;
+                    meta.parse_nested_meta(|inner| {
+                        let id = inner
+                            .path
+                            .get_ident()
+                            .ok_or_else(|| inner.error("expected group identifier"))?
+                            .to_string();
+                        let value = inner.value()?;
+                        let display: syn::LitStr = value.parse()?;
+                        groups.push((id, display.value()));
+                        Ok(())
+                    })?;
+                } else if meta.input.peek(syn::Token![=]) {
+                    let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                } else if meta.input.peek(syn::token::Paren) {
+                    let _content;
+                    syn::parenthesized!(_content in meta.input);
+                }
+                Ok(())
+            })?;
+            if found_groups {
+                return Ok(Some(GroupRegistry { groups }));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Resolve method groups against an optional registry.
+///
+/// When a registry is present, each method's `group` value must match a declared
+/// ID — otherwise a compile error is emitted. The returned string is the display
+/// name from the registry.
+///
+/// When no registry is present, method `group` values are used as literal display
+/// names (Tier 1 mode).
+pub fn resolve_method_group(
+    method: &MethodInfo,
+    registry: &Option<GroupRegistry>,
+) -> syn::Result<Option<String>> {
+    let group_value = match &method.group {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+
+    match registry {
+        Some(reg) => {
+            // Tier 2: resolve ID → display name
+            for (id, display) in &reg.groups {
+                if id == group_value {
+                    return Ok(Some(display.clone()));
+                }
+            }
+            // ID not found — compile error
+            let span = method.method.sig.ident.span();
+            Err(syn::Error::new(
+                span,
+                format!(
+                    "unknown group `{group_value}`; declared groups are: {}",
+                    reg.groups
+                        .iter()
+                        .map(|(id, _)| format!("`{id}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ))
+        }
+        None => {
+            // Tier 1: literal display name
+            Ok(Some(group_value.clone()))
+        }
     }
 }
 

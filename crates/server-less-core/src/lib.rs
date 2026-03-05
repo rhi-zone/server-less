@@ -323,6 +323,8 @@ pub struct MethodInfo {
     pub is_optional: bool,
     /// Whether the return type is `Result<T, E>`
     pub is_result: bool,
+    /// Group display name for categorization
+    pub group: Option<String>,
 }
 
 /// Runtime parameter metadata with string-based types.
