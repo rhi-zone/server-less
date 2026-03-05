@@ -1,0 +1,7 @@
+error: method has `group = "admin"` but no `groups(...)` registry is declared on the impl block
+
+       help: add `#[server(groups(admin = "Display Name"))]` to the impl block
+ --> tests/fixtures/group_without_registry.rs:9:12
+  |
+9 |     pub fn reset(&self) -> String {
+  |            ^^^^^
