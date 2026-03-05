@@ -343,44 +343,114 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
 
     let partitioned = partition_methods(&methods, has_cli_skip);
 
-    // Resolve method groups (Tier 1: inline strings, Tier 2: registry IDs)
+    // Resolve method groups
     let group_registry = extract_groups(&impl_block)?;
     let group_order = build_group_order(&partitioned.leaf, &group_registry)?;
+    let has_groups = !group_order.is_empty();
 
-    // Generate subcommands grouped by heading:
-    // ungrouped first, then each group in declaration/first-seen order.
-    let leaf_subcommands_grouped = {
-        let mut tokens: Vec<TokenStream2> = Vec::new();
-        // Ungrouped methods first
+    // Generate subcommands for leaf methods.
+    // When groups exist, hide all leaf subcommands from clap's help — we render
+    // them ourselves via `after_help` because clap doesn't support multiple
+    // subcommand sections (clap-rs/clap#1553).
+    let leaf_subcommands: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .map(|m| {
+            generate_leaf_subcommand(
+                m,
+                has_qualified,
+                &global_flags,
+                has_defaults,
+                has_cli_hidden(m) || has_groups,
+            )
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    // Build grouped help text as `after_help` content
+    let grouped_after_help = if has_groups {
+        #[allow(clippy::type_complexity)]
+        let mut sections: Vec<(Option<String>, Vec<(String, String)>)> = Vec::new();
+
+        // Ungrouped leaf methods first
+        let mut ungrouped = Vec::new();
         for m in &partitioned.leaf {
+            if has_cli_hidden(m) {
+                continue;
+            }
             if resolve_method_group(m, &group_registry)?.is_none() {
-                let cmd = generate_leaf_subcommand(
-                    m,
-                    has_qualified,
-                    &global_flags,
-                    has_defaults,
-                    has_cli_hidden(m),
-                )?;
-                tokens.push(quote! { .subcommand(#cmd) });
+                let name = m.name.to_string().to_kebab_case();
+                let about = m.docs.clone().unwrap_or_default();
+                ungrouped.push((name, about));
             }
         }
-        // Grouped methods, in order
+        // Static mounts
+        for m in &partitioned.static_mounts {
+            if !has_cli_hidden(m) {
+                let name = m.name.to_string().to_kebab_case();
+                let about = m.docs.clone().unwrap_or_default();
+                ungrouped.push((name, about));
+            }
+        }
+        // Slug mounts
+        for m in &partitioned.slug_mounts {
+            if !has_cli_hidden(m) {
+                let name = m.name.to_string().to_kebab_case();
+                let about = m.docs.clone().unwrap_or_default();
+                ungrouped.push((name, about));
+            }
+        }
+        if !ungrouped.is_empty() {
+            sections.push((None, ungrouped));
+        }
+
+        // Grouped methods in registry order
         for group in &group_order {
-            tokens.push(quote! { .subcommand_help_heading(#group) });
+            let mut entries = Vec::new();
             for m in &partitioned.leaf {
+                if has_cli_hidden(m) {
+                    continue;
+                }
                 if resolve_method_group(m, &group_registry)?.as_deref() == Some(group.as_str()) {
-                    let cmd = generate_leaf_subcommand(
-                        m,
-                        has_qualified,
-                        &global_flags,
-                        has_defaults,
-                        has_cli_hidden(m),
-                    )?;
-                    tokens.push(quote! { .subcommand(#cmd) });
+                    let name = m.name.to_string().to_kebab_case();
+                    let about = m.docs.clone().unwrap_or_default();
+                    entries.push((name, about));
                 }
             }
+            if !entries.is_empty() {
+                sections.push((Some(group.clone()), entries));
+            }
         }
-        tokens
+
+        // Column width for alignment
+        let max_width = sections
+            .iter()
+            .flat_map(|(_, entries)| entries.iter())
+            .map(|(name, _)| name.len())
+            .max()
+            .unwrap_or(0);
+
+        let mut text = String::new();
+        for (heading, entries) in &sections {
+            match heading {
+                Some(h) => text.push_str(&format!("\x1b[1;4m{h}:\x1b[0m\n")),
+                None => text.push_str("\x1b[1;4mCommands:\x1b[0m\n"),
+            }
+            for (name, about) in entries {
+                if about.is_empty() {
+                    text.push_str(&format!("  {name}\n"));
+                } else {
+                    text.push_str(&format!(
+                        "  \x1b[1m{name:<width$}\x1b[0m  {about}\n",
+                        width = max_width
+                    ));
+                }
+            }
+            text.push('\n');
+        }
+
+        Some(quote! { .after_help(#text) })
+    } else {
+        None
     };
 
     // Generate subcommands for static mounts
@@ -586,8 +656,9 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                     .about(#about)
                     #(#global_flag_args)*
                     #format_flags
+                    #grouped_after_help
                     #(.arg(#default_parent_args))*
-                    #(#leaf_subcommands_grouped)*
+                    #(.subcommand(#leaf_subcommands))*
                     #(.subcommand(#static_mount_subcommands))*
                     #(.subcommand(#slug_mount_subcommands))*
             }
