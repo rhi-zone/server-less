@@ -143,6 +143,7 @@ Detailed design docs live in `docs/design/`:
 - [Route & Response Attributes](docs/design/route-response-attrs.md) - `#[route]` and `#[response]` HTTP overrides
 - [Mount Points](docs/design/mount-points.md) - Nested subcommand composition via `&T` return types
 - [OpenAPI Composition](docs/design/openapi-composition.md) - Multi-protocol OpenAPI spec composition
+- [Method Groups](docs/design/method-groups.md) - Cross-protocol method grouping (`#[server(group)]`)
 
 **Process:**
 - [Open Questions](docs/design/open-questions.md) - Unresolved design questions
