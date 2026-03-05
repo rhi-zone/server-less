@@ -10,33 +10,7 @@ Mount points (`&T` return types) provide *structural* grouping — a whole sub-s
 
 ## Design
 
-Two tiers, following progressive disclosure:
-
-### Tier 1: Inline strings (simple)
-
-```rust
-#[server]
-impl AnalyzeService {
-    #[server(group = "Code quality")]
-    pub fn complexity(&self, path: String) -> ComplexityReport { ... }
-
-    #[server(group = "Code quality")]
-    pub fn length(&self, path: String) -> LengthReport { ... }
-
-    #[server(group = "Module structure")]
-    pub fn density(&self, path: String) -> DensityReport { ... }
-
-    // Ungrouped — appears before any group section
-    pub fn summary(&self) -> SummaryReport { ... }
-}
-```
-
-- The string *is* the display name.
-- Group ordering in output = first-seen order in the impl block.
-- Typos produce an extra group (visible immediately in `--help` / docs).
-- Zero ceremony — one attribute, one string.
-
-### Tier 2: Registry with IDs (strict)
+Declare groups on the impl block, assign methods by ID:
 
 ```rust
 #[server]
@@ -44,30 +18,31 @@ impl AnalyzeService {
     code = "Code quality",
     modules = "Module structure",
     repo = "Repository",
-    graph = "Graph analysis",
 ))]
 impl AnalyzeService {
     #[server(group = "code")]
     pub fn complexity(&self, path: String) -> ComplexityReport { ... }
 
+    #[server(group = "code")]
+    pub fn length(&self, path: String) -> LengthReport { ... }
+
     #[server(group = "modules")]
     pub fn density(&self, path: String) -> DensityReport { ... }
 
-    // Ungrouped
+    // Ungrouped — appears before any group section
     pub fn summary(&self) -> SummaryReport { ... }
 }
 ```
 
-- `groups(...)` on the impl block declares the registry: `id = "Display Name"`.
-- `group = "id"` on a method must match a declared ID — compile error otherwise.
-- Group ordering in output = declaration order in `groups(...)`.
-- IDs are internal linkage — never shown to users, only the display name appears.
+**Rules:**
+- `groups(...)` on the impl block declares the registry: `id = "Display Name"`
+- `group = "id"` on a method must match a declared ID — **compile error otherwise**
+- Using `group` without a `groups(...)` registry is also a compile error
+- Group ordering in output = declaration order in `groups(...)`
+- IDs are internal linkage — never shown to users, only the display name appears
+- Ungrouped methods appear first, under the default heading
 
-### Disambiguation
-
-When `groups(...)` is declared on the impl block, `group = "x"` resolves against registry IDs. When no registry exists, `group = "x"` is a literal display name (Tier 1).
-
-This means the two tiers coexist without ambiguity: the presence of `groups(...)` switches the interpretation.
+**Why a registry, not inline strings?** The display name lives in one place. Short IDs on methods are less noisy than repeating `"Code quality"` everywhere. Typos are caught at compile time instead of producing silent extra groups. Ordering is explicit, not first-seen.
 
 ## Cross-Protocol Projection
 
@@ -115,7 +90,7 @@ Repository:
   hotspots    High-churn + high-complexity intersections
 ```
 
-Ungrouped methods appear first under the standard `Commands:` heading. Grouped methods appear in sections ordered by group declaration (Tier 2) or first-seen (Tier 1).
+Ungrouped methods appear first under the standard `Commands:` heading. Grouped methods appear in sections ordered by declaration order in `groups(...)`.
 
 ## Parse Layer
 
@@ -143,20 +118,17 @@ pub struct GroupRegistry {
 pub fn extract_groups(impl_block: &ItemImpl) -> syn::Result<Option<GroupRegistry>>
 ```
 
-Each protocol's expander calls `extract_groups()` and resolves method group strings against the registry (if present) or uses them as literal display names.
+Each protocol's expander calls `extract_groups()` and resolves method group strings against the registry.
 
 ### Validation
 
-When a `GroupRegistry` is present:
-- `group = "x"` where `x` is not a declared ID → compile error with span pointing at the attribute
+- `group = "x"` without `groups(...)` on the impl → compile error with helpful suggestion
+- `group = "x"` where `x` is not a declared ID → compile error listing valid IDs
 - Declared groups with zero methods → warning (unused group)
-
-When no registry:
-- Any string is accepted — no validation needed
 
 ## Implementation Surface
 
-1. **`server-less-parse`** — `extract_groups()` parses `groups(...)` from impl attrs. `MethodInfo::parse()` reads `#[server(group = "...")]` into the new field.
+1. **`server-less-parse`** — `extract_groups()` parses `groups(...)` from impl attrs. `MethodInfo::parse()` reads `#[server(group = "...")]` into the new field. `resolve_method_group()` validates and resolves IDs to display names.
 2. **`server-less-macros/cli.rs`** — `generate_cli()` partitions subcommands by group, emits `help_heading` on each clap `Command`.
 3. **`server-less-macros/openapi.rs`** — prepends group display name to operation tags.
 4. **`server-less-macros/markdown.rs`** — emits group sections.
@@ -164,9 +136,7 @@ When no registry:
 
 ## Alternatives Considered
 
-**Registry only (no Tier 1).** Rejected — too much ceremony for simple cases. A service with 3 groups doesn't need a registry; inline strings work fine.
-
-**Inline only (no Tier 2).** Rejected — typos in group names silently create extra groups. Large impls benefit from compile-time validation and explicit ordering.
+**Inline strings without registry (`#[server(group = "Code quality")]`).** Rejected — repeating the display name on every method is noisy, and typos silently create extra groups instead of failing at compile time. The registry keeps the display name in one place and IDs short.
 
 **Per-protocol group attrs (`#[cli(group)]`, `#[route(group)]`).** Rejected — groups are a semantic concept that should project consistently. Per-protocol overrides could be added later if needed, but the common case is one grouping across all protocols.
 

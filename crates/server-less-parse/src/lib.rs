@@ -245,14 +245,13 @@ pub fn extract_groups(impl_block: &ItemImpl) -> syn::Result<Option<GroupRegistry
     Ok(None)
 }
 
-/// Resolve method groups against an optional registry.
+/// Resolve a method's group against the registry.
 ///
-/// When a registry is present, each method's `group` value must match a declared
-/// ID — otherwise a compile error is emitted. The returned string is the display
-/// name from the registry.
+/// When the method has `group = "id"`, the registry must be present and must
+/// contain a matching ID — otherwise a compile error is emitted. The returned
+/// string is the display name from the registry.
 ///
-/// When no registry is present, method `group` values are used as literal display
-/// names (Tier 1 mode).
+/// When the method has no `group` attribute, returns `None`.
 pub fn resolve_method_group(
     method: &MethodInfo,
     registry: &Option<GroupRegistry>,
@@ -262,16 +261,15 @@ pub fn resolve_method_group(
         None => return Ok(None),
     };
 
+    let span = method.method.sig.ident.span();
+
     match registry {
         Some(reg) => {
-            // Tier 2: resolve ID → display name
             for (id, display) in &reg.groups {
                 if id == group_value {
                     return Ok(Some(display.clone()));
                 }
             }
-            // ID not found — compile error
-            let span = method.method.sig.ident.span();
             Err(syn::Error::new(
                 span,
                 format!(
@@ -284,10 +282,14 @@ pub fn resolve_method_group(
                 ),
             ))
         }
-        None => {
-            // Tier 1: literal display name
-            Ok(Some(group_value.clone()))
-        }
+        None => Err(syn::Error::new(
+            span,
+            format!(
+                "method has `group = \"{group_value}\"` but no `groups(...)` registry is declared on the impl block\n\
+                 \n\
+                 help: add `#[server(groups({group_value} = \"Display Name\"))]` to the impl block"
+            ),
+        )),
     }
 }
 

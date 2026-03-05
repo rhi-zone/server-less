@@ -259,21 +259,37 @@ fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
     None
 }
 
-/// Build an ordered list of unique group display names from methods, preserving first-seen order.
+/// Build an ordered list of group display names.
+///
+/// When a registry exists, uses declaration order from `groups(...)`.
+/// Only includes groups that have at least one method assigned.
 fn build_group_order(
     methods: &[&MethodInfo],
     registry: &Option<server_less_parse::GroupRegistry>,
 ) -> syn::Result<Vec<String>> {
-    let mut seen = std::collections::HashSet::new();
-    let mut order = Vec::new();
-    for m in methods {
-        if let Some(display) = resolve_method_group(m, registry)?
-            && seen.insert(display.clone())
-        {
-            order.push(display);
+    match registry {
+        Some(reg) => {
+            // Use registry declaration order, filtered to groups with methods
+            let used: std::collections::HashSet<String> = methods
+                .iter()
+                .filter_map(|m| m.group.clone())
+                .collect();
+            Ok(reg
+                .groups
+                .iter()
+                .filter(|(id, _)| used.contains(id))
+                .map(|(_, display)| display.clone())
+                .collect())
+        }
+        None => {
+            // No registry — resolve_method_group will error if any method has a group,
+            // so this path only produces an empty vec.
+            for m in methods {
+                resolve_method_group(m, registry)?;
+            }
+            Ok(vec![])
         }
     }
-    Ok(order)
 }
 
 /// Strip `#[cli(...)]` and `#[server(...)]` attributes from methods in the
