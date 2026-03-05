@@ -4,20 +4,29 @@
 [![Rust](https://img.shields.io/badge/rust-2024%20edition-blue)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Write less server code.** Composable derive macros for Rust. Write your implementation once, project it into multiple protocols.
+**Write less server code.** Server-less is a projection system for Rust. You write an impl block — plain methods with plain types — and server-less projects it onto arbitrary protocols: HTTP, CLI, WebSocket, MCP, gRPC, and more.
 
-## Philosophy
+You're not writing a server, a CLI app, or an API. You're writing your logic. Server-less handles the rest.
 
-Server-less is about minimizing boilerplate while maximizing flexibility:
+```rust
+impl UserService {
+    pub fn create_user(&self, name: String, email: String) -> Result<User, UserError> {
+        // This is just your code. No framework, no protocol awareness.
+    }
+}
+```
 
-- **Convention over configuration** - Sensible defaults that just work
-- **Composable** - Stack multiple macros on the same impl block
-- **Progressive disclosure** - Simple by default, powerful when needed
-- **Escape hatches** - Drop to manual code whenever you want
+Add attributes to project it:
+
+```rust
+#[http(prefix = "/api")]  // → POST /api/users, GET /api/users/{id}
+#[cli(name = "users")]    // → users create-user --name X --email Y
+#[mcp]                    // → MCP tools: create_user, get_user
+```
+
+Each projection is competitive with hand-written code using the protocol's native library (axum, clap, etc.). That's the quality bar, not the pitch. The pitch is: **annotate once, project anywhere.**
 
 ## Quick Start
-
-Write your business logic once, expose it through multiple protocols:
 
 ```rust
 use server_less::prelude::*;
@@ -211,22 +220,16 @@ The generated code automatically wraps your stream in SSE format with proper eve
 
 ## Philosophy
 
-Server-less follows an **impl-first design** approach:
+Server-less is a **projection system**, not a framework. The distinction matters:
 
-1. **Write your implementation** - Focus on business logic
-2. **Add protocol macros** - Derive handlers from methods
-3. **Customize as needed** - Progressive disclosure of complexity
-4. **Escape hatch available** - Drop to manual code when needed
+- **Frameworks** own your code. You write handlers in their shape, using their types.
+- **Server-less** projects your code. You write plain Rust methods. Attributes are semantic metadata — `#[param(help = "...")]` becomes CLI help text *and* OpenAPI description *and* MCP tool input docs simultaneously.
 
-### Design Principles
+**Progressive disclosure.** The zero-config case should just work. Complexity appears only when you need it. Don't like how server-less handles something? Drop that one derive and write it by hand — everything else still composes.
 
-- **Minimize barrier to entry** - The simple case should be trivial
-- **Progressive disclosure** - Complexity appears only when you need it
-- **Gradual refinement** - Start simple, incrementally add control
-- **Not here to judge** - Support multiple workflows, don't prescribe
-- **Silly but proper** - Simple things done right (good errors, readable code)
+**Prior art: Serde.** `#[derive(Serialize)]` doesn't compete with hand-written JSON serializers. It's a projection from Rust types onto data formats. Server-less does the same thing, from Rust methods onto protocols.
 
-See [docs/design/](docs/design/) for detailed design philosophy.
+See [docs/design/](docs/design/) for detailed design documents.
 
 ## Development
 
@@ -283,4 +286,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-Inspired by the composability of Serde and the "just works" experience of Clap.
+Inspired by Serde's model: derive macros as a projection interface, not a straitjacket.
