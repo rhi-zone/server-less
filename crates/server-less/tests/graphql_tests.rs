@@ -828,3 +828,69 @@ fn test_graphql_hidden_schema_builds_successfully() {
     let sdl = schema.sdl();
     assert!(!sdl.is_empty());
 }
+
+// ============================================================================
+// Context Injection Tests
+// ============================================================================
+
+/// Service with a Context parameter — context must not appear as a GraphQL field argument.
+#[derive(Clone)]
+struct ContextGraphqlService;
+
+#[graphql]
+impl ContextGraphqlService {
+    /// Get greeting using context (context should be invisible to callers)
+    pub fn get_greeting(&self, ctx: server_less::Context, name: String) -> String {
+        let _ = ctx;
+        format!("Hello, {}!", name)
+    }
+
+    /// No context — should work normally
+    pub fn get_ping(&self) -> String {
+        "pong".to_string()
+    }
+}
+
+#[test]
+fn test_graphql_context_param_not_in_sdl() {
+    let service = ContextGraphqlService;
+    let sdl = service.graphql_sdl();
+
+    // `ctx` must NOT appear as a GraphQL argument in the SDL
+    assert!(
+        !sdl.contains("ctx:"),
+        "Context parameter should not appear in GraphQL SDL, got:\n{}",
+        sdl
+    );
+
+    // `name` must still be there as a field argument
+    assert!(
+        sdl.contains("name:"),
+        "Regular parameter 'name' should appear in SDL, got:\n{}",
+        sdl
+    );
+}
+
+#[tokio::test]
+async fn test_graphql_context_param_method_callable() {
+    let service = ContextGraphqlService;
+    let schema = service.graphql_schema();
+
+    // Execute without providing ctx — the macro injects it automatically
+    let result = schema
+        .execute(r#"{ getGreeting(name: "Alice") }"#)
+        .await;
+    assert!(
+        result.errors.is_empty(),
+        "Query with context injection should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    assert_eq!(
+        data["getGreeting"].as_str(),
+        Some("Hello, Alice!"),
+        "Should return greeting, got: {:?}",
+        data
+    );
+}

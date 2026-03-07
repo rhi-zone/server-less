@@ -54,6 +54,7 @@
 //!
 //! Also implements `McpNamespace` trait for composition.
 
+use crate::context::{has_qualified_context, partition_context_params};
 use crate::server_attrs::{has_server_hidden, has_server_skip};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -121,6 +122,9 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         format!("{}_", namespace)
     };
 
+    // Detect whether any method uses qualified server_less::Context (two-pass strategy).
+    let has_qualified = has_qualified_context(&methods);
+
     let partitioned = partition_methods(&methods, has_server_skip);
 
     // Separate hidden from visible leaf methods.
@@ -135,20 +139,20 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     // Generate tool definitions for visible leaf methods only
     let leaf_tool_definitions: Vec<_> = visible_leaf
         .iter()
-        .map(|m| generate_tool_definition(&namespace_prefix, m))
+        .map(|m| generate_tool_definition(&namespace_prefix, m, has_qualified))
         .collect();
 
     // Generate dispatch match arms for ALL leaf methods (hidden methods remain callable)
     let leaf_dispatch_sync: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_dispatch_arm_sync(&namespace_prefix, m))
+        .map(|m| generate_dispatch_arm_sync(&namespace_prefix, m, has_qualified))
         .collect();
 
     let leaf_dispatch_async: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_dispatch_arm_async(&namespace_prefix, m))
+        .map(|m| generate_dispatch_arm_async(&namespace_prefix, m, has_qualified))
         .collect();
 
     // Tool names for visible leaf methods only
@@ -303,15 +307,23 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
 }
 
 /// Generate an MCP tool definition (JSON schema)
-fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
+fn generate_tool_definition(
+    namespace_prefix: &str,
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> TokenStream2 {
     let name = format!("{}{}", namespace_prefix, method.name);
     let description = method
         .docs
         .clone()
         .unwrap_or_else(|| method.name.to_string());
 
-    // Generate parameter schema using shared utility
-    let (properties, required_params) = server_less_rpc::generate_param_schema(&method.params);
+    // Partition out Context parameters — they are injected, not user-visible inputs.
+    let (_ctx_param, user_params) =
+        partition_context_params(&method.params, has_qualified).unwrap_or((None, method.params.iter().collect()));
+
+    // Generate parameter schema using shared utility (excluding Context params)
+    let (properties, required_params) = server_less_rpc::generate_param_schema_for(&user_params);
 
     quote! {
         {
@@ -340,15 +352,56 @@ fn generate_tool_definition(namespace_prefix: &str, method: &MethodInfo) -> Toke
 }
 
 /// Generate a dispatch match arm for calling a method (sync version)
-fn generate_dispatch_arm_sync(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
+fn generate_dispatch_arm_sync(
+    namespace_prefix: &str,
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    server_less_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Error)
+    generate_dispatch_arm_with_context(method, Some(&tool_name), AsyncHandling::Error, has_qualified)
 }
 
 /// Generate a dispatch match arm for calling a method (async version)
-fn generate_dispatch_arm_async(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
+fn generate_dispatch_arm_async(
+    namespace_prefix: &str,
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    server_less_rpc::generate_dispatch_arm(method, Some(&tool_name), AsyncHandling::Await)
+    generate_dispatch_arm_with_context(method, Some(&tool_name), AsyncHandling::Await, has_qualified)
+}
+
+/// Generate a dispatch arm that injects Context parameters instead of reading them from JSON.
+fn generate_dispatch_arm_with_context(
+    method: &MethodInfo,
+    tool_name: Option<&str>,
+    async_handling: AsyncHandling,
+    has_qualified: bool,
+) -> TokenStream2 {
+    // Find context parameter indices for injection.
+    let injections: Vec<(usize, TokenStream2)> = method
+        .params
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| {
+            if crate::context::should_inject_context(&p.ty, has_qualified) {
+                Some((i, quote! { ::server_less::Context::default() }))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if injections.is_empty() {
+        server_less_rpc::generate_dispatch_arm(method, tool_name, async_handling)
+    } else {
+        server_less_rpc::generate_dispatch_arm_with_injections(
+            method,
+            tool_name,
+            async_handling,
+            &injections,
+        )
+    }
 }
 
 /// Generate code to append mounted tools to the tools list.
