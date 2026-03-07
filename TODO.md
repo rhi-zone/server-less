@@ -284,9 +284,9 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **`camel_to_sentence` unwrap** ✅ Replaced .next().unwrap() with for-loop over ToLowercase iterator. (`error.rs:255`): Safe in practice but should use explicit char handling.
 
-- [ ] **GraphQL: no mount point / composition tests**
+- [x] **GraphQL: no mount point / composition tests** ✅ 11 tests added; field-merging helpers generated on each #[graphql] service; child fields inlined into parent schema.
 
-- [ ] **`serve` macro never tested with GraphQL**
+- [x] **`serve` macro never tested with GraphQL** ✅ 4 integration tests: POST /graphql responds, query executes, /health works, openapi_spec documents the endpoint.
 
 ---
 
