@@ -213,13 +213,13 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [ ] **Generic impl blocks broken** (`server-less-parse/src/lib.rs` `get_impl_name`): Discards type parameters — `impl<T> MyService<T>` generates `impl MyService { }`, breaking all generic services with confusing compiler errors.
 
-- [ ] **Substring type inference produces wrong schemas** (`server-less-rpc/src/lib.rs` `infer_json_type`, `cli.rs` type_to_json_schema, `graphql_input.rs`): Uses `.contains("String")` etc., so `Vec<String>` → `"string"`, `HashMap<String, i32>` → `"string"`, user type named `Stringer` → `"string"`. Wrong schemas across MCP/JSON-RPC/WS/OpenAPI/CLI.
+- [x] **Substring type inference produces wrong schemas** ✅ Fixed: AST-based type inspection using syn::Type pattern matching on the outermost type name. Vec<String>→array, HashMap<K,V>→object, Option<T> recurses into T.
 
 ### HIGH — embarrassing on crates.io
 
-- [ ] **`__trellis_` naming in generated code** (`http.rs`, `ws.rs`, `jsonrpc.rs`): Old project name visible in `cargo expand` output. Rename to `__server_less_`.
+- [x] **`__trellis_` naming in generated code** ✅ Renamed to `__server_less_` in http.rs, ws.rs, jsonrpc.rs.
 
-- [ ] **`Box::leak` on every call in tool/method name fns** (`mcp.rs`, `jsonrpc.rs`, `ws.rs`): `mcp_tool_names()`, `jsonrpc_methods()`, `ws_methods()` call `Box::leak` on every invocation, leaking memory if called more than once. Fix: use `OnceLock` or return owned `String`s.
+- [x] **`Box::leak` on every call in tool/method name fns** ✅ Changed return type to Vec<String>, push owned strings directly. No more Box::leak.
 
 - [ ] **`#[server(skip)]` ignored by GraphQL** (`graphql.rs`): Methods marked `#[server(skip)]` still appear in GraphQL schema. GraphQL doesn't call `partition_methods` at all.
 
@@ -265,13 +265,13 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 ### MEDIUM — async CLI (from targeted audit)
 
-- [ ] **Async return types untested**: No tests for async methods returning `Result<T,E>`, `Option<T>`, or `()` — all have distinct codegen branches.
+- [x] **Async return types untested** ✅ Added tests for Result<T,E> ok path, Option<T> some/none (via --json), and () unit return.
 
 - [ ] **Async + output flags untested**: `--json`, `--jq`, `--params-json`, `--input-schema`/`--output-schema` untested through async dispatch path.
 
-- [ ] **Async slug mount dispatch untested**: `generate_slug_mount_arm_async` exercised only at compile time, never at runtime.
+- [x] **Async slug mount dispatch untested** ✅ Added SlugParent/SlugChild test exercising generate_slug_mount_arm_async at runtime.
 
-- [ ] **`no_sync`/`no_async` compile-fail tests missing**: No fixture verifying that suppressed methods truly don't exist on the trait.
+- [x] **`no_sync`/`no_async` compile-fail tests missing** ✅ Added trybuild fixtures: no_sync_missing_cli_run_with.rs, no_async_missing_cli_run_with_async.rs.
 
 ### LOW
 
