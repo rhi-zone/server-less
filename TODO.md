@@ -261,7 +261,8 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [ ] **`no_sync`/`no_async` trait semantics undocumented**: These suppress convenience methods only, not `cli_dispatch`/`cli_dispatch_async` on the trait. Surprising to users who expect full suppression.
 
-- [ ] **Only 4 compile-fail test fixtures**: Missing coverage for invalid attribute syntax, conflicting attributes, multiple `#[cli(default)]` methods, `ServerlessError` on struct, etc.
+- [x] **Only 4 compile-fail test fixtures** ✅ Added 5 fixtures: invalid_cli_attribute, invalid_param_attribute, serverless_error_on_struct, cli_on_non_impl, graphql_input_non_named_fields.: Missing coverage for invalid attribute syntax, conflicting attributes, multiple `#[cli(default)]` methods, `ServerlessError` on struct, etc.
+- [ ] **Multiple `#[cli(default)]` silently ignored**: When two methods are marked default, the macro takes the first silently. Should emit a compile error.
 
 ### MEDIUM — async CLI (from targeted audit)
 
