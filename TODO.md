@@ -221,15 +221,15 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **`Box::leak` on every call in tool/method name fns** ✅ Changed return type to Vec<String>, push owned strings directly. No more Box::leak.
 
-- [ ] **`#[server(skip)]` ignored by GraphQL** (`graphql.rs`): Methods marked `#[server(skip)]` still appear in GraphQL schema. GraphQL doesn't call `partition_methods` at all.
+- [x] **`#[server(skip)]` ignored by GraphQL** ✅ partition_methods with has_server_skip predicate now called in expand_graphql. (`graphql.rs`): Methods marked `#[server(skip)]` still appear in GraphQL schema. GraphQL doesn't call `partition_methods` at all.
 
-- [ ] **HTTP `partition_methods(|_| false)` skip bug** (`http.rs`): Passes hardcoded never-skip predicate to `partition_methods`, then manually checks `has_server_skip` afterwards — means skipped `&T`-returning methods still get classified as mount points.
+- [x] **HTTP `partition_methods(|_| false)` skip bug** ✅ Replaced hardcoded never-skip predicate with has_server_skip. (`http.rs`): Passes hardcoded never-skip predicate to `partition_methods`, then manually checks `has_server_skip` afterwards — means skipped `&T`-returning methods still get classified as mount points.
 
-- [ ] **Context injection missing from MCP and GraphQL** (`mcp.rs`, `graphql.rs`): `server_less::Context` parameters treated as regular tool inputs/arguments instead of being injected. Breaks "annotate once, project anywhere" for any method using Context.
+- [x] **Context injection missing from MCP and GraphQL** ✅ MCP and GraphQL now use partition_context_params and inject Context::default() instead of exposing ctx as input. (`mcp.rs`, `graphql.rs`): `server_less::Context` parameters treated as regular tool inputs/arguments instead of being injected. Breaks "annotate once, project anywhere" for any method using Context.
 
-- [ ] **`#[server(hidden)]` only respected by CLI**: Methods hidden from CLI help still appear in MCP tool lists, JSON-RPC method listings, OpenAPI specs, etc.
+- [x] **`#[server(hidden)]` only respected by CLI** ✅ visible_leaf filter added to MCP, JSON-RPC, WS, HTTP, GraphQL; hidden methods excluded from all discovery outputs but still dispatchable.: Methods hidden from CLI help still appear in MCP tool lists, JSON-RPC method listings, OpenAPI specs, etc.
 
-- [ ] **`ServerlessError` → HTTP status uses string matching, not `IntoErrorCode`**: HTTP handler infers status codes from error message text ("not found" → 404) rather than the `IntoErrorCode` trait. `#[error(code = 409)]` may silently not work.
+- [x] **`ServerlessError` → HTTP status uses string matching, not `IntoErrorCode`** ✅ Autoref specialization pattern; HttpStatusHelper calls http_status() on concrete error, fallback to 500.: HTTP handler infers status codes from error message text ("not found" → 404) rather than the `IntoErrorCode` trait. `#[error(code = 409)]` may silently not work.
 
 - [x] **lib.rs doc examples use `#[ignore]` and wrong version** ✅ Changed to no_run, updated version to "0.2".: Main crate docs show `use server_less::prelude::*` with `#[ignore]` examples that don't compile; version shows `"0.1"` instead of current version. Bad on docs.rs.
 
