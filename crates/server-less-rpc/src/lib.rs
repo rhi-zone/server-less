@@ -306,10 +306,10 @@ pub fn infer_json_type(ty: &syn::Type) -> &'static str {
                     "HashMap" | "BTreeMap" | "IndexMap" => "object",
                     "Option" => {
                         // Recurse into Option<T> to get the inner type's schema type
-                        if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                            if let Some(GenericArgument::Type(inner)) = args.args.first() {
-                                return infer_json_type(inner);
-                            }
+                        if let PathArguments::AngleBracketed(args) = &segment.arguments
+                            && let Some(GenericArgument::Type(inner)) = args.args.first()
+                        {
+                            return infer_json_type(inner);
                         }
                         "object"
                     }

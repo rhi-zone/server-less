@@ -345,13 +345,18 @@ pub fn generate_openapi_paths(
             let required =
                 location == "path" || (!param.is_optional && param.default_value.is_none());
 
+            let description = &param.help_text;
+            let description_tokens = match description {
+                Some(text) => quote! { Some(#text.to_string()) },
+                None => quote! { None },
+            };
             param_constructors.push(quote! {
                 ::server_less::OpenApiParameter {
                     name: #name.to_string(),
                     location: #location.to_string(),
                     required: #required,
                     schema: ::server_less::serde_json::json!({"type": #json_type}),
-                    description: None,
+                    description: #description_tokens,
                     extra: ::server_less::serde_json::Map::new(),
                 }
             });

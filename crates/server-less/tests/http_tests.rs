@@ -999,11 +999,7 @@ impl ParamService {
     /// Help text annotation
     ///
     /// #[param(help = "...")] carries description metadata parsed into
-    /// ParamInfo::help_text.  It is available to the OpenAPI generator but
-    /// currently not wired into OpenApiParameter::description (tracked in
-    /// TODO.md).  The test below verifies the macro compiles and the route
-    /// appears in the spec; once the gap is closed the description assertion
-    /// can be enabled.
+    /// ParamInfo::help_text and forwarded to OpenApiParameter::description.
     pub fn find_users(
         &self,
         #[param(help = "Substring to match against user names")] name: Option<String>,
@@ -1216,10 +1212,6 @@ fn test_param_header_in_openapi() {
 
 /// #[param(help = "...")] — the route compiles and appears in the OpenAPI spec.
 ///
-/// NOTE: `help_text` is parsed into `ParamInfo::help_text` but is currently
-/// not forwarded to `OpenApiParameter::description` (hardcoded to `None` in
-/// openapi_gen.rs line ~354).  This is tracked in TODO.md.  Once that gap is
-/// closed, uncomment the description assertion below.
 #[test]
 fn test_param_help_route_in_openapi() {
     let paths = ParamService::http_openapi_paths();
@@ -1241,12 +1233,9 @@ fn test_param_help_route_in_openapi() {
         route.operation.parameters
     );
 
-    // Once ParamInfo::help_text is wired into OpenApiParameter::description,
-    // enable this assertion:
-    //
-    // assert_eq!(
-    //     name_param.unwrap().description.as_deref(),
-    //     Some("Substring to match against user names"),
-    //     "#[param(help = \"...\")] should populate the OpenAPI parameter description"
-    // );
+    assert_eq!(
+        name_param.unwrap().description.as_deref(),
+        Some("Substring to match against user names"),
+        "#[param(help = \"...\")] should populate the OpenAPI parameter description"
+    );
 }
