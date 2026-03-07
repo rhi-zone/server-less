@@ -25,9 +25,21 @@
 //!
 //! # Generated Methods
 //!
+//! **Sync entrypoints** (suppressed by `#[cli(no_sync)]`):
 //! - `cli_command() -> clap::Command` - Complete CLI application
-//! - `cli_run()` - Run from process args
-//! - `cli_run_with(args)` - Run with custom args
+//! - `cli_run()` - Run from process args using an internally-created Tokio runtime
+//! - `cli_run_with(args)` - Run with custom args (same runtime behaviour as `cli_run`)
+//!
+//! **Async entrypoints** (suppressed by `#[cli(no_async)]`):
+//! - `cli_run_async()` - Run from process args; caller supplies the async runtime
+//! - `cli_run_with_async(args)` - Run with custom args; caller supplies the async runtime
+//!
+//! **Trait methods** (always generated, never suppressed):
+//! - `cli_dispatch(&self, matches)` - Sync dispatch (part of `CliSubcommand`)
+//! - `cli_dispatch_async(&self, matches)` - Async dispatch (part of `CliSubcommand`)
+//!
+//! The `cli_dispatch` / `cli_dispatch_async` trait methods are never suppressed because
+//! they are the integration point used by `#[program]` and other presets for composition.
 //!
 //! Also implements `CliSubcommand` trait for composition.
 //!
@@ -89,9 +101,19 @@ pub(crate) struct CliArgs {
     pub about: Option<String>,
     pub global: Vec<(String, Option<String>)>,
     pub defaults: Option<String>,
-    /// Suppress generation of `cli_run()` and `cli_run_with()`.
+    /// Suppress the sync convenience entrypoints `cli_run()` and `cli_run_with()`.
+    ///
+    /// The underlying `CliSubcommand::cli_dispatch()` trait method is **not** suppressed —
+    /// it remains on the trait and is used by `#[program]` and other presets for composition.
+    /// Use `no_sync` when you want to provide your own sync entrypoint or when you only
+    /// use the async path.
     pub no_sync: bool,
-    /// Suppress generation of `cli_run_async()`.
+    /// Suppress the async convenience entrypoints `cli_run_async()` and `cli_run_with_async()`.
+    ///
+    /// The underlying `CliSubcommand::cli_dispatch_async()` trait method is **not** suppressed —
+    /// it remains on the trait and is used by `#[program]` and other presets for composition.
+    /// Use `no_async` when all methods are synchronous and you want to keep the generated
+    /// impl free of async items.
     pub no_async: bool,
 }
 
