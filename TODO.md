@@ -190,7 +190,7 @@ How do implementors know what server-less can do, at the moment they need it?
 - [x] Add MSRV CI job (rust-version = 1.85, separate `msrv` job with `cargo check`)
 - [x] Add `cargo doc --no-deps` CI check for doc warnings (already present in CI)
 - [x] Add examples for blessed presets (`server_preset.rs`, `rpc_preset.rs`, `tool_preset.rs`, `program_preset.rs`)
-- [ ] Add examples for `ServerlessError`, `OpenApiBuilder`, and mount points
+- [x] Add examples for `ServerlessError`, `OpenApiBuilder`, and mount points
 - [x] Create missing `examples/param_service.rs` (stable Rust version demonstrating inference)
 - [x] Feature-gate `server-less-openapi` (optional dep, pulled in by http/ws/jsonrpc/graphql/openapi features)
 - [x] Document relationship between `MethodInfo`/`ParamInfo` in core vs parse crates
