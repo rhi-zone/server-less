@@ -109,7 +109,12 @@ Prioritized backlog of pending features and improvements.
 
 ### gRPC Runtime
 
-> **Not planned here** — spun out to `rhizone/normalize`. tonic integration and gRPC client/server codegen lives there.
+> **Server side is in scope** — `#[grpc]` projects an impl block onto a tonic gRPC server, same model as `#[http]` → axum. Client stub generation from proto files lives in `rhizone/normalize`.
+
+- [ ] tonic integration for `#[grpc]`
+- [ ] Generate server trait implementation
+- [ ] Error code mapping (Rust errors → gRPC status codes)
+- [ ] Metadata/header support
 
 ### Implementor DX — Capability Discovery
 
