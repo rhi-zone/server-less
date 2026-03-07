@@ -162,6 +162,15 @@ pub fn generate_json_response(method: &MethodInfo) -> TokenStream {
                     .map_err(|e| format!("Serialization error: {}", e))?)
             }
         }
+    } else if ret.is_iterator {
+        // Collect iterator into Vec before serializing (Iterator doesn't implement Serialize)
+        quote! {
+            {
+                let __collected: Vec<_> = result.collect();
+                Ok(::server_less::serde_json::to_value(&__collected)
+                    .map_err(|e| format!("Serialization error: {}", e))?)
+            }
+        }
     } else if ret.is_result {
         quote! {
             match result {

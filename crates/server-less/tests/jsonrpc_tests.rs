@@ -417,3 +417,57 @@ fn test_jsonrpc_mount_trait_implemented() {
     assert!(methods.contains(&"add".to_string()));
     assert!(methods.contains(&"double".to_string()));
 }
+
+// ============================================================================
+// Iterator return type tests
+// ============================================================================
+
+#[derive(Clone)]
+struct IteratorService;
+
+#[jsonrpc]
+impl IteratorService {
+    /// Return numbers as an iterator — must serialize to a JSON array
+    pub fn numbers(&self) -> impl Iterator<Item = i32> {
+        vec![1, 2, 3].into_iter()
+    }
+
+    /// Return strings as an iterator
+    pub fn words(&self) -> impl Iterator<Item = String> {
+        vec!["hello".to_string(), "world".to_string()].into_iter()
+    }
+}
+
+#[tokio::test]
+async fn test_jsonrpc_iterator_serializes_to_array() {
+    let svc = IteratorService;
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "numbers",
+        "params": {},
+        "id": 1
+    });
+
+    let response = svc.jsonrpc_handle(request).await;
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+    assert!(response["result"].is_array(), "iterator result must be a JSON array, got: {}", response);
+    assert_eq!(response["result"], json!([1, 2, 3]));
+}
+
+#[tokio::test]
+async fn test_jsonrpc_iterator_strings_serializes_to_array() {
+    let svc = IteratorService;
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "words",
+        "params": {},
+        "id": 2
+    });
+
+    let response = svc.jsonrpc_handle(request).await;
+
+    assert!(response["result"].is_array(), "iterator result must be a JSON array");
+    assert_eq!(response["result"], json!(["hello", "world"]));
+}

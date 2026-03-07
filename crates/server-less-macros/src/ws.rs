@@ -557,6 +557,28 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         })
         .collect();
 
+    // Build context init code for the handler at macro expansion time,
+    // avoiding `if true { }` / `if false { }` in generated output.
+    let ctx_init_code = if uses_injected_params {
+        quote! {
+            let mut __ctx = ::server_less::Context::new();
+            for (name, value) in __context_headers.iter() {
+                if let Ok(value_str) = value.to_str() {
+                    __ctx.set(name.as_str(), value_str);
+                }
+            }
+            if let Some(request_id) = __context_headers.get("x-request-id")
+                .and_then(|v| v.to_str().ok())
+            {
+                __ctx.set_request_id(request_id);
+            }
+        }
+    } else {
+        quote! {
+            let __ctx = ::server_less::Context::new();
+        }
+    };
+
     Ok(quote! {
         #impl_block
 
@@ -791,19 +813,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             let state = state_extractor.0;
 
             // Extract Context from HTTP upgrade headers
-            let mut __ctx = ::server_less::Context::new();
-            if #uses_injected_params {
-                for (name, value) in __context_headers.iter() {
-                    if let Ok(value_str) = value.to_str() {
-                        __ctx.set(name.as_str(), value_str);
-                    }
-                }
-                if let Some(request_id) = __context_headers.get("x-request-id")
-                    .and_then(|v| v.to_str().ok())
-                {
-                    __ctx.set_request_id(request_id);
-                }
-            }
+            #ctx_init_code
 
             ws.on_upgrade(move |socket| async move {
                 #connection_fn_name(socket, state, __ctx).await
