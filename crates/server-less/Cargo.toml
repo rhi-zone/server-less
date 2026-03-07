@@ -7,9 +7,9 @@ repository.workspace = true
 description = "Composable derive macros for common Rust patterns"
 
 [dependencies]
-server-less-core = { path = "../server-less-core", version = "0.2.1-alpha.4", default-features = false }
-server-less-macros = { path = "../server-less-macros", version = "0.2.1-alpha.4", default-features = false }
-server-less-openapi = { path = "../server-less-openapi", version = "0.2.1-alpha.4", optional = true }
+server-less-core = { path = "../server-less-core", version = "0.3.0", default-features = false }
+server-less-macros = { path = "../server-less-macros", version = "0.3.0", default-features = false }
+server-less-openapi = { path = "../server-less-openapi", version = "0.3.0", optional = true }
 
 # Re-export common dependencies users will need
 serde = { version = "1", features = ["derive"] }
