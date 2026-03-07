@@ -81,8 +81,10 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{ItemImpl, Token, parse::Parse};
+
+use crate::server_attrs::has_server_skip;
 
 /// Arguments for the #[graphql] attribute
 #[derive(Default)]
@@ -154,8 +156,12 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
-    let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = methods
+    let partitioned = partition_methods(&methods, has_server_skip);
+    let leaf_methods = &partitioned.leaf;
+
+    let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = leaf_methods
         .iter()
+        .copied()
         .partition(|m| is_query_method(&m.name.to_string()));
 
     let query_fields = generate_field_registrations(&query_methods);
@@ -169,8 +175,8 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
 
     let has_mutations = !mutation_methods.is_empty();
 
-    // Collect custom scalars used across all methods
-    let custom_scalars = collect_custom_scalars(&methods);
+    // Collect custom scalars used across all non-skipped methods
+    let custom_scalars = collect_custom_scalars(leaf_methods);
     let scalar_registrations: Vec<_> = custom_scalars
         .iter()
         .map(|name| {
@@ -782,7 +788,7 @@ fn map_inner_type_to_graphql(inner: &str) -> &'static str {
 ///
 /// Returns a deduplicated list of scalar names that need to be registered
 /// with the dynamic schema builder.
-fn collect_custom_scalars(methods: &[MethodInfo]) -> Vec<String> {
+fn collect_custom_scalars(methods: &[&MethodInfo]) -> Vec<String> {
     let mut scalars = std::collections::BTreeSet::new();
 
     for method in methods {
