@@ -243,7 +243,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 ### MEDIUM
 
 - [x] **`#[param]` has zero integration tests** ✅ Added 8 tests covering name, query, path, body, default, header, help; fixed strip_http_attrs bug that was blocking compilation. Gap: help_text not wired to OpenAPI description.: `http_tests.rs` comment says it can't be tested on stable. Verify MSRV / edition 2024 claim and add tests.
-- [ ] **`#[param(help)]` not wired to OpenAPI description**: `ParamInfo::help_text` is parsed but `openapi_gen.rs` hardcodes `description: None` for all parameters.
+- [x] **`#[param(help)]` not wired to OpenAPI description** ✅ openapi_gen.rs now reads ParamInfo::help_text; test assertion enabled.: `ParamInfo::help_text` is parsed but `openapi_gen.rs` hardcodes `description: None` for all parameters.
 
 - [x] **`Path<T>`, `Query<T>`, `Json<T>` in `extract.rs` are dead code** ✅ Removed (54 lines); confirmed unused via grep across all crates.: Defined with Deref impls but never referenced in generated code or tests.
 
