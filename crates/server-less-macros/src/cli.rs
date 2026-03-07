@@ -469,7 +469,20 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
 
     // Find the default action (if any) — the method marked #[cli(default)].
     // It still appears as a normal subcommand AND runs when no subcommand is given.
-    let default_method = partitioned.leaf.iter().find(|m| has_cli_default(m));
+    // Emit a compile error if more than one method is marked as default.
+    let mut default_methods = partitioned.leaf.iter().filter(|m| has_cli_default(m));
+    let default_method = default_methods.next();
+    if let Some(second) = default_methods.next() {
+        let first_name = default_method
+            .map(|m| m.method.sig.ident.to_string())
+            .unwrap_or_default();
+        return Err(syn::Error::new_spanned(
+            &second.method.sig.ident,
+            format!(
+                "only one method may be marked as default; first default is '{first_name}'"
+            ),
+        ));
+    }
 
     // Parent-level args for the default action so that flags like
     // `app --flag` are parsed (and shown in `app --help`) when no subcommand is specified.
