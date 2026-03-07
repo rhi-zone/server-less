@@ -162,11 +162,7 @@ How do implementors know what server-less can do, at the moment they need it?
 
 ### Authentication/Authorization
 
-- [ ] `#[auth(required)]` attribute
-- [ ] `#[auth(roles = ["admin"])]` for role-based access
-- [ ] Bearer token extraction to Context
-- [ ] JWT validation middleware
-- [ ] API key validation middleware
+> **Not planned here** — auth is intentionally an escape hatch / third-party extension (e.g. a `server-less-auth` crate). Baking `#[auth]` into core contradicts the design philosophy; users compose their own Tower layers.
 
 ### "Server" Blessed Preset
 
@@ -179,10 +175,7 @@ How do implementors know what server-less can do, at the moment they need it?
 
 ### IDE Integration
 
-- [ ] rust-analyzer proc-macro expansion hints
-- [ ] Go-to-definition for generated methods
-- [ ] Hover documentation for attributes
-- [ ] Code action: "Add #[http] to impl block"
+> **Not planned here** — requires rust-analyzer plugin / LSP work outside this repo. Server-less improves span quality (which helps IDEs) but can't drive IDE integration itself.
 
 ### Polish & Hardening
 
