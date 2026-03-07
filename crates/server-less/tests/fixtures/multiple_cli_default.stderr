@@ -1,0 +1,5 @@
+error: only one method may be marked as default; first default is 'greet'
+  --> tests/fixtures/multiple_cli_default.rs:13:8
+   |
+13 |     fn farewell(&self) {
+   |        ^^^^^^^^
