@@ -1382,3 +1382,135 @@ fn test_no_async_sync_entrypoint_works() {
     let svc = NoAsyncService;
     assert!(svc.cli_run_with(["no-async-app", "run"]).is_ok());
 }
+
+// ─── Async return type coverage ─────────────────────────────────────────────
+//
+// Tests for async methods with Result<T,E>, Option<T>, and () return types
+// which each have distinct codegen branches in generate_async_method_call.
+
+#[derive(Clone)]
+struct AsyncReturnsService;
+
+#[cli(name = "async-returns")]
+impl AsyncReturnsService {
+    pub async fn ok_value(&self) -> Result<String, String> {
+        Ok("success".to_string())
+    }
+
+    pub async fn err_value(&self) -> Result<String, String> {
+        Err("boom".to_string())
+    }
+
+    pub async fn some_value(&self) -> Option<String> {
+        Some("found".to_string())
+    }
+
+    pub async fn none_value(&self) -> Option<String> {
+        None
+    }
+
+    pub async fn unit_method(&self) {}
+}
+
+#[tokio::test]
+async fn test_async_result_ok() {
+    let svc = AsyncReturnsService;
+    let result = svc.cli_run_with_async(["async-returns", "ok-value"]).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_async_option_some() {
+    let svc = AsyncReturnsService;
+    let result = svc
+        .cli_run_with_async(["async-returns", "some-value"])
+        .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_async_option_none_with_json_flag() {
+    // Without --json, None calls process::exit(1). With --json, None outputs null.
+    let svc = AsyncReturnsService;
+    let result = svc
+        .cli_run_with_async(["async-returns", "--json", "none-value"])
+        .await;
+    assert!(result.is_ok());
+}
+
+// Note: err_value() calls process::exit(1) which cannot be caught in tests.
+// The fact that it compiles verifies async Result<T,E> codegen is correct.
+
+#[tokio::test]
+async fn test_async_unit_return() {
+    let svc = AsyncReturnsService;
+    let result = svc
+        .cli_run_with_async(["async-returns", "unit-method"])
+        .await;
+    assert!(result.is_ok());
+}
+
+// ─── Async slug mount dispatch ───────────────────────────────────────────────
+//
+// Tests generate_slug_mount_arm_async at runtime (previously compile-time only).
+
+#[derive(Clone)]
+struct SlugChild {
+    prefix: String,
+}
+
+impl SlugChild {
+    fn new(prefix: impl Into<String>) -> Self {
+        Self {
+            prefix: prefix.into(),
+        }
+    }
+}
+
+#[cli(name = "slug-child")]
+impl SlugChild {
+    pub async fn hello(&self) -> String {
+        format!("{}_hello", self.prefix)
+    }
+}
+
+#[derive(Clone)]
+struct SlugParent {
+    children: std::collections::HashMap<String, SlugChild>,
+}
+
+impl SlugParent {
+    fn new() -> Self {
+        let mut children = std::collections::HashMap::new();
+        children.insert("abc".to_string(), SlugChild::new("abc"));
+        children.insert("def".to_string(), SlugChild::new("def"));
+        Self { children }
+    }
+}
+
+#[cli(name = "slug-parent")]
+impl SlugParent {
+    pub fn section(&self, id: String) -> &SlugChild {
+        self.children
+            .get(&id)
+            .expect("BUG: test uses known key in slug-parent dispatch")
+    }
+}
+
+#[tokio::test]
+async fn test_async_slug_mount_dispatch() {
+    let app = SlugParent::new();
+    let result = app
+        .cli_run_with_async(["slug-parent", "section", "abc", "hello"])
+        .await;
+    assert!(result.is_ok(), "slug dispatch failed: {:?}", result);
+}
+
+#[tokio::test]
+async fn test_async_slug_mount_dispatch_different_slug() {
+    let app = SlugParent::new();
+    let result = app
+        .cli_run_with_async(["slug-parent", "section", "def", "hello"])
+        .await;
+    assert!(result.is_ok());
+}

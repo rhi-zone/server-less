@@ -1,0 +1,13 @@
+error[E0599]: no method named `cli_run_with` found for struct `MySvc` in the current scope
+  --> tests/fixtures/no_sync_missing_cli_run_with.rs:16:9
+   |
+ 4 | struct MySvc;
+   | ------------ method `cli_run_with` not found for this struct
+...
+16 |     svc.cli_run_with(["my-svc", "run"]).unwrap();
+   |         ^^^^^^^^^^^^
+   |
+help: there is a method `cli_run_with_async` with a similar name
+   |
+16 |     svc.cli_run_with_async(["my-svc", "run"]).unwrap();
+   |                     ++++++
