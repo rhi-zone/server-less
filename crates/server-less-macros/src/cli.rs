@@ -708,8 +708,12 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             /// Run the CLI application.
             ///
             /// Parses process arguments and dispatches to the matching method.
-            /// Async methods are driven by an internally-created Tokio runtime.
-            /// Use [`cli_run_async`] instead if you already have an async runtime.
+            /// Async methods are driven by an internally-created Tokio runtime —
+            /// add `tokio` to your dependencies if any methods are `async`.
+            ///
+            /// If you already have an async runtime or prefer a different one
+            /// (async-std, smol, etc.), use [`cli_run_async`] instead and drive
+            /// it with your own `#[runtime::main]`.
             pub fn cli_run(&self) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
                 let matches = Self::cli_command().get_matches();
                 <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)

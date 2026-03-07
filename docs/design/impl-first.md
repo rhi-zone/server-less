@@ -183,3 +183,29 @@ fn create_user(
 - gRPC: metadata
 - CLI: env vars, config files
 - MCP: conversation context (if available)
+
+## CLI Async Runtime
+
+`cli_run()` is the batteries-included sync entrypoint. When async methods are present,
+it internally creates a Tokio runtime to drive them. **Tokio is the chosen battery** —
+this is a deliberate default, not an accident.
+
+`cli_run_async()` is the runtime-agnostic escape hatch: it `await`s the dispatched method
+directly without importing any runtime. Users who prefer async-std, smol, or want to
+control runtime configuration use this:
+
+```rust
+#[tokio::main]         // or async_std::main, smol::block_on, etc.
+async fn main() {
+    app.cli_run_async().await.unwrap();
+}
+```
+
+**Why not make the runtime configurable?** A `#[cli(runtime = "async-std")]` attribute
+would enumerate runtimes in the macro and generate different `block_on` call sites per
+choice — complexity with no real payoff. `cli_run_async()` already gives full control
+with zero macro complexity. Users who don't want Tokio use `cli_run_async()`; users who
+want to drop the entrypoints entirely use `#[cli(no_sync)]` / `#[cli(no_async)]`.
+
+**Settled:** tokio as default battery, `cli_run_async()` as the escape hatch. Do not
+revisit by adding a `runtime` attribute.
