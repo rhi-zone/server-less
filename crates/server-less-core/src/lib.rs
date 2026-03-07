@@ -122,22 +122,12 @@ pub trait HttpMount: Send + Sync + 'static {
     /// Build an axum Router for this mount's routes.
     fn http_mount_router(self: ::std::sync::Arc<Self>) -> ::axum::Router;
 
-    /// Get OpenAPI path definitions for this mount.
-    fn http_mount_openapi_paths() -> Vec<crate::HttpMountPathInfo>
+    /// Get full OpenAPI path definitions for this mount (including any nested mounts).
+    ///
+    /// Paths are relative to the mount point. The parent prefixes them when composing.
+    fn http_mount_openapi_paths() -> Vec<server_less_openapi::OpenApiPath>
     where
         Self: Sized;
-}
-
-/// Simplified path info for HttpMount composition.
-#[cfg(feature = "http")]
-#[derive(Debug, Clone)]
-pub struct HttpMountPathInfo {
-    /// The path (relative to the mount point).
-    pub path: String,
-    /// The HTTP method (get, post, etc.).
-    pub method: String,
-    /// Summary text.
-    pub summary: Option<String>,
 }
 
 /// Format a `serde_json::Value` according to the active JSON output flag.

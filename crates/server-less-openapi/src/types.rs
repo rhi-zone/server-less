@@ -26,7 +26,7 @@ pub struct OpenApiOperation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Unique operation identifier.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "operationId", skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<String>,
     /// Tags for grouping operations in documentation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -38,7 +38,7 @@ pub struct OpenApiOperation {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameters: Vec<OpenApiParameter>,
     /// Request body definition.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "requestBody", skip_serializing_if = "Option::is_none")]
     pub request_body: Option<Value>,
     /// Response definitions keyed by status code.
     #[serde(default)]

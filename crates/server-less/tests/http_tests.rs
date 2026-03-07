@@ -725,16 +725,53 @@ fn test_http_static_mount_openapi_paths() {
     let spec = HttpApp::openapi_spec();
     let paths = spec.get("paths").unwrap().as_object().unwrap();
 
-    // Leaf path (get_health → GET /healths via HTTP convention)
+    let path_keys: Vec<_> = paths.keys().collect();
+
+    // Leaf path on parent (get_health → GET /healths)
     assert!(
         paths.contains_key("/healths"),
         "Expected /healths path, got: {:?}",
-        paths.keys().collect::<Vec<_>>()
+        path_keys
     );
 
-    // Note: mounted child OpenAPI paths are not yet merged into parent spec
-    // (http_mount_openapi_paths is a TODO). The router correctly nests
-    // child routes, but the OpenAPI spec only shows leaf methods for now.
+    // Mounted child paths should be prefixed with mount name.
+    // UserApi mounts at /users: list_users → GET /users/users, get_user → GET /users/users/{id}
+    assert!(
+        path_keys.iter().any(|p| p.starts_with("/users/")),
+        "Expected child paths under /users/, got: {:?}",
+        path_keys
+    );
+
+    // PostApi mounts at /posts: list_posts → GET /posts/posts
+    assert!(
+        path_keys.iter().any(|p| p.starts_with("/posts/")),
+        "Expected child paths under /posts/, got: {:?}",
+        path_keys
+    );
+}
+
+/// Verify http_openapi_paths() directly includes mounted child paths.
+#[test]
+fn test_http_mount_openapi_paths_composed() {
+    let paths = HttpApp::http_openapi_paths();
+    let path_strs: Vec<&str> = paths.iter().map(|p| p.path.as_str()).collect();
+
+    assert!(
+        path_strs.iter().any(|p| p.starts_with("/users/")),
+        "Mounted UserApi paths should appear under /users/: {:?}",
+        path_strs
+    );
+    assert!(
+        path_strs.iter().any(|p| p.starts_with("/posts/")),
+        "Mounted PostApi paths should appear under /posts/: {:?}",
+        path_strs
+    );
+    // Parent leaf path
+    assert!(
+        path_strs.contains(&"/healths"),
+        "Parent leaf path /healths should be included: {:?}",
+        path_strs
+    );
 }
 
 /// HttpMount trait test

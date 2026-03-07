@@ -249,7 +249,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **`ErrorCode` missing `jsonrpc_code() -> i32`** ✅ Added to trait with sensible defaults; ServerlessError derive supports #[error(jsonrpc_code = -32602)]; jsonrpc.rs uses it in error responses.: Has `http_status()`, `grpc_code()`, `exit_code()` but no JSON-RPC error code mapping.
 
-- [ ] **HTTP mount OpenAPI composition incomplete**: Mounted child OpenAPI paths not merged into parent spec (acknowledged in test comment).
+- [x] **HTTP mount OpenAPI composition incomplete** ✅ `http_openapi_paths()` now recursively collects mounted children via `<Child as HttpMount>::http_mount_openapi_paths()` and prefixes paths. `openapi_spec()` rebuilt from `http_openapi_paths()` so mounts appear in the spec. `HttpMountPathInfo` removed (replaced by `OpenApiPath`). `operationId`/`requestBody` serde renames added to `OpenApiOperation`.
 
 - [x] **`panic!` in generated schema file writers** ✅ False positive — write_* methods already return std::io::Result<()>; panic! only in assert_schema_matches() which is intentional test-assertion behavior.: `grpc.rs`, `smithy.rs`, `thrift.rs`, `capnp.rs` use `panic!` in generated `write_*` methods for I/O errors. Should propagate errors.
 

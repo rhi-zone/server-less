@@ -267,6 +267,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
     // Generate mount routes (static mounts only)
     let mut mount_routes = Vec::new();
+    let mut mount_openapi_calls = Vec::new();
     for mount in &partitioned.static_mounts {
         let mount_name = mount.name.to_string();
         let mount_path = format!("/{}", mount_name);
@@ -283,12 +284,19 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                 ::std::sync::Arc::new(state.#method_name().clone())
             ))
         });
+
+        // Collect child OpenAPI paths prefixed with the mount path.
+        mount_openapi_calls.push(quote! {
+            for mut child_path in <#inner_ty as ::server_less::HttpMount>::http_mount_openapi_paths() {
+                child_path.path = format!("{}{}", #mount_path, child_path.path);
+                paths.push(child_path);
+            }
+        });
     }
 
     let mut handlers = Vec::new();
     let mut routes = Vec::new();
     let mut openapi_methods = Vec::new();
-    let mut mount_path_entries = Vec::new();
     let mut route_docs: Vec<String> = Vec::new();
     // Maps normalized route signature (e.g., "GET /users/{*}") to (method_name, original_path)
     let mut route_signatures: std::collections::HashMap<String, (String, String)> =
@@ -377,19 +385,6 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
         routes.push(route);
 
-        // Collect path info for HttpMount::http_mount_openapi_paths()
-        let method_str = http_method_enum.as_str().to_lowercase();
-        let summary = method.docs.clone();
-        let has_summary = summary.is_some();
-        let summary_lit = summary.unwrap_or_default();
-        mount_path_entries.push(quote! {
-            ::server_less::HttpMountPathInfo {
-                path: #full_path.to_string(),
-                method: #method_str.to_string(),
-                summary: if #has_summary { Some(#summary_lit.to_string()) } else { None },
-            }
-        });
-
         // Always collect for http_openapi_paths() (used by #[openapi] and #[serve])
         // Exclude from OpenAPI if hidden via #[route(hidden)] or #[server(hidden)]
         if !overrides.hidden && !has_server_hidden(method) {
@@ -422,24 +417,41 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let openapi_paths_method = quote! {
         #[doc = #openapi_paths_doc]
         pub fn http_openapi_paths() -> ::std::vec::Vec<::server_less::OpenApiPath> {
-            #openapi_paths_fn
+            let mut paths = #openapi_paths_fn;
+            #(#mount_openapi_calls)*
+            paths
         }
     };
 
-    // Conditionally generate OpenAPI spec method
+    // Conditionally generate OpenAPI spec method.
+    // Builds from http_openapi_paths() so mounted child paths are automatically included.
+    let struct_name_str = struct_name.to_string();
     let openapi_method = if generate_openapi {
-        let openapi_fn =
-            generate_openapi_spec(&struct_name, &prefix, &openapi_methods, has_qualified)?;
         let openapi_doc = format!(
             "Get OpenAPI 3.0 specification for this service.\n\n\
-             Covers {} route{}. Use `http_openapi_paths()` for composable path fragments.",
-            route_docs.len(),
-            if route_docs.len() == 1 { "" } else { "s" }
+             Includes all paths (own + mounted children). Use `http_openapi_paths()` for composable path fragments.",
         );
         quote! {
             #[doc = #openapi_doc]
             pub fn openapi_spec() -> ::server_less::serde_json::Value {
-                #openapi_fn
+                let mut paths = ::server_less::serde_json::Map::new();
+                for path_info in Self::http_openapi_paths() {
+                    let path_item = paths.entry(path_info.path.clone())
+                        .or_insert_with(|| ::server_less::serde_json::json!({}));
+                    if let Some(map) = path_item.as_object_mut() {
+                        let op = ::server_less::serde_json::to_value(&path_info.operation)
+                            .expect("BUG: OpenApiOperation must be serializable");
+                        map.insert(path_info.method.clone(), op);
+                    }
+                }
+                ::server_less::serde_json::json!({
+                    "openapi": "3.0.0",
+                    "info": {
+                        "title": #struct_name_str,
+                        "version": "0.1.0"
+                    },
+                    "paths": paths
+                })
             }
         }
     } else {
@@ -462,8 +474,8 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                     .with_state(state)
             }
 
-            fn http_mount_openapi_paths() -> Vec<::server_less::HttpMountPathInfo> {
-                vec![#(#mount_path_entries),*]
+            fn http_mount_openapi_paths() -> Vec<::server_less::OpenApiPath> {
+                Self::http_openapi_paths()
             }
         }
 

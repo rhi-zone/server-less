@@ -1500,6 +1500,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "server-less-openapi",
  "thiserror",
  "tokio",
 ]
