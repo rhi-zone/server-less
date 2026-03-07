@@ -77,6 +77,7 @@
 //! let app = service.graphql_router();  // Serves GraphQL + Playground at /graphql
 //! ```
 
+use crate::context::{has_qualified_context, partition_context_params, should_inject_context};
 use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -152,12 +153,15 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
+    // Detect whether any method uses qualified server_less::Context (two-pass strategy).
+    let has_qualified = has_qualified_context(&methods);
+
     let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = methods
         .iter()
         .partition(|m| is_query_method(&m.name.to_string()));
 
-    let query_fields = generate_field_registrations(&query_methods);
-    let mutation_fields = generate_field_registrations(&mutation_methods);
+    let query_fields = generate_field_registrations(&query_methods, has_qualified);
+    let mutation_fields = generate_field_registrations(&mutation_methods, has_qualified);
 
     let query_resolvers = generate_resolver_dispatch(&struct_name, &query_methods);
     let mutation_resolvers = generate_resolver_dispatch(&struct_name, &mutation_methods);
@@ -445,14 +449,14 @@ fn is_query_method(name: &str) -> bool {
         || name.starts_with("has_")
 }
 
-fn generate_field_registrations(methods: &[&MethodInfo]) -> Vec<TokenStream2> {
+fn generate_field_registrations(methods: &[&MethodInfo], has_qualified: bool) -> Vec<TokenStream2> {
     methods
         .iter()
-        .map(|m| generate_field_registration(m))
+        .map(|m| generate_field_registration(m, has_qualified))
         .collect()
 }
 
-fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
+fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> TokenStream2 {
     let method_name = method.name.to_string();
     let method_ident = &method.name;
     let field_name = method_name.to_lower_camel_case();
@@ -461,8 +465,11 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
     let ret = &method.return_info;
     let (type_ref, is_list) = infer_graphql_type_ref(ret);
 
-    let arg_registrations: Vec<_> = method
-        .params
+    // Partition params: context params are injected; only user params go into the GraphQL schema.
+    let (_ctx_param, user_params) =
+        partition_context_params(&method.params, has_qualified).unwrap_or((None, method.params.iter().collect()));
+
+    let arg_registrations: Vec<_> = user_params
         .iter()
         .map(|p| {
             let arg_name = p.name.to_string();
@@ -480,7 +487,7 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
         })
         .collect();
 
-    let arg_extractions: Vec<_> = method.params.iter().map(|p| {
+    let arg_extractions: Vec<_> = user_params.iter().map(|p| {
         let arg_name = p.name.to_string();
         let param_name = &p.name;
         let ty = &p.ty;
@@ -499,7 +506,15 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
         }
     }).collect();
 
-    let param_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
+    // Build arg list for method call: inject Context::default() where needed, pass others by name.
+    let param_names: Vec<_> = method.params.iter().map(|p| {
+        if should_inject_context(&p.ty, has_qualified) {
+            quote! { ::server_less::Context::default() }
+        } else {
+            let name = &p.name;
+            quote! { #name }
+        }
+    }).collect();
 
     let method_call = if method.is_async {
         quote! { service.#method_ident(#(#param_names),*).await }

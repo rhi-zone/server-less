@@ -527,3 +527,82 @@ fn test_mcp_namespace_trait_implemented() {
         <UserTools as McpNamespace>::mcp_namespace_call(&svc, "list", serde_json::json!({}));
     assert!(result.is_ok());
 }
+
+// ============================================================================
+// Context Injection Tests
+// ============================================================================
+
+/// Service with a Context parameter — context must not appear in the tool schema.
+#[derive(Clone)]
+struct ContextMcpService;
+
+#[mcp(namespace = "ctx")]
+impl ContextMcpService {
+    /// Echo name with context (context should be invisible to callers)
+    pub fn echo_name(&self, ctx: server_less::Context, name: String) -> String {
+        let _ = ctx;
+        format!("Hello, {}!", name)
+    }
+
+    /// No context parameter - should work normally
+    pub fn ping(&self) -> String {
+        "pong".to_string()
+    }
+}
+
+#[test]
+fn test_mcp_context_param_not_in_input_schema() {
+    let tools = ContextMcpService::mcp_tools();
+
+    let echo_tool = tools
+        .iter()
+        .find(|t| t.get("name").unwrap().as_str().unwrap() == "ctx_echo_name")
+        .expect("ctx_echo_name tool should exist");
+
+    let schema = echo_tool.get("inputSchema").unwrap();
+    let properties = schema.get("properties").unwrap().as_object().unwrap();
+
+    // `ctx` must NOT appear in the input schema
+    assert!(
+        !properties.contains_key("ctx"),
+        "Context parameter should not appear in inputSchema, got: {:?}",
+        properties
+    );
+
+    // `name` must still be there
+    assert!(
+        properties.contains_key("name"),
+        "Regular parameter 'name' should appear in inputSchema"
+    );
+
+    let required = schema.get("required").unwrap().as_array().unwrap();
+    assert!(
+        !required.iter().any(|v| v.as_str() == Some("ctx")),
+        "Context parameter should not be in the required list"
+    );
+    assert!(
+        required.iter().any(|v| v.as_str() == Some("name")),
+        "Regular parameter 'name' should be required"
+    );
+}
+
+#[test]
+fn test_mcp_context_param_method_callable() {
+    let service = ContextMcpService;
+
+    // Call without ctx in the args — the macro injects it automatically
+    let result = service.mcp_call("ctx_echo_name", serde_json::json!({"name": "Alice"}));
+    assert!(result.is_ok(), "Call should succeed: {:?}", result);
+    assert_eq!(result.unwrap(), serde_json::json!("Hello, Alice!"));
+}
+
+#[tokio::test]
+async fn test_mcp_context_param_method_callable_async() {
+    let service = ContextMcpService;
+
+    let result = service
+        .mcp_call_async("ctx_echo_name", serde_json::json!({"name": "Bob"}))
+        .await;
+    assert!(result.is_ok(), "Async call should succeed: {:?}", result);
+    assert_eq!(result.unwrap(), serde_json::json!("Hello, Bob!"));
+}
