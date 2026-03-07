@@ -109,7 +109,9 @@ impl Parse for McpArgs {
 }
 
 pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
-    let struct_name = get_impl_name(&impl_block)?;
+    let _struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     let namespace = args.namespace.unwrap_or_default();
@@ -154,14 +156,14 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .iter()
         .chain(partitioned.slug_mounts.iter())
         .map(|m| generate_mount_tools(&namespace_prefix, m))
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     let mount_tool_names: Vec<_> = partitioned
         .static_mounts
         .iter()
         .chain(partitioned.slug_mounts.iter())
         .map(|m| generate_mount_tool_names(&namespace_prefix, m))
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     let mount_dispatch_sync: Vec<_> = partitioned
         .static_mounts
@@ -173,7 +175,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 .iter()
                 .map(|m| generate_slug_mount_dispatch(&namespace_prefix, m, AsyncHandling::Error)),
         )
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     let mount_dispatch_async: Vec<_> = partitioned
         .static_mounts
@@ -185,7 +187,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 .iter()
                 .map(|m| generate_slug_mount_dispatch(&namespace_prefix, m, AsyncHandling::Await)),
         )
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     // Build tool documentation
     let tool_doc_entries: Vec<String> = partitioned
@@ -218,7 +220,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     Ok(quote! {
         #impl_block
 
-        impl ::server_less::McpNamespace for #struct_name {
+        impl #impl_generics ::server_less::McpNamespace for #self_ty #where_clause {
             fn mcp_namespace_tools() -> Vec<::server_less::serde_json::Value> {
                 Self::mcp_tools()
             }
@@ -244,7 +246,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #mcp_tools_doc]
             pub fn mcp_tools() -> Vec<::server_less::serde_json::Value> {
                 let mut tools = vec![
@@ -344,10 +346,15 @@ fn generate_dispatch_arm_async(namespace_prefix: &str, method: &MethodInfo) -> T
 }
 
 /// Generate code to append mounted tools to the tools list.
-fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
+fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> syn::Result<TokenStream2> {
     let mount_name = method.name.to_string();
     let full_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
     let is_slug = !method.params.is_empty();
 
     if is_slug {
@@ -367,7 +374,7 @@ fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> TokenStr
             .map(|p| p.name.to_string())
             .collect();
 
-        quote! {
+        Ok(quote! {
             {
                 let child_tools = <#inner_ty as ::server_less::McpNamespace>::mcp_namespace_tools();
                 for mut tool in child_tools {
@@ -401,10 +408,10 @@ fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> TokenStr
                     tools.push(tool);
                 }
             }
-        }
+        })
     } else {
         // Static mount: just prefix the names
-        quote! {
+        Ok(quote! {
             {
                 let child_tools = <#inner_ty as ::server_less::McpNamespace>::mcp_namespace_tools();
                 for mut tool in child_tools {
@@ -416,17 +423,25 @@ fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> TokenStr
                     tools.push(tool);
                 }
             }
-        }
+        })
     }
 }
 
 /// Generate code to append mounted tool names to the names list.
-fn generate_mount_tool_names(namespace_prefix: &str, method: &MethodInfo) -> TokenStream2 {
+fn generate_mount_tool_names(
+    namespace_prefix: &str,
+    method: &MethodInfo,
+) -> syn::Result<TokenStream2> {
     let mount_name = method.name.to_string();
     let full_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
-    quote! {
+    Ok(quote! {
         {
             let child_names = <#inner_ty as ::server_less::McpNamespace>::mcp_namespace_tool_names();
             for child_name in child_names {
@@ -434,7 +449,7 @@ fn generate_mount_tool_names(namespace_prefix: &str, method: &MethodInfo) -> Tok
                 names.push(prefixed);
             }
         }
-    }
+    })
 }
 
 /// Generate dispatch for a static mount (`fn foo(&self) -> &T`).
@@ -442,13 +457,18 @@ fn generate_static_mount_dispatch(
     namespace_prefix: &str,
     method: &MethodInfo,
     async_handling: AsyncHandling,
-) -> TokenStream2 {
+) -> syn::Result<TokenStream2> {
     let mount_name = method.name.to_string();
     let mount_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
-    match async_handling {
+    Ok(match async_handling {
         AsyncHandling::Await => quote! {
             __name if __name.starts_with(#mount_prefix) => {
                 let __stripped = &__name[#mount_prefix.len()..];
@@ -463,7 +483,7 @@ fn generate_static_mount_dispatch(
                 <#inner_ty as ::server_less::McpNamespace>::mcp_namespace_call(__delegate, __stripped, args)
             }
         },
-    }
+    })
 }
 
 /// Generate dispatch for a slug mount (`fn foo(&self, id: Id) -> &T`).
@@ -471,11 +491,16 @@ fn generate_slug_mount_dispatch(
     namespace_prefix: &str,
     method: &MethodInfo,
     async_handling: AsyncHandling,
-) -> TokenStream2 {
+) -> syn::Result<TokenStream2> {
     let mount_name = method.name.to_string();
     let mount_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
     // Generate slug parameter extraction from args
     let slug_extractions: Vec<_> = method
@@ -485,7 +510,7 @@ fn generate_slug_mount_dispatch(
         .collect();
     let slug_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
 
-    match async_handling {
+    Ok(match async_handling {
         AsyncHandling::Await => quote! {
             __name if __name.starts_with(#mount_prefix) => {
                 let __stripped = &__name[#mount_prefix.len()..];
@@ -502,5 +527,5 @@ fn generate_slug_mount_dispatch(
                 <#inner_ty as ::server_less::McpNamespace>::mcp_namespace_call(__delegate, __stripped, args)
             }
         },
-    }
+    })
 }

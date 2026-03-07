@@ -345,6 +345,8 @@ fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
 
 pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     // PASS 1: Scan for qualified server_less::Context usage
@@ -574,12 +576,12 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .static_mounts
         .iter()
         .map(|m| generate_static_mount_arm(m))
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
     let async_static_mount_arms: Vec<_> = partitioned
         .static_mounts
         .iter()
         .map(|m| generate_static_mount_arm_async(m))
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate match arms for slug mounts
     let slug_mount_arms: Vec<_> = partitioned
@@ -715,6 +717,12 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             /// (async-std, smol, etc.), use [`cli_run_async`] instead and drive
             /// it with your own `#[runtime::main]`.
             pub fn cli_run(&self) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
+                if ::tokio::runtime::Handle::try_current().is_ok() {
+                    return Err(
+                        "cli_run() cannot be called from within an async context (e.g. #[tokio::test] or #[tokio::main]). \\
+                         Use cli_run_async() instead.".into()
+                    );
+                }
                 let matches = Self::cli_command().get_matches();
                 <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)
             }
@@ -723,11 +731,17 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             ///
             /// Like [`cli_run`] but accepts an iterator of arguments instead of process args.
             /// Useful for testing.
-            pub fn cli_run_with<I, T>(&self, args: I) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
+            pub fn cli_run_with<__CliI, __CliArg>(&self, args: __CliI) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
             where
-                I: IntoIterator<Item = T>,
-                T: Into<::std::ffi::OsString> + Clone,
+                __CliI: IntoIterator<Item = __CliArg>,
+                __CliArg: Into<::std::ffi::OsString> + Clone,
             {
+                if ::tokio::runtime::Handle::try_current().is_ok() {
+                    return Err(
+                        "cli_run_with() cannot be called from within an async context (e.g. #[tokio::test] or #[tokio::main]). \\
+                         Use cli_run_with_async() instead.".into()
+                    );
+                }
                 let matches = Self::cli_command().get_matches_from(args);
                 <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)
             }
@@ -752,10 +766,10 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             ///
             /// Like [`cli_run_async`] but accepts an iterator of arguments instead of process args.
             /// Useful for testing async CLI dispatch.
-            pub async fn cli_run_with_async<I, T>(&self, args: I) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
+            pub async fn cli_run_with_async<__CliI, __CliArg>(&self, args: __CliI) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
             where
-                I: IntoIterator<Item = T>,
-                T: Into<::std::ffi::OsString> + Clone,
+                __CliI: IntoIterator<Item = __CliArg>,
+                __CliArg: Into<::std::ffi::OsString> + Clone,
             {
                 let matches = Self::cli_command().get_matches_from(args);
                 <Self as ::server_less::CliSubcommand>::cli_dispatch_async(self, &matches).await
@@ -768,7 +782,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     Ok(quote! {
         #clean_impl_block
 
-        impl ::server_less::CliSubcommand for #struct_name {
+        impl #impl_generics ::server_less::CliSubcommand for #self_ty #where_clause {
             fn cli_command() -> ::clap::Command {
                 ::clap::Command::new(#app_name)
                     .version(#version)
@@ -814,7 +828,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #cli_command_doc]
             pub fn cli_command() -> ::clap::Command {
                 <Self as ::server_less::CliSubcommand>::cli_command()
@@ -876,7 +890,12 @@ fn generate_static_mount_subcommand(
 ) -> syn::Result<TokenStream2> {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
     let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
 
     Ok(quote! {
@@ -899,7 +918,12 @@ fn generate_slug_mount_subcommand(
 ) -> syn::Result<TokenStream2> {
     let name = method.name.to_string().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
     let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
 
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
@@ -1542,36 +1566,51 @@ fn generate_leaf_match_arm(
     })
 }
 
-fn generate_static_mount_arm(method: &MethodInfo) -> TokenStream2 {
+fn generate_static_mount_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
-    quote! {
+    Ok(quote! {
         Some((#subcommand_name, sub_matches)) => {
             let __delegate = self.#method_name();
             <#inner_ty as ::server_less::CliSubcommand>::cli_dispatch(__delegate, sub_matches)
         }
-    }
+    })
 }
 
-fn generate_static_mount_arm_async(method: &MethodInfo) -> TokenStream2 {
+fn generate_static_mount_arm_async(method: &MethodInfo) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
-    quote! {
+    Ok(quote! {
         Some((#subcommand_name, sub_matches)) => {
             let __delegate = self.#method_name();
             <#inner_ty as ::server_less::CliSubcommand>::cli_dispatch_async(__delegate, sub_matches).await
         }
-    }
+    })
 }
 
 fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
 
@@ -1608,7 +1647,12 @@ fn generate_slug_mount_arm_async(
 ) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
 

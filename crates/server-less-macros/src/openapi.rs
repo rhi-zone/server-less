@@ -170,6 +170,9 @@ impl DetectedProtocols {
 
 pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let generics_clone = impl_block.generics.clone();
+    let (impl_generics, _ty_generics, where_clause) = generics_clone.split_for_impl();
+    let self_ty = impl_block.self_ty.clone();
     let struct_name_str = struct_name.to_string();
 
     // Detect sibling protocol attributes
@@ -203,7 +206,7 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
         Ok(quote! {
             #impl_block
 
-            impl #struct_name {
+            impl #impl_generics #self_ty #where_clause {
                 #[doc = #openapi_doc]
                 pub fn openapi_spec() -> ::server_less::serde_json::Value {
                     ::server_less::OpenApiBuilder::new()
@@ -257,7 +260,7 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
         Ok(quote! {
             #clean_impl
 
-            impl #struct_name {
+            impl #impl_generics #self_ty #where_clause {
                 #[doc = #standalone_doc]
                 pub fn openapi_spec() -> ::server_less::serde_json::Value {
                     #openapi_fn

@@ -84,6 +84,7 @@ fn graphql_base_type(ty: &Type) -> TokenStream2 {
 
 pub(crate) fn expand_graphql_input(item: ItemStruct) -> syn::Result<TokenStream2> {
     let struct_name = &item.ident;
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let struct_name_str = struct_name.to_string();
 
     // Only support named fields
@@ -164,7 +165,7 @@ pub(crate) fn expand_graphql_input(item: ItemStruct) -> syn::Result<TokenStream2
     Ok(quote! {
         #item
 
-        impl #struct_name {
+        impl #impl_generics #struct_name #ty_generics #where_clause {
             /// Get the GraphQL InputObject type definition for this struct.
             ///
             /// Used by `#[graphql(inputs(...))]` to register the input type in the schema.

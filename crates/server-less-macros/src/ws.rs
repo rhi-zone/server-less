@@ -320,6 +320,8 @@ impl Parse for WsArgs {
 
 pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     // PASS 1: Scan for qualified server_less::Context and server_less::WsSender usage
@@ -397,7 +399,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 .iter()
                 .map(|m| generate_ws_slug_mount_dispatch(m, false)),
         )
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     let mount_dispatch_async: Vec<_> = partitioned
         .static_mounts
@@ -409,14 +411,14 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                 .iter()
                 .map(|m| generate_ws_slug_mount_dispatch(m, true)),
         )
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     let mount_method_names: Vec<_> = partitioned
         .static_mounts
         .iter()
         .chain(partitioned.slug_mounts.iter())
         .map(|m| generate_ws_mount_method_names(m))
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     // Check if any leaf method uses Context or WsSender
     let uses_injected_params = partitioned.leaf.iter().any(|m| {
@@ -560,7 +562,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
     Ok(quote! {
         #impl_block
 
-        impl ::server_less::WsMount for #struct_name {
+        impl #impl_generics ::server_less::WsMount for #self_ty #where_clause {
             fn ws_mount_methods() -> Vec<String> {
                 Self::ws_methods()
             }
@@ -582,7 +584,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #ws_methods_doc]
             pub fn ws_methods() -> Vec<String> {
                 let mut names: Vec<String> = vec![#(#method_names.to_string()),*];
@@ -785,7 +787,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         // WebSocket upgrade handler
         async fn #handler_name(
             ws: ::axum::extract::WebSocketUpgrade,
-            state_extractor: ::axum::extract::State<::std::sync::Arc<#struct_name>>,
+            state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
             __context_headers: ::axum::http::HeaderMap,
         ) -> impl ::axum::response::IntoResponse {
             let state = state_extractor.0;
@@ -813,7 +815,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         // Handle individual WebSocket connection
         async fn #connection_fn_name(
             socket: ::axum::extract::ws::WebSocket,
-            state: ::std::sync::Arc<#struct_name>,
+            state: ::std::sync::Arc<#self_ty>,
             __ctx: ::server_less::Context,
         ) {
             use ::futures::stream::StreamExt;
@@ -943,12 +945,17 @@ fn generate_dispatch_arm_with_injected_params(
 }
 
 /// Generate mount method names contribution for ws_methods().
-fn generate_ws_mount_method_names(method: &MethodInfo) -> TokenStream2 {
+fn generate_ws_mount_method_names(method: &MethodInfo) -> syn::Result<TokenStream2> {
     let mount_name = method.name.to_string();
     let mount_prefix = format!("{}.", mount_name);
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
-    quote! {
+    Ok(quote! {
         {
             let child_methods = <#inner_ty as ::server_less::WsMount>::ws_mount_methods();
             for child_name in child_methods {
@@ -956,17 +963,22 @@ fn generate_ws_mount_method_names(method: &MethodInfo) -> TokenStream2 {
                 names.push(prefixed);
             }
         }
-    }
+    })
 }
 
 /// Generate dispatch for a static WS mount.
-fn generate_ws_static_mount_dispatch(method: &MethodInfo, is_async: bool) -> TokenStream2 {
+fn generate_ws_static_mount_dispatch(method: &MethodInfo, is_async: bool) -> syn::Result<TokenStream2> {
     let mount_name = method.name.to_string();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
-    if is_async {
+    Ok(if is_async {
         quote! {
             __method if __method.starts_with(#mount_prefix) => {
                 let __stripped = &__method[#mount_prefix.len()..];
@@ -982,15 +994,20 @@ fn generate_ws_static_mount_dispatch(method: &MethodInfo, is_async: bool) -> Tok
                 <#inner_ty as ::server_less::WsMount>::ws_mount_dispatch(__delegate, __stripped, args)
             }
         }
-    }
+    })
 }
 
 /// Generate dispatch for a slug WS mount.
-fn generate_ws_slug_mount_dispatch(method: &MethodInfo, is_async: bool) -> TokenStream2 {
+fn generate_ws_slug_mount_dispatch(method: &MethodInfo, is_async: bool) -> syn::Result<TokenStream2> {
     let mount_name = method.name.to_string();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
-    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
 
     let slug_extractions: Vec<_> = method
         .params
@@ -999,7 +1016,7 @@ fn generate_ws_slug_mount_dispatch(method: &MethodInfo, is_async: bool) -> Token
         .collect();
     let slug_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
 
-    if is_async {
+    Ok(if is_async {
         quote! {
             __method if __method.starts_with(#mount_prefix) => {
                 let __stripped = &__method[#mount_prefix.len()..];
@@ -1017,5 +1034,5 @@ fn generate_ws_slug_mount_dispatch(method: &MethodInfo, is_async: bool) -> Token
                 <#inner_ty as ::server_less::WsMount>::ws_mount_dispatch(__delegate, __stripped, args)
             }
         }
-    }
+    })
 }

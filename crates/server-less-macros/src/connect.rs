@@ -84,6 +84,8 @@ impl Parse for ConnectArgs {
 
 pub(crate) fn expand_connect(args: ConnectArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
 
@@ -128,7 +130,7 @@ service {service_name} {{
     Ok(quote! {
         #impl_block
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             /// Get the Protocol Buffers schema for Connect.
             pub fn connect_schema() -> &'static str {
                 #proto_schema

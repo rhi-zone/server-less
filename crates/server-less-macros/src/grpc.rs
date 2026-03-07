@@ -89,6 +89,8 @@ impl Parse for GrpcArgs {
 
 pub(crate) fn expand_grpc(args: GrpcArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
 
@@ -160,7 +162,7 @@ service {service_name} {{
 
     Ok(quote! {
         #impl_block
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             pub fn proto_schema() -> &'static str {
                 #proto_schema
             }

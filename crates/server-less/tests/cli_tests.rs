@@ -1514,3 +1514,16 @@ async fn test_async_slug_mount_dispatch_different_slug() {
         .await;
     assert!(result.is_ok());
 }
+
+#[tokio::test]
+async fn test_cli_run_with_inside_tokio_returns_err() {
+    let svc = ItemService::new();
+    let result = svc.cli_run_with(["item-cli", "list-items"]);
+    assert!(result.is_err());
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("async"),
+        "expected error to mention 'async', got: {msg}"
+    );
+}
+
