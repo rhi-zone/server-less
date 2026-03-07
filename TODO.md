@@ -28,6 +28,7 @@ Prioritized backlog of pending features and improvements.
 
 ### OpenAPI Improvements
 
+- [ ] Wire `ParamInfo::help_text` into `OpenApiParameter::description` in `openapi_gen.rs` — `#[param(help = "...")]` is parsed but currently hardcoded to `None` in the OpenAPI output (see `http_tests.rs::test_param_help_route_in_openapi` for the commented-out assertion)
 - [ ] Add richer parameter schemas (description, examples, enum values)
 - [x] Add response descriptions via `#[response(description = "...")]` ✅
 - [x] Support `#[route(hidden)]` to exclude specific endpoints ✅

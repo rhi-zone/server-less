@@ -228,6 +228,28 @@ impl Parse for HttpArgs {
     }
 }
 
+/// Strip `#[param]`, `#[route]`, and `#[response]` attributes from the impl block
+/// before re-emitting it, so rustc does not encounter unknown or macro attributes
+/// on function parameters / methods in the generated output.
+fn strip_http_attrs(impl_block: &ItemImpl) -> ItemImpl {
+    let mut block = impl_block.clone();
+    for item in &mut block.items {
+        if let syn::ImplItem::Fn(method) = item {
+            // Strip method-level HTTP attributes.
+            method
+                .attrs
+                .retain(|attr| !attr.path().is_ident("route") && !attr.path().is_ident("response"));
+            // Strip #[param(...)] from function parameters.
+            for input in &mut method.sig.inputs {
+                if let syn::FnArg::Typed(pat_type) = input {
+                    pat_type.attrs.retain(|attr| !attr.path().is_ident("param"));
+                }
+            }
+        }
+    }
+    block
+}
+
 pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
@@ -416,8 +438,10 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         quote! {}
     };
 
+    let clean_impl = strip_http_attrs(&impl_block);
+
     Ok(quote! {
-        #impl_block
+        #clean_impl
 
         impl ::server_less::HttpMount for #struct_name {
             fn http_mount_router(self: ::std::sync::Arc<Self>) -> ::axum::Router {
