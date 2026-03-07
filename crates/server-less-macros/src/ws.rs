@@ -479,8 +479,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
     };
 
     let struct_name_snake = struct_name.to_string().to_lowercase();
-    let handler_name = format_ident!("__trellis_ws_handler_{}", struct_name_snake);
-    let connection_fn_name = format_ident!("__trellis_ws_connection_{}", struct_name_snake);
+    let handler_name = format_ident!("__server_less_ws_handler_{}", struct_name_snake);
+    let connection_fn_name = format_ident!("__server_less_ws_connection_{}", struct_name_snake);
 
     // Generate method signatures based on injected params usage
     let (handle_sig_sync, handle_sig_async) = if uses_injected_params {

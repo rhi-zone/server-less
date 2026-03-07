@@ -212,7 +212,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     };
 
     let struct_name_snake = struct_name.to_string().to_lowercase();
-    let handler_name = format_ident!("__trellis_jsonrpc_handler_{}", struct_name_snake);
+    let handler_name = format_ident!("__server_less_jsonrpc_handler_{}", struct_name_snake);
 
     // Generate dispatch signature and public API based on Context usage
     let (

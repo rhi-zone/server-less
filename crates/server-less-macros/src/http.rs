@@ -467,7 +467,7 @@ fn generate_handler(
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
-    let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
+    let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
 
     let (param_extractions, param_calls) = generate_param_handling(method, has_qualified)?;
 
@@ -817,7 +817,7 @@ fn generate_route(
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
-    let handler_name = format_ident!("__trellis_http_{}_{}", struct_name_snake, method_name);
+    let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
 
     let http_method = if let Some(ref m) = overrides.method {
         match m.as_str() {
