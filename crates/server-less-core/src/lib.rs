@@ -22,6 +22,15 @@ pub trait CliSubcommand {
 
     /// Dispatch a matched subcommand to the appropriate method.
     fn cli_dispatch(&self, matches: &::clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>>;
+
+    /// Dispatch a matched subcommand asynchronously.
+    ///
+    /// Awaits the dispatched method directly without creating an internal runtime.
+    /// Used by `cli_run_async` to support user-provided async runtimes.
+    fn cli_dispatch_async<'a>(
+        &'a self,
+        matches: &'a ::clap::ArgMatches,
+    ) -> impl std::future::Future<Output = Result<(), Box<dyn std::error::Error>>> + 'a;
 }
 
 /// Trait for types that can be mounted as MCP tool namespaces.

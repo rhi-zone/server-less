@@ -89,6 +89,10 @@ pub(crate) struct CliArgs {
     pub about: Option<String>,
     pub global: Vec<(String, Option<String>)>,
     pub defaults: Option<String>,
+    /// Suppress generation of `cli_run()` and `cli_run_with()`.
+    pub no_sync: bool,
+    /// Suppress generation of `cli_run_async()`.
+    pub no_async: bool,
 }
 
 impl Parse for CliArgs {
@@ -97,6 +101,26 @@ impl Parse for CliArgs {
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
+
+            // Bare flags (no `= value`)
+            match ident.to_string().as_str() {
+                "no_sync" => {
+                    args.no_sync = true;
+                    if input.peek(Token![,]) {
+                        input.parse::<Token![,]>()?;
+                    }
+                    continue;
+                }
+                "no_async" => {
+                    args.no_async = true;
+                    if input.peek(Token![,]) {
+                        input.parse::<Token![,]>()?;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+
             input.parse::<Token![=]>()?;
 
             match ident.to_string().as_str() {
@@ -140,9 +164,10 @@ impl Parse for CliArgs {
                         format!(
                             "unknown argument `{other}`\n\
                              \n\
-                             Valid arguments: name, version, about, global, defaults\n\
+                             Valid arguments: name, version, about, global, defaults, no_sync, no_async\n\
                              \n\
                              Example: #[cli(name = \"my-app\", version = \"1.0.0\", about = \"My CLI tool\")]\n\
+                             Bare flags: #[cli(no_sync)] or #[cli(no_async)]\n\
                              \n\
                              Related: #[program] preset (CLI + markdown docs), #[markdown] (standalone docs)"
                         ),
@@ -340,6 +365,8 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .defaults
         .as_ref()
         .map(|name| syn::Ident::new(name, proc_macro2::Span::call_site()));
+    let no_sync = args.no_sync;
+    let no_async = args.no_async;
 
     let partitioned = partition_methods(&methods, has_cli_skip);
 
@@ -508,6 +535,19 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             &global_flags,
             &defaults_fn_ident,
             true,
+            false,
+        )?)
+    } else {
+        None
+    };
+    let async_default_none_arm: Option<TokenStream2> = if let Some(dm) = default_method {
+        Some(generate_leaf_match_arm(
+            dm,
+            has_qualified,
+            &global_flags,
+            &defaults_fn_ident,
+            true,
+            true,
         )?)
     } else {
         None
@@ -518,7 +558,14 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .leaf
         .iter()
         .map(|m| {
-            generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false)
+            generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, false)
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+    let async_leaf_match_arms: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .map(|m| {
+            generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, true)
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
@@ -528,12 +575,22 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .iter()
         .map(|m| generate_static_mount_arm(m))
         .collect();
+    let async_static_mount_arms: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .map(|m| generate_static_mount_arm_async(m))
+        .collect();
 
     // Generate match arms for slug mounts
     let slug_mount_arms: Vec<_> = partitioned
         .slug_mounts
         .iter()
         .map(|m| generate_slug_mount_arm(m, has_qualified))
+        .collect::<syn::Result<Vec<_>>>()?;
+    let async_slug_mount_arms: Vec<_> = partitioned
+        .slug_mounts
+        .iter()
+        .map(|m| generate_slug_mount_arm_async(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Build subcommand documentation
@@ -646,6 +703,51 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         )
     };
 
+    let sync_entrypoints = if !no_sync {
+        quote! {
+            /// Run the CLI application.
+            ///
+            /// Parses process arguments and dispatches to the matching method.
+            /// Async methods are driven by an internally-created Tokio runtime.
+            /// Use [`cli_run_async`] instead if you already have an async runtime.
+            pub fn cli_run(&self) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
+                let matches = Self::cli_command().get_matches();
+                <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)
+            }
+
+            /// Run the CLI with custom arguments.
+            ///
+            /// Like [`cli_run`] but accepts an iterator of arguments instead of process args.
+            /// Useful for testing.
+            pub fn cli_run_with<I, T>(&self, args: I) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<::std::ffi::OsString> + Clone,
+            {
+                let matches = Self::cli_command().get_matches_from(args);
+                <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let async_entrypoint = if !no_async {
+        quote! {
+            /// Run the CLI application asynchronously.
+            ///
+            /// Parses process arguments and awaits the dispatched method directly,
+            /// without creating an internal runtime. Use this when you already have
+            /// an async runtime (e.g. `#[tokio::main]` or `async_std::main`).
+            pub async fn cli_run_async(&self) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
+                let matches = Self::cli_command().get_matches();
+                <Self as ::server_less::CliSubcommand>::cli_dispatch_async(self, &matches).await
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         #clean_impl_block
 
@@ -675,6 +777,24 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                     }
                 }
             }
+
+            fn cli_dispatch_async<'__a>(
+                &'__a self,
+                matches: &'__a ::clap::ArgMatches,
+            ) -> impl ::std::future::Future<Output = ::std::result::Result<(), Box<dyn ::std::error::Error>>> + '__a {
+                async move {
+                    match matches.subcommand() {
+                        #(#async_leaf_match_arms)*
+                        #(#async_static_mount_arms)*
+                        #(#async_slug_mount_arms)*
+                        #async_default_none_arm
+                        _ => {
+                            Self::cli_command().print_help()?;
+                            Ok(())
+                        }
+                    }
+                }
+            }
         }
 
         impl #struct_name {
@@ -683,21 +803,8 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 <Self as ::server_less::CliSubcommand>::cli_command()
             }
 
-            /// Run the CLI application
-            pub fn cli_run(&self) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
-                let matches = Self::cli_command().get_matches();
-                <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)
-            }
-
-            /// Run the CLI with custom arguments
-            pub fn cli_run_with<I, T>(&self, args: I) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<::std::ffi::OsString> + Clone,
-            {
-                let matches = Self::cli_command().get_matches_from(args);
-                <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)
-            }
+            #sync_entrypoints
+            #async_entrypoint
         }
     })
 }
@@ -955,6 +1062,8 @@ fn generate_leaf_match_arm(
     // with `let sub_matches = matches;` so the body is identical.
     // When false: generates the normal `Some(("name", sub_matches)) =>` arm.
     none_arm: bool,
+    // When true: generates async dispatch (`.await` instead of `block_on`).
+    for_async: bool,
 ) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
@@ -1192,10 +1301,13 @@ fn generate_leaf_match_arm(
     let gen_call = |names: &[TokenStream2]| -> TokenStream2 {
         if method.return_info.is_unit {
             if method.is_async {
-                quote! {
-                    ::tokio::runtime::Runtime::new()
-                        .expect("Failed to create Tokio runtime")
-                        .block_on(self.#method_name(#(#names),*));
+                if for_async {
+                    quote! { self.#method_name(#(#names),*).await; }
+                } else {
+                    quote! {
+                        ::tokio::runtime::Runtime::new()?
+                            .block_on(self.#method_name(#(#names),*));
+                    }
                 }
             } else {
                 quote! {
@@ -1203,10 +1315,13 @@ fn generate_leaf_match_arm(
                 }
             }
         } else if method.is_async {
-            quote! {
-                let result = ::tokio::runtime::Runtime::new()
-                    .expect("Failed to create Tokio runtime")
-                    .block_on(self.#method_name(#(#names),*));
+            if for_async {
+                quote! { let result = self.#method_name(#(#names),*).await; }
+            } else {
+                quote! {
+                    let result = ::tokio::runtime::Runtime::new()?
+                        .block_on(self.#method_name(#(#names),*));
+                }
             }
         } else {
             quote! {
@@ -1403,6 +1518,19 @@ fn generate_static_mount_arm(method: &MethodInfo) -> TokenStream2 {
     }
 }
 
+fn generate_static_mount_arm_async(method: &MethodInfo) -> TokenStream2 {
+    let subcommand_name = method.name.to_string().to_kebab_case();
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    quote! {
+        Some((#subcommand_name, sub_matches)) => {
+            let __delegate = self.#method_name();
+            <#inner_ty as ::server_less::CliSubcommand>::cli_dispatch_async(__delegate, sub_matches).await
+        }
+    }
+}
+
 fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
     let subcommand_name = method.name.to_string().to_kebab_case();
     let method_name = &method.name;
@@ -1433,6 +1561,43 @@ fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
             #(#slug_extractions)*
             let __delegate = self.#method_name(#(#slug_names),*);
             <#inner_ty as ::server_less::CliSubcommand>::cli_dispatch(__delegate, sub_matches)
+        }
+    })
+}
+
+fn generate_slug_mount_arm_async(
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> syn::Result<TokenStream2> {
+    let subcommand_name = method.name.to_string().to_kebab_case();
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
+
+    let mut slug_extractions = Vec::new();
+    let mut slug_names = Vec::new();
+
+    for p in regular_params {
+        let name = &p.name;
+        let name_str = p.name.to_string().to_kebab_case();
+        let ty = &p.ty;
+
+        slug_extractions.push(quote! {
+            let #name: #ty = sub_matches
+                .get_one::<String>(#name_str)
+                .map(|s| s.parse())
+                .transpose()?
+                .ok_or_else(|| format!("Missing required argument: {}", #name_str))?;
+        });
+        slug_names.push(quote! { #name });
+    }
+
+    Ok(quote! {
+        Some((#subcommand_name, sub_matches)) => {
+            #(#slug_extractions)*
+            let __delegate = self.#method_name(#(#slug_names),*);
+            <#inner_ty as ::server_less::CliSubcommand>::cli_dispatch_async(__delegate, sub_matches).await
         }
     })
 }
