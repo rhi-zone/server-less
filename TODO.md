@@ -211,7 +211,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 ### CRITICAL — pre-publish blockers
 
-- [ ] **Generic impl blocks broken** (`server-less-parse/src/lib.rs` `get_impl_name`): Discards type parameters — `impl<T> MyService<T>` generates `impl MyService { }`, breaking all generic services with confusing compiler errors.
+- [x] **Generic impl blocks broken** ✅ Fixed: split_for_impl() pattern propagated to all 18 macro expanders; __CliI/__CliArg rename avoids collision with user generics; regression test added. (`server-less-parse/src/lib.rs` `get_impl_name`): Discards type parameters — `impl<T> MyService<T>` generates `impl MyService { }`, breaking all generic services with confusing compiler errors.
 
 - [x] **Substring type inference produces wrong schemas** ✅ Fixed: AST-based type inspection using syn::Type pattern matching on the outermost type name. Vec<String>→array, HashMap<K,V>→object, Option<T> recurses into T.
 
@@ -231,13 +231,13 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [ ] **`ServerlessError` → HTTP status uses string matching, not `IntoErrorCode`**: HTTP handler infers status codes from error message text ("not found" → 404) rather than the `IntoErrorCode` trait. `#[error(code = 409)]` may silently not work.
 
-- [ ] **lib.rs doc examples use `#[ignore]` and wrong version**: Main crate docs show `use server_less::prelude::*` with `#[ignore]` examples that don't compile; version shows `"0.1"` instead of current version. Bad on docs.rs.
+- [x] **lib.rs doc examples use `#[ignore]` and wrong version** ✅ Changed to no_run, updated version to "0.2".: Main crate docs show `use server_less::prelude::*` with `#[ignore]` examples that don't compile; version shows `"0.1"` instead of current version. Bad on docs.rs.
 
 - [ ] **`JsonRpcMount` has no sync dispatch method**: Inconsistent with MCP, WS, and CLI which all have both sync and async variants.
 
 - [ ] **`.unwrap()` on `reference_inner` in mount code**: Multiple sites across `cli.rs`, `mcp.rs`, `jsonrpc.rs`, `ws.rs`, `http.rs` — should be `syn::Error` with span instead of macro panic.
 
-- [ ] **Nested tokio runtime panic in `cli_run()`**: If called from within a `#[tokio::main]` or `#[tokio::test]`, tokio panics with "Cannot start a runtime from within a runtime". Consider `Handle::try_current()` to return a proper `Err`.
+- [x] **Nested tokio runtime panic in `cli_run()`** ✅ Handle::try_current() guard added; returns proper Err if called inside tokio context.: If called from within a `#[tokio::main]` or `#[tokio::test]`, tokio panics with "Cannot start a runtime from within a runtime". Consider `Handle::try_current()` to return a proper `Err`.
 
 ### MEDIUM
 
@@ -253,9 +253,9 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [ ] **Stacking `#[cli]` + `#[http]` on same impl block doesn't compose**: Each macro re-emits the impl block; stacking two raw protocol macros duplicates user methods. Presets work via `strip_first_impl` but raw composition does not.
 
-- [ ] **Iterator types silently fail in RPC dispatch** (`server-less-rpc`): `impl Iterator<Item = T>` return type has no handling in `generate_json_response` — falls through to `serde_json::to_value(iterator)` which fails at runtime. CLI handles iterators correctly.
+- [x] **Iterator types silently fail in RPC dispatch** ✅ Added is_iterator branch in generate_json_response; integration tests verify array output. (`server-less-rpc`): `impl Iterator<Item = T>` return type has no handling in `generate_json_response` — falls through to `serde_json::to_value(iterator)` which fails at runtime. CLI handles iterators correctly.
 
-- [ ] **`if true { }` / `if false { }` in WS generated code** (`ws.rs:795`): Produces dead_code/unreachable warnings in user's build output.
+- [x] **`if true { }` / `if false { }` in WS generated code** ✅ Moved uses_injected_params branch into Rust code to avoid dead warnings. (`ws.rs:795`): Produces dead_code/unreachable warnings in user's build output.
 
 - [ ] **Module doc in `cli.rs` missing async methods**: `cli_run_async`, `cli_run_with_async`, `cli_dispatch_async` not listed in module-level doc comment.
 
