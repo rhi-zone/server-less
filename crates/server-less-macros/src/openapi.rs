@@ -206,6 +206,11 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
             detected_list.join(", ")
         );
 
+        // In protocol-aware mode, #[openapi] is always the outermost attribute (placed
+        // first in source).  It must re-emit the impl block unconditionally so that the
+        // sibling protocol macros (#[http], #[jsonrpc], etc.) can process it afterward.
+        // is_protocol_impl_emitter does NOT apply here; the sibling macros themselves
+        // handle deduplication via their own is_protocol_impl_emitter checks.
         Ok(quote! {
             #impl_block
 
@@ -260,8 +265,15 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
             .attrs
             .retain(|attr| !attr.path().is_ident("server"));
 
+        // Only emit the impl block if no higher-priority protocol sibling is present.
+        let maybe_impl = if crate::is_protocol_impl_emitter(&clean_impl, "openapi") {
+            quote! { #clean_impl }
+        } else {
+            quote! {}
+        };
+
         Ok(quote! {
-            #clean_impl
+            #maybe_impl
 
             impl #impl_generics #self_ty #where_clause {
                 #[doc = #standalone_doc]

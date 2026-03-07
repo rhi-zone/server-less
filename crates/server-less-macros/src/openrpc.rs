@@ -105,8 +105,15 @@ pub(crate) fn expand_openrpc(args: OpenRpcArgs, impl_block: ItemImpl) -> syn::Re
 
     let methods_json = method_specs.join(",\n");
 
+    // Only emit the impl block if no higher-priority protocol sibling is present.
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "openrpc") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
             /// Get the OpenRPC specification for this service.
