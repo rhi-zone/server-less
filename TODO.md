@@ -233,7 +233,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **lib.rs doc examples use `#[ignore]` and wrong version** ✅ Changed to no_run, updated version to "0.2".: Main crate docs show `use server_less::prelude::*` with `#[ignore]` examples that don't compile; version shows `"0.1"` instead of current version. Bad on docs.rs.
 
-- [ ] **`JsonRpcMount` has no sync dispatch method**: Inconsistent with MCP, WS, and CLI which all have both sync and async variants.
+- [x] **`JsonRpcMount` has no sync dispatch method** ✅ Added jsonrpc_mount_dispatch() sync variant to trait and generated impl; async-only methods return clear error from sync path.: Inconsistent with MCP, WS, and CLI which all have both sync and async variants.
 
 - [ ] **`.unwrap()` on `reference_inner` in mount code**: Multiple sites across `cli.rs`, `mcp.rs`, `jsonrpc.rs`, `ws.rs`, `http.rs` — should be `syn::Error` with span instead of macro panic.
 
@@ -245,7 +245,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **`Path<T>`, `Query<T>`, `Json<T>` in `extract.rs` are dead code** ✅ Removed (54 lines); confirmed unused via grep across all crates.: Defined with Deref impls but never referenced in generated code or tests.
 
-- [ ] **`ErrorCode` missing `jsonrpc_code() -> i32`**: Has `http_status()`, `grpc_code()`, `exit_code()` but no JSON-RPC error code mapping.
+- [x] **`ErrorCode` missing `jsonrpc_code() -> i32`** ✅ Added to trait with sensible defaults; ServerlessError derive supports #[error(jsonrpc_code = -32602)]; jsonrpc.rs uses it in error responses.: Has `http_status()`, `grpc_code()`, `exit_code()` but no JSON-RPC error code mapping.
 
 - [ ] **HTTP mount OpenAPI composition incomplete**: Mounted child OpenAPI paths not merged into parent spec (acknowledged in test comment).
 
