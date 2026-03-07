@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use server_less::{graphql, graphql_enum};
+use server_less::{graphql, graphql_enum, serve};
 
 #[derive(Clone)]
 struct SimpleService {
@@ -709,5 +709,451 @@ fn test_graphql_input_schema_registration() {
         sdl.contains("age: Int"),
         "Should have age field. SDL:\n{}",
         sdl
+    );
+}
+
+// ============================================================================
+// Mount / Composition Tests
+//
+// A parent service can expose a child service's queries/mutations by returning
+// `&ChildService` from a method. The macro inlines all child fields into the
+// parent's query/mutation Objects so a single schema contains everything.
+// ============================================================================
+
+/// Child service with its own queries and mutations.
+#[derive(Clone)]
+struct ProductService {
+    tax_rate: f64,
+}
+
+impl ProductService {
+    fn new() -> Self {
+        Self { tax_rate: 0.1 }
+    }
+}
+
+#[graphql]
+impl ProductService {
+    /// Get product name
+    pub fn get_product_name(&self) -> String {
+        "Widget".to_string()
+    }
+
+    /// Get product price
+    pub fn get_product_price(&self) -> i32 {
+        100
+    }
+
+    /// Create product
+    pub fn create_product(&self, name: String) -> String {
+        format!("Created: {}", name)
+    }
+}
+
+/// Parent service that mounts `ProductService` as a child.
+#[derive(Clone)]
+struct CatalogService {
+    product_service: ProductService,
+}
+
+impl CatalogService {
+    fn new() -> Self {
+        Self {
+            product_service: ProductService::new(),
+        }
+    }
+}
+
+#[graphql]
+impl CatalogService {
+    /// Get catalog name
+    pub fn get_catalog_name(&self) -> String {
+        "Main Catalog".to_string()
+    }
+
+    /// Get catalog version
+    pub fn get_catalog_version(&self) -> i32 {
+        1
+    }
+
+    /// Update catalog description
+    pub fn update_catalog_description(&self, description: String) -> String {
+        format!("Updated: {}", description)
+    }
+
+    /// Mount: expose ProductService fields in this schema
+    pub fn products(&self) -> &ProductService {
+        &self.product_service
+    }
+}
+
+#[test]
+fn test_graphql_mount_schema_created() {
+    let service = CatalogService::new();
+    let schema = service.graphql_schema();
+    let _ = schema;
+}
+
+#[test]
+fn test_graphql_mount_sdl_contains_parent_fields() {
+    let service = CatalogService::new();
+    let sdl = service.graphql_sdl();
+
+    // Parent query fields should be present
+    assert!(
+        sdl.contains("getCatalogName"),
+        "SDL should have getCatalogName from parent. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("getCatalogVersion"),
+        "SDL should have getCatalogVersion from parent. SDL:\n{}",
+        sdl
+    );
+}
+
+#[test]
+fn test_graphql_mount_sdl_contains_child_fields() {
+    let service = CatalogService::new();
+    let sdl = service.graphql_sdl();
+
+    // Child query fields should be inlined into parent's schema
+    assert!(
+        sdl.contains("getProductName"),
+        "SDL should have getProductName from child ProductService. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("getProductPrice"),
+        "SDL should have getProductPrice from child ProductService. SDL:\n{}",
+        sdl
+    );
+}
+
+#[test]
+fn test_graphql_mount_sdl_contains_child_mutations() {
+    let service = CatalogService::new();
+    let sdl = service.graphql_sdl();
+
+    // Child mutation fields should be inlined into parent's mutation type
+    assert!(
+        sdl.contains("createProduct"),
+        "SDL should have createProduct mutation from child ProductService. SDL:\n{}",
+        sdl
+    );
+    // Parent's own mutation should also be present
+    assert!(
+        sdl.contains("updateCatalogDescription"),
+        "SDL should have updateCatalogDescription mutation from parent. SDL:\n{}",
+        sdl
+    );
+}
+
+#[tokio::test]
+async fn test_graphql_mount_execute_parent_query() {
+    let service = CatalogService::new();
+    let schema = service.graphql_schema();
+
+    let result = schema.execute("{ getCatalogName }").await;
+    assert!(
+        result.errors.is_empty(),
+        "Parent query should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    assert_eq!(data["getCatalogName"], "Main Catalog");
+}
+
+#[tokio::test]
+async fn test_graphql_mount_execute_child_query() {
+    let service = CatalogService::new();
+    let schema = service.graphql_schema();
+
+    // Child's query field is now accessible directly through the parent schema
+    let result = schema.execute("{ getProductName }").await;
+    assert!(
+        result.errors.is_empty(),
+        "Child query through parent schema should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    assert_eq!(data["getProductName"], "Widget");
+}
+
+#[tokio::test]
+async fn test_graphql_mount_execute_child_query_int() {
+    let service = CatalogService::new();
+    let schema = service.graphql_schema();
+
+    let result = schema.execute("{ getProductPrice }").await;
+    assert!(
+        result.errors.is_empty(),
+        "Child int query through parent schema should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    assert_eq!(data["getProductPrice"], 100);
+}
+
+#[tokio::test]
+async fn test_graphql_mount_execute_child_mutation() {
+    let service = CatalogService::new();
+    let schema = service.graphql_schema();
+
+    let result = schema
+        .execute(r#"mutation { createProduct(name: "Gadget") }"#)
+        .await;
+    assert!(
+        result.errors.is_empty(),
+        "Child mutation through parent schema should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    assert_eq!(data["createProduct"], "Created: Gadget");
+}
+
+#[tokio::test]
+async fn test_graphql_mount_execute_parent_mutation() {
+    let service = CatalogService::new();
+    let schema = service.graphql_schema();
+
+    let result = schema
+        .execute(r#"mutation { updateCatalogDescription(description: "New desc") }"#)
+        .await;
+    assert!(
+        result.errors.is_empty(),
+        "Parent mutation should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    assert_eq!(data["updateCatalogDescription"], "Updated: New desc");
+}
+
+/// Child-only service with queries but no mutations.
+#[derive(Clone)]
+struct TagService;
+
+#[graphql]
+impl TagService {
+    /// List all tags
+    pub fn list_tags(&self) -> Vec<String> {
+        vec!["rust".to_string(), "graphql".to_string()]
+    }
+
+    /// Get tag count
+    pub fn get_tag_count(&self) -> i32 {
+        2
+    }
+}
+
+/// Parent service that mounts a query-only child (no child mutations).
+#[derive(Clone)]
+struct BlogService {
+    tag_service: TagService,
+}
+
+impl BlogService {
+    fn new() -> Self {
+        Self {
+            tag_service: TagService,
+        }
+    }
+}
+
+#[graphql]
+impl BlogService {
+    /// Get blog title
+    pub fn get_blog_title(&self) -> String {
+        "My Blog".to_string()
+    }
+
+    /// Publish post
+    pub fn publish_post(&self, title: String) -> String {
+        format!("Published: {}", title)
+    }
+
+    /// Mount: expose TagService fields (queries only, no mutations)
+    pub fn tags(&self) -> &TagService {
+        &self.tag_service
+    }
+}
+
+#[test]
+fn test_graphql_mount_query_only_child_sdl() {
+    let service = BlogService::new();
+    let sdl = service.graphql_sdl();
+
+    // Both parent and child query fields should be present
+    assert!(
+        sdl.contains("getBlogTitle"),
+        "SDL should have getBlogTitle. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("listTags"),
+        "SDL should have listTags from child TagService. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("getTagCount"),
+        "SDL should have getTagCount from child TagService. SDL:\n{}",
+        sdl
+    );
+    // Parent mutation should still be present
+    assert!(
+        sdl.contains("publishPost"),
+        "SDL should have publishPost mutation. SDL:\n{}",
+        sdl
+    );
+}
+
+#[tokio::test]
+async fn test_graphql_mount_query_only_child_dispatch() {
+    let service = BlogService::new();
+    let schema = service.graphql_schema();
+
+    let result = schema.execute("{ listTags }").await;
+    assert!(
+        result.errors.is_empty(),
+        "Child list query through parent should succeed: {:?}",
+        result.errors
+    );
+
+    let data = result.data.into_json().unwrap();
+    let tags = data["listTags"].as_array().unwrap();
+    assert_eq!(tags.len(), 2);
+}
+
+// ============================================================================
+// #[serve] + #[graphql] Integration Test
+//
+// Verifies that a service annotated with both #[graphql] and #[serve(graphql)]
+// produces a working axum router that responds to GraphQL introspection queries.
+// ============================================================================
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use tower::ServiceExt;
+
+#[derive(Clone)]
+struct ServeGraphqlService;
+
+#[graphql]
+#[serve(graphql)]
+impl ServeGraphqlService {
+    /// Get server version
+    pub fn get_server_version(&self) -> String {
+        "1.0.0".to_string()
+    }
+
+    /// Ping the server
+    pub fn get_ping(&self) -> String {
+        "pong".to_string()
+    }
+}
+
+#[tokio::test]
+async fn test_serve_graphql_router_responds() {
+    let service = ServeGraphqlService;
+    let router = service.router();
+
+    // Send a basic introspection query to the /graphql endpoint
+    let query = serde_json::json!({
+        "query": "{ __typename }"
+    });
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/graphql")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&query).unwrap()))
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "GraphQL endpoint should return 200"
+    );
+}
+
+#[tokio::test]
+async fn test_serve_graphql_introspection_query() {
+    let service = ServeGraphqlService;
+    let router = service.router();
+
+    let query = serde_json::json!({
+        "query": "{ getServerVersion getping: getPing }"
+    });
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/graphql")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&query).unwrap()))
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    assert!(
+        body["errors"].is_null() || body["errors"].as_array().map(|a| a.is_empty()).unwrap_or(true),
+        "GraphQL response should have no errors: {}",
+        body
+    );
+    assert!(
+        body["data"].is_object(),
+        "GraphQL response should have data: {}",
+        body
+    );
+}
+
+#[tokio::test]
+async fn test_serve_graphql_health_endpoint() {
+    let service = ServeGraphqlService;
+    let router = service.router();
+
+    let request = Request::builder()
+        .method("GET")
+        .uri("/health")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "#[serve] health endpoint should respond with 200"
+    );
+}
+
+#[tokio::test]
+async fn test_serve_graphql_openapi_spec() {
+    let spec = ServeGraphqlService::combined_openapi_spec();
+
+    // The spec should include the GraphQL endpoint paths
+    let paths = &spec["paths"];
+    assert!(
+        paths.is_object(),
+        "OpenAPI spec should have paths. Spec: {}",
+        serde_json::to_string_pretty(&spec).unwrap()
+    );
+
+    // GraphQL endpoint should be documented
+    assert!(
+        paths["/graphql"].is_object(),
+        "OpenAPI spec should document /graphql endpoint. Paths: {}",
+        serde_json::to_string_pretty(paths).unwrap()
     );
 }

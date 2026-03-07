@@ -81,7 +81,7 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, extract_methods, get_impl_name};
+use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{ItemImpl, Token, parse::Parse};
 
 /// Arguments for the #[graphql] attribute
@@ -152,8 +152,13 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     let struct_name = get_impl_name(&impl_block)?;
     let methods = extract_methods(&impl_block)?;
 
-    let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = methods
+    // Partition into leaf methods and mount points (&T return types).
+    let partitioned = partition_methods(&methods, |_| false);
+
+    let (query_methods, mutation_methods): (Vec<&MethodInfo>, Vec<&MethodInfo>) = partitioned
+        .leaf
         .iter()
+        .copied()
         .partition(|m| is_query_method(&m.name.to_string()));
 
     let query_fields = generate_field_registrations(&query_methods);
@@ -165,10 +170,50 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     let query_type_name = format!("{}Query", struct_name);
     let mutation_type_name = format!("{}Mutation", struct_name);
 
-    let has_mutations = !mutation_methods.is_empty();
+    // Generate mount composition calls — for each static mount `fn child(&self) -> &ChildService`,
+    // inline the child's query and mutation fields into this service's schema objects.
+    let mount_query_merges: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .map(|mount| {
+            let method_ident = &mount.name;
+            let inner_ty = mount.return_info.reference_inner.as_ref().unwrap();
+            quote! {
+                {
+                    let child_arc = ::std::sync::Arc::new(service.#method_ident().clone());
+                    obj = #inner_ty::__graphql_merge_query_fields(obj, child_arc);
+                }
+            }
+        })
+        .collect();
 
-    // Collect custom scalars used across all methods
-    let custom_scalars = collect_custom_scalars(&methods);
+    // Each child's `__graphql_merge_mutation_fields` returns (Object, usize) where usize is the
+    // number of fields it added. We accumulate the count to decide whether to register the
+    // mutation type.
+    let mount_mutation_merges: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .map(|mount| {
+            let method_ident = &mount.name;
+            let inner_ty = mount.return_info.reference_inner.as_ref().unwrap();
+            quote! {
+                {
+                    let child_arc = ::std::sync::Arc::new(service.#method_ident().clone());
+                    let (updated_obj, added) = #inner_ty::__graphql_merge_mutation_fields(obj, child_arc);
+                    obj = updated_obj;
+                    mutation_field_count += added;
+                }
+            }
+        })
+        .collect();
+
+    // Whether this service has its own mutations (from leaf methods).
+    let has_own_mutations = !mutation_methods.is_empty();
+    // Whether this service has mount points (child services).
+    let has_mounts = !partitioned.static_mounts.is_empty();
+
+    // Collect custom scalars used across all leaf methods (mounts manage their own scalars).
+    let custom_scalars = collect_custom_scalars_refs(&partitioned.leaf);
     let scalar_registrations: Vec<_> = custom_scalars
         .iter()
         .map(|name| {
@@ -200,7 +245,46 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
         })
         .collect();
 
-    let schema_build = if has_mutations {
+    // Build the schema_build expression, based on what combination of own mutations and mounts
+    // are present.
+    //
+    // - No mutations, no mounts: query-only schema.
+    // - Own mutations only: always register mutation type (field count is known at compile time).
+    // - Mounts only (no own mutations): build mutation object, let children add fields at runtime,
+    //   register only if count > 0.
+    // - Own mutations + mounts: build mutation object with own fields + child fields; always register.
+    let schema_build = if has_own_mutations && has_mounts {
+        // Own mutations + child mounts: merge both, always register mutation.
+        quote! {
+            let mut mutation_field_count: usize = 0;
+
+            let mutation = {
+                let service = service.clone();
+                let mut obj = Object::new(#mutation_type_name);
+                #(
+                    {
+                        let service = service.clone();
+                        mutation_field_count += 1;
+                        #mutation_fields
+                    }
+                )*
+                // Merge child mutation fields from mount points.
+                #(#mount_mutation_merges)*
+                obj
+            };
+
+            // mutation_field_count > 0 because we have own mutations; always register.
+            Schema::build(#query_type_name, Some(#mutation_type_name), None)
+                .register(query)
+                .register(mutation)
+                #(#scalar_registrations)*
+                #(#enum_registrations)*
+                #(#input_registrations)*
+                .finish()
+                .expect("Failed to build GraphQL schema")
+        }
+    } else if has_own_mutations {
+        // Own mutations only — no mounts. Always register mutation type.
         quote! {
             let mutation = {
                 let service = service.clone();
@@ -223,7 +307,39 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
                 .finish()
                 .expect("Failed to build GraphQL schema")
         }
+    } else if has_mounts {
+        // No own mutations, but child mounts may contribute mutation fields at runtime.
+        quote! {
+            let mut mutation_field_count: usize = 0;
+
+            let mutation = {
+                let mut obj = Object::new(#mutation_type_name);
+                // Merge child mutation fields from mount points (each call updates mutation_field_count).
+                #(#mount_mutation_merges)*
+                obj
+            };
+
+            if mutation_field_count > 0 {
+                Schema::build(#query_type_name, Some(#mutation_type_name), None)
+                    .register(query)
+                    .register(mutation)
+                    #(#scalar_registrations)*
+                    #(#enum_registrations)*
+                    #(#input_registrations)*
+                    .finish()
+                    .expect("Failed to build GraphQL schema")
+            } else {
+                Schema::build(#query_type_name, None::<&str>, None)
+                    .register(query)
+                    #(#scalar_registrations)*
+                    #(#enum_registrations)*
+                    #(#input_registrations)*
+                    .finish()
+                    .expect("Failed to build GraphQL schema")
+            }
+        }
     } else {
+        // No mutations and no mounts — query-only schema.
         quote! {
             Schema::build(#query_type_name, None::<&str>, None)
                 .register(query)
@@ -234,6 +350,12 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
                 .expect("Failed to build GraphQL schema")
         }
     };
+
+    // Generate the field-merging helpers used by parent services that mount this service.
+    // These allow a parent's `graphql_schema` to inline this service's fields into its own
+    // query/mutation Objects without creating a nested schema.
+    let merge_query_helper = generate_merge_query_helper(&struct_name, &query_methods);
+    let merge_mutation_helper = generate_merge_mutation_helper(&struct_name, &mutation_methods);
 
     Ok(quote! {
         #impl_block
@@ -257,11 +379,16 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
                             #query_fields
                         }
                     )*
+                    // Merge child query fields from mount points.
+                    #(#mount_query_merges)*
                     obj
                 };
 
                 #schema_build
             }
+
+            #merge_query_helper
+            #merge_mutation_helper
 
             /// Create an axum router with GraphQL endpoint
             pub fn graphql_router(self) -> ::axum::Router
@@ -776,27 +903,100 @@ fn map_inner_type_to_graphql(inner: &str) -> &'static str {
     }
 }
 
-/// Collect custom scalar types used across all methods (parameters + return types).
-///
-/// Returns a deduplicated list of scalar names that need to be registered
-/// with the dynamic schema builder.
-fn collect_custom_scalars(methods: &[MethodInfo]) -> Vec<String> {
+/// Collect custom scalar types used across a slice of method references (after partitioning).
+fn collect_custom_scalars_refs(methods: &[&MethodInfo]) -> Vec<String> {
     let mut scalars = std::collections::BTreeSet::new();
 
     for method in methods {
-        // Check parameters
         for param in &method.params {
             let ty = &param.ty;
             check_type_for_scalars(&quote!(#ty).to_string(), &mut scalars);
         }
-
-        // Check return type
         if let Some(ref ty) = method.return_info.ty {
             check_type_for_scalars(&quote!(#ty).to_string(), &mut scalars);
         }
     }
 
     scalars.into_iter().collect()
+}
+
+/// Generate the `__graphql_merge_query_fields` helper method for a service.
+///
+/// This is called by parent services that mount this service as a child. It inlines
+/// this service's query fields into the parent's Object builder, enabling schema composition.
+fn generate_merge_query_helper(
+    _struct_name: &syn::Ident,
+    query_methods: &[&MethodInfo],
+) -> TokenStream2 {
+    let field_registrations = generate_field_registrations(query_methods);
+
+    quote! {
+        /// Merge this service's query fields into an existing Object builder.
+        ///
+        /// Called by parent services that include this service as a mount point.
+        /// This inlines all query fields from this service into the parent's schema
+        /// without creating a nested GraphQL type.
+        #[doc(hidden)]
+        pub fn __graphql_merge_query_fields(
+            mut obj: ::async_graphql::dynamic::Object,
+            service: ::std::sync::Arc<Self>,
+        ) -> ::async_graphql::dynamic::Object
+        where
+            Self: Clone + Send + Sync + 'static,
+        {
+            use ::async_graphql::dynamic::*;
+
+            #(
+                {
+                    let service = service.clone();
+                    #field_registrations
+                }
+            )*
+
+            obj
+        }
+    }
+}
+
+/// Generate the `__graphql_merge_mutation_fields` helper method for a service.
+///
+/// This is called by parent services that mount this service as a child. It inlines
+/// this service's mutation fields into the parent's Object builder and returns how many
+/// fields were added (so the parent can decide whether to register the mutation type).
+fn generate_merge_mutation_helper(
+    _struct_name: &syn::Ident,
+    mutation_methods: &[&MethodInfo],
+) -> TokenStream2 {
+    let field_count = mutation_methods.len();
+    let field_registrations = generate_field_registrations(mutation_methods);
+
+    quote! {
+        /// Merge this service's mutation fields into an existing Object builder.
+        ///
+        /// Returns the updated Object and the number of fields added. The parent uses
+        /// the count to decide whether to register the mutation type with the schema.
+        ///
+        /// Called by parent services that include this service as a mount point.
+        #[doc(hidden)]
+        pub fn __graphql_merge_mutation_fields(
+            mut obj: ::async_graphql::dynamic::Object,
+            service: ::std::sync::Arc<Self>,
+        ) -> (::async_graphql::dynamic::Object, usize)
+        where
+            Self: Clone + Send + Sync + 'static,
+        {
+            use ::async_graphql::dynamic::*;
+
+            #(
+                {
+                    let service = service.clone();
+                    #field_registrations
+                }
+            )*
+
+            (obj, #field_count)
+        }
+    }
 }
 
 /// Check a type string for custom scalar types and add them to the set.
