@@ -6,7 +6,7 @@
 //! Run: cargo run --example error_handling
 
 use serde::{Deserialize, Serialize};
-use server_less::{IntoErrorCode, ServerlessError, http};
+use server_less::{ServerlessError, http};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Task {

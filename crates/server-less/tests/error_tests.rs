@@ -132,6 +132,49 @@ fn test_std_error_impl() {
     assert_eq!(err.to_string(), "Not found");
 }
 
+// Test jsonrpc_code on ErrorCode
+#[test]
+fn test_error_code_jsonrpc_code() {
+    assert_eq!(ErrorCode::InvalidInput.jsonrpc_code(), -32602);
+    assert_eq!(ErrorCode::Internal.jsonrpc_code(), -32603);
+    assert_eq!(ErrorCode::NotImplemented.jsonrpc_code(), -32601);
+    assert_eq!(ErrorCode::NotFound.jsonrpc_code(), -32002);
+    assert_eq!(ErrorCode::Unauthenticated.jsonrpc_code(), -32000);
+}
+
+// Test jsonrpc_code via IntoErrorCode default delegation
+#[test]
+fn test_into_error_code_jsonrpc_code_default() {
+    let err = BasicError::NotFound;
+    // Default delegates to ErrorCode::NotFound.jsonrpc_code()
+    assert_eq!(err.jsonrpc_code(), ErrorCode::NotFound.jsonrpc_code());
+
+    let err = BasicError::InternalError;
+    assert_eq!(err.jsonrpc_code(), ErrorCode::Internal.jsonrpc_code());
+}
+
+// Test explicit jsonrpc_code override on variants
+#[derive(Debug, ServerlessError)]
+enum JsonRpcCodeError {
+    #[error(code = InvalidInput, jsonrpc_code = -32602)]
+    BadParams,
+    #[error(code = NotFound, jsonrpc_code = -32099)]
+    CustomNotFound,
+    // No override — delegates to error_code().jsonrpc_code()
+    InternalError,
+}
+
+#[test]
+fn test_explicit_jsonrpc_code_override() {
+    assert_eq!(JsonRpcCodeError::BadParams.jsonrpc_code(), -32602);
+    assert_eq!(JsonRpcCodeError::CustomNotFound.jsonrpc_code(), -32099);
+    // InternalError → ErrorCode::Internal → -32603
+    assert_eq!(
+        JsonRpcCodeError::InternalError.jsonrpc_code(),
+        ErrorCode::Internal.jsonrpc_code()
+    );
+}
+
 // Test HTTP status code mapping
 #[derive(Debug, ServerlessError)]
 enum HttpStatusError {

@@ -74,8 +74,15 @@ pub trait JsonRpcMount {
     /// Get method names for this mount (without prefix).
     fn jsonrpc_mount_methods() -> Vec<String>;
 
-    /// Dispatch a method call (async).
+    /// Dispatch a method call (sync). Returns error for async-only methods.
     fn jsonrpc_mount_dispatch(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
+
+    /// Dispatch a method call (async).
+    fn jsonrpc_mount_dispatch_async(
         &self,
         method: &str,
         params: serde_json::Value,
