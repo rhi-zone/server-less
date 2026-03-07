@@ -127,20 +127,6 @@ pub(crate) fn is_protocol_impl_emitter(impl_block: &ItemImpl, current: &str) -> 
     })
 }
 
-/// Strip all protocol macro attributes from an impl block's outer attribute list.
-///
-/// Called by the designated impl-emitter before re-emitting the impl block so that
-/// the remaining protocol attrs are not processed again (which would cause double
-/// expansion).
-pub(crate) fn strip_protocol_impl_attrs(impl_block: &ItemImpl) -> ItemImpl {
-    let mut block = impl_block.clone();
-    block.attrs.retain(|attr| {
-        !PROTOCOL_PRIORITY
-            .iter()
-            .any(|name| attr.path().is_ident(name))
-    });
-    block
-}
 
 #[cfg(feature = "asyncapi")]
 mod asyncapi;

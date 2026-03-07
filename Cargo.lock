@@ -1467,7 +1467,7 @@ dependencies = [
 
 [[package]]
 name = "server-less"
-version = "0.2.1-alpha.7"
+version = "0.3.0"
 dependencies = [
  "async-graphql",
  "async-graphql-axum",
@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "server-less-core"
-version = "0.2.1-alpha.7"
+version = "0.3.0"
 dependencies = [
  "axum",
  "clap",
@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "server-less-macros"
-version = "0.2.1-alpha.7"
+version = "0.3.0"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1519,7 +1519,7 @@ dependencies = [
 
 [[package]]
 name = "server-less-openapi"
-version = "0.2.1-alpha.7"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1528,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "server-less-parse"
-version = "0.2.1-alpha.7"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1537,7 +1537,7 @@ dependencies = [
 
 [[package]]
 name = "server-less-rpc"
-version = "0.2.1-alpha.7"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",

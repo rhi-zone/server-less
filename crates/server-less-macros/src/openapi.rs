@@ -174,9 +174,6 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
     let (impl_generics, _ty_generics, where_clause) = generics_clone.split_for_impl();
     let self_ty = impl_block.self_ty.clone();
     let struct_name_str = struct_name.to_string();
-    let generics_clone = impl_block.generics.clone();
-    let (impl_generics, _ty_generics, where_clause) = generics_clone.split_for_impl();
-    let self_ty = impl_block.self_ty.clone();
 
     // Detect sibling protocol attributes
     let protocols = DetectedProtocols::from_attrs(&impl_block.attrs);

@@ -158,7 +158,7 @@ use crate::context::{
 
 // Re-export shared OpenAPI types for backward compatibility
 pub use crate::openapi_gen::{
-    HttpMethod, ResponseOverride, RouteOverride, generate_openapi_spec, infer_http_method,
+    HttpMethod, ResponseOverride, RouteOverride, infer_http_method,
     infer_path,
 };
 
