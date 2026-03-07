@@ -253,7 +253,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **`panic!` in generated schema file writers** ✅ False positive — write_* methods already return std::io::Result<()>; panic! only in assert_schema_matches() which is intentional test-assertion behavior.: `grpc.rs`, `smithy.rs`, `thrift.rs`, `capnp.rs` use `panic!` in generated `write_*` methods for I/O errors. Should propagate errors.
 
-- [ ] **Stacking `#[cli]` + `#[http]` on same impl block doesn't compose**: Each macro re-emits the impl block; stacking two raw protocol macros duplicates user methods. Presets work via `strip_first_impl` but raw composition does not.
+- [ ] **Stacking `#[cli]` + `#[http]` on same impl block doesn't compose**: Each macro re-emits the impl block; stacking two raw protocol macros duplicates user methods. Presets work via `strip_first_impl` but raw composition does not. **Investigated:** three viable options — (1) each macro detects sibling protocol attrs and skips re-emitting its impl block, (2) an `emit_impl` attribute marker, (3) a `#[cli_http]` blessed preset. Option 1 has ordering risk; Option 3 (preset) is cleanest and follows existing philosophy. `strip_first_impl` is in `lib.rs`; `#[server]`, `#[rpc]`, `#[tool]`, `#[program]` all demonstrate the pattern.
 
 - [x] **Iterator types silently fail in RPC dispatch** ✅ Added is_iterator branch in generate_json_response; integration tests verify array output. (`server-less-rpc`): `impl Iterator<Item = T>` return type has no handling in `generate_json_response` — falls through to `serde_json::to_value(iterator)` which fails at runtime. CLI handles iterators correctly.
 
