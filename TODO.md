@@ -146,16 +146,7 @@ How do implementors know what server-less can do, at the moment they need it?
 
 ### Development Tools
 
-- [ ] Hot reloading exploration
-- [ ] `cargo serverless` subcommand — revisit when ecosystem is bigger. Main use case: bird's-eye view across a workspace ("what's exposed where?"). Current discovery mechanisms (SERVER_LESS_DEBUG, enriched errors, dynamic rustdoc) cover the single-service case well enough at v0.2.
-
-### Performance
-
-- [ ] Benchmark HTTP macro vs hand-written axum
-- [ ] Benchmark CLI macro vs hand-written clap
-- [ ] Measure compile-time overhead
-- [ ] Optimize generated code size
-- [ ] Reduce monomorphization where possible
+> Hot reloading and `cargo serverless` subcommand deferred indefinitely — not a macro concern at this stage.
 
 ### Authentication/Authorization
 
@@ -283,13 +274,10 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 These need more design work before implementation:
 
-- [ ] Code-first → Schema-first transition tooling
-- [ ] Automatic API migration generation between versions
-- [ ] Contract testing framework
-- [ ] Distributed tracing (OpenTelemetry integration)
-- [ ] GraphQL Federation support
-- [ ] WebAssembly target support
-- [ ] no_std support for embedded
+- [ ] Distributed tracing (OpenTelemetry integration) — inject trace context via middleware layer
+- [ ] GraphQL Federation support — far future; requires significant schema stitching work
+
+> Removed as out-of-scope: Code-first→schema-first tooling, auto migration gen, contract testing (separate products), WASM/no_std (different target universe), performance benchmarks (pre-mature at this stage).
 
 ---
 
