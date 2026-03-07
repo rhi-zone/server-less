@@ -5,40 +5,35 @@
 //!
 //! # Quick Start
 //!
-//! ```ignore
+//! ```no_run
 //! use server_less::prelude::*;
+//! use serde::{Deserialize, Serialize};
 //!
-//! struct UserService {
-//!     // your state
-//! }
+//! #[derive(Serialize, Deserialize)]
+//! struct User { name: String, email: String }
 //!
-//! #[http]
-//! #[cli(name = "users")]
+//! #[derive(Debug, ServerlessError)]
+//! enum UserError { NotFound }
+//!
+//! struct UserService;
+//!
 //! #[mcp]
-//! #[ws(path = "/ws")]
 //! impl UserService {
 //!     /// Create a new user
 //!     async fn create_user(&self, name: String, email: String) -> Result<User, UserError> {
-//!         // implementation
-//!     }
-//!
-//!     /// Get user by ID
-//!     async fn get_user(&self, id: UserId) -> Option<User> {
-//!         // implementation
+//!         Ok(User { name, email })
 //!     }
 //!
 //!     /// List all users
 //!     async fn list_users(&self, limit: Option<u32>) -> Vec<User> {
-//!         // implementation
+//!         let _ = limit;
+//!         vec![]
 //!     }
 //! }
 //! ```
 //!
 //! This generates:
-//! - **HTTP**: `POST /users`, `GET /users/{id}`, `GET /users` (axum router)
-//! - **CLI**: `users create-user --name X`, `users get-user <id>` (clap)
-//! - **MCP**: Tools `create_user`, `get_user`, `list_users` (Model Context Protocol)
-//! - **WebSocket**: JSON-RPC methods over WebSocket (axum)
+//! - **MCP**: Tools `create_user`, `list_users` (Model Context Protocol)
 //!
 //! # Available Macros
 //!
@@ -75,33 +70,53 @@
 //!
 //! All macros support async methods:
 //!
-//! ```ignore
+//! ```no_run
+//! use server_less::prelude::*;
+//!
+//! struct MyService;
+//!
 //! #[mcp]
 //! impl MyService {
-//!     // Sync method - works with mcp_call() and mcp_call_async()
-//!     pub fn sync_method(&self) -> String { ... }
+//!     /// Sync method - works with mcp_call() and mcp_call_async()
+//!     pub fn sync_method(&self) -> String {
+//!         String::from("hello")
+//!     }
 //!
-//!     // Async method - use mcp_call_async() for proper await
-//!     pub async fn async_method(&self) -> String { ... }
+//!     /// Async method - use mcp_call_async() for proper await
+//!     pub async fn async_method(&self) -> String {
+//!         String::from("hello async")
+//!     }
 //! }
 //!
-//! // Sync call (errors on async methods)
-//! service.mcp_call("sync_method", json!({}));
-//!
-//! // Async call (awaits async methods properly)
-//! service.mcp_call_async("async_method", json!({})).await;
+//! #[tokio::main]
+//! async fn main() {
+//!     let service = MyService;
+//!     // Sync call (errors on async methods)
+//!     service.mcp_call("sync_method", serde_json::json!({}));
+//!     // Async call (awaits async methods properly)
+//!     service.mcp_call_async("async_method", serde_json::json!({})).await;
+//! }
 //! ```
 //!
 //! # SSE Streaming (HTTP)
 //!
 //! Return `impl Stream<Item=T>` for Server-Sent Events:
 //!
-//! ```ignore
+//! ```no_run
+//! use server_less::prelude::*;
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Clone, Serialize, Deserialize)]
+//! struct Event { message: String }
+//!
+//! #[derive(Clone)]
+//! struct StreamService;
+//!
 //! #[http]
 //! impl StreamService {
 //!     // Note: Rust 2024 requires `+ use<>` to avoid lifetime capture
-//!     pub fn stream_events(&self) -> impl Stream<Item = Event> + use<> {
-//!         futures::stream::iter(vec![Event { ... }])
+//!     pub fn stream_events(&self) -> impl futures::Stream<Item = Event> + use<> {
+//!         futures::stream::iter(vec![Event { message: String::from("hello") }])
 //!     }
 //! }
 //! ```
@@ -112,7 +127,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! server-less = { version = "0.1", default-features = false, features = ["http", "cli"] }
+//! server-less = { version = "0.2", default-features = false, features = ["http", "cli"] }
 //! ```
 //!
 //! Available features:
