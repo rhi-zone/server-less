@@ -14,7 +14,7 @@ use syn::{DeriveInput, ItemImpl, parse_macro_input};
 /// When `SERVER_LESS_DEBUG=1` is set at build time, print the generated token
 /// stream to stderr so implementors can inspect macro output without `cargo expand`.
 fn debug_emit(macro_name: &str, type_name: &str, tokens: &TokenStream2) {
-    if std::env::var("SERVER_LESS_DEBUG").is_ok() {
+    if std::env::var("SERVER_LESS_DEBUG").as_deref() == Ok("1") {
         eprintln!("--- server-less: #[{macro_name}] on {type_name} ---");
         eprintln!("{tokens}");
         eprintln!("--- end #[{macro_name}] on {type_name} ---");
