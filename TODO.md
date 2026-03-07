@@ -249,7 +249,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [ ] **HTTP mount OpenAPI composition incomplete**: Mounted child OpenAPI paths not merged into parent spec (acknowledged in test comment).
 
-- [ ] **`panic!` in generated schema file writers**: `grpc.rs`, `smithy.rs`, `thrift.rs`, `capnp.rs` use `panic!` in generated `write_*` methods for I/O errors. Should propagate errors.
+- [x] **`panic!` in generated schema file writers** ✅ False positive — write_* methods already return std::io::Result<()>; panic! only in assert_schema_matches() which is intentional test-assertion behavior.: `grpc.rs`, `smithy.rs`, `thrift.rs`, `capnp.rs` use `panic!` in generated `write_*` methods for I/O errors. Should propagate errors.
 
 - [ ] **Stacking `#[cli]` + `#[http]` on same impl block doesn't compose**: Each macro re-emits the impl block; stacking two raw protocol macros duplicates user methods. Presets work via `strip_first_impl` but raw composition does not.
 
