@@ -8,7 +8,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde::{Deserialize, Serialize};
-use server_less::{http, response};
+use server_less::{http, response, IntoErrorCode as _};
 use tower::ServiceExt;
 
 // Helper to read a response body as JSON
@@ -36,22 +36,13 @@ struct Item {
     name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, server_less::ServerlessError)]
 enum ItemError {
+    #[error(code = NotFound, message = "Item not found")]
     NotFound,
+    #[error(code = InvalidInput, message = "Invalid item")]
     Invalid,
 }
-
-impl std::fmt::Display for ItemError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ItemError::NotFound => write!(f, "Item not found"),
-            ItemError::Invalid => write!(f, "Invalid item"),
-        }
-    }
-}
-
-impl std::error::Error for ItemError {}
 
 #[derive(Clone)]
 struct ItemService {
@@ -224,7 +215,7 @@ async fn test_post_create_validation_error() {
         .await
         .unwrap();
 
-    // ItemError::Invalid → name contains "invalid" → ErrorCode::InvalidInput → 400
+    // ItemError::Invalid → #[error(code = InvalidInput)] → 400
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     let body: serde_json::Value = body_json(response).await;
@@ -271,7 +262,7 @@ async fn test_put_update_not_found() {
         .await
         .unwrap();
 
-    // ItemError::NotFound → 404
+    // ItemError::NotFound → #[error(code = NotFound)] → 404
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 

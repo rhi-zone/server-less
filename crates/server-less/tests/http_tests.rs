@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use server_less::{http, response, route, server};
+#[allow(unused_imports)]
+use server_less::IntoErrorCode as _;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -808,4 +810,125 @@ fn test_http_server_hidden_router_is_created() {
     // The router should still be created successfully (method is still routable)
     let svc = HiddenHttpService;
     let _router = svc.http_router();
+}
+
+// ============================================================================
+// IntoErrorCode / HTTP Status Code Tests
+// ============================================================================
+
+/// Error type that uses `#[error(code = 422)]` to explicitly set the HTTP status.
+#[derive(Debug, server_less::ServerlessError)]
+enum ValidationError {
+    #[error(code = 422, message = "Input failed validation")]
+    InputInvalid,
+    #[error(code = 409, message = "Resource already exists")]
+    AlreadyExists,
+}
+
+#[derive(Clone)]
+struct ValidationService;
+
+#[http(prefix = "/api")]
+impl ValidationService {
+    /// Trigger a 422 validation error
+    pub fn create_validated(&self, fail: bool) -> Result<String, ValidationError> {
+        if fail {
+            Err(ValidationError::InputInvalid)
+        } else {
+            Ok("ok".to_string())
+        }
+    }
+
+    /// Trigger a 409 conflict error
+    pub fn create_unique(&self, exists: bool) -> Result<String, ValidationError> {
+        if exists {
+            Err(ValidationError::AlreadyExists)
+        } else {
+            Ok("created".to_string())
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_serverless_error_code_422_maps_to_http_422() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let router = ValidationService.http_router();
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/validateds")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"fail":true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "Expected HTTP 422 from #[error(code = 422)], got: {}",
+        response.status()
+    );
+}
+
+#[tokio::test]
+async fn test_serverless_error_code_409_maps_to_http_409() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let router = ValidationService.http_router();
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/uniques")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"exists":true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::CONFLICT,
+        "Expected HTTP 409 from #[error(code = 409)], got: {}",
+        response.status()
+    );
+}
+
+#[tokio::test]
+async fn test_serverless_error_ok_returns_200() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let router = ValidationService.http_router();
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/validateds")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"fail":false}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Expected HTTP 200 for Ok case, got: {}",
+        response.status()
+    );
 }
