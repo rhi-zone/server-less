@@ -757,3 +757,55 @@ fn test_http_mount_trait_implemented() {
 //
 // The parsing logic is tested in server-less-parse, and the HTTP macro
 // correctly uses wire_name and default_value when generating handlers.
+
+// ============================================================================
+// Hidden Method Tests (#[server(hidden)])
+// ============================================================================
+
+#[derive(Clone)]
+struct HiddenHttpService;
+
+#[http]
+impl HiddenHttpService {
+    /// Public endpoint
+    pub fn get_public(&self) -> String {
+        "public".to_string()
+    }
+
+    /// Hidden endpoint - routable but absent from OpenAPI spec
+    #[server(hidden)]
+    pub fn get_hidden(&self) -> String {
+        "hidden".to_string()
+    }
+}
+
+#[test]
+fn test_http_server_hidden_not_in_openapi_paths() {
+    let paths = HiddenHttpService::http_openapi_paths();
+    // Only the public endpoint appears in OpenAPI
+    let path_keys: Vec<_> = paths.iter().map(|p| p.path.as_str()).collect();
+    assert!(
+        path_keys.iter().any(|p| p.contains("public")),
+        "public endpoint must appear in OpenAPI paths"
+    );
+    assert!(
+        !path_keys.iter().any(|p| p.contains("hidden")),
+        "hidden endpoint must not appear in OpenAPI paths"
+    );
+}
+
+#[test]
+fn test_http_server_hidden_not_in_openapi_spec() {
+    let spec = HiddenHttpService::openapi_spec();
+    let paths = spec.get("paths").unwrap().as_object().unwrap();
+    // The spec paths must not mention the hidden endpoint
+    let paths_str = serde_json::to_string(paths).unwrap();
+    assert!(!paths_str.contains("hidden"), "hidden endpoint must not appear in openapi_spec paths");
+}
+
+#[test]
+fn test_http_server_hidden_router_is_created() {
+    // The router should still be created successfully (method is still routable)
+    let svc = HiddenHttpService;
+    let _router = svc.http_router();
+}

@@ -773,3 +773,58 @@ fn test_graphql_input_schema_registration() {
         sdl
     );
 }
+
+// ============================================================================
+// Hidden Method Tests (#[server(hidden)])
+// ============================================================================
+
+#[derive(Clone)]
+struct HiddenGraphqlService;
+
+#[graphql]
+impl HiddenGraphqlService {
+    /// Public query
+    pub fn get_public(&self) -> String {
+        "public".to_string()
+    }
+
+    /// Hidden query - callable but not in schema SDL
+    #[server(hidden)]
+    pub fn get_hidden(&self) -> String {
+        "hidden".to_string()
+    }
+
+    /// Public mutation
+    pub fn create_public(&self, name: String) -> String {
+        format!("created: {}", name)
+    }
+
+    /// Hidden mutation - not in schema SDL
+    #[server(hidden)]
+    pub fn create_hidden(&self, value: i32) -> i32 {
+        value
+    }
+}
+
+#[test]
+fn test_graphql_hidden_method_not_in_sdl() {
+    let svc = HiddenGraphqlService;
+    let sdl = svc.graphql_sdl();
+
+    // Public methods appear in SDL
+    assert!(sdl.contains("getPublic"), "getPublic must appear in SDL");
+    assert!(sdl.contains("createPublic"), "createPublic must appear in SDL");
+
+    // Hidden methods do NOT appear in SDL
+    assert!(!sdl.contains("getHidden"), "getHidden must not appear in SDL");
+    assert!(!sdl.contains("createHidden"), "createHidden must not appear in SDL");
+}
+
+#[test]
+fn test_graphql_hidden_schema_builds_successfully() {
+    let svc = HiddenGraphqlService;
+    // Schema must build without errors even with hidden methods
+    let schema = svc.graphql_schema();
+    let sdl = schema.sdl();
+    assert!(!sdl.is_empty());
+}

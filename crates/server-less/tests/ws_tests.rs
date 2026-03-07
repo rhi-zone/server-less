@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use server_less::ws;
+use server_less::{server, ws};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -489,4 +489,65 @@ fn test_ws_mount_trait_implemented() {
         <MathWs as WsMount>::ws_mount_dispatch(&svc, "add", serde_json::json!({"a": 1, "b": 2}));
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), serde_json::json!(3));
+}
+
+// ============================================================================
+// Hidden Method Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct HiddenWsService;
+
+#[ws]
+impl HiddenWsService {
+    /// Public WS method
+    pub fn public_ws(&self) -> String {
+        "public".to_string()
+    }
+
+    /// Hidden WS method - callable but not listed
+    #[server(hidden)]
+    pub fn hidden_ws(&self, x: i32) -> i32 {
+        x + 1
+    }
+}
+
+#[test]
+fn test_ws_hidden_method_not_in_methods_list() {
+    let methods = HiddenWsService::ws_methods();
+    // Public method appears
+    assert!(methods.contains(&"public_ws".to_string()));
+    // Hidden method does NOT appear
+    assert!(!methods.contains(&"hidden_ws".to_string()));
+}
+
+#[test]
+fn test_ws_hidden_method_still_dispatchable_sync() {
+    let svc = HiddenWsService;
+    let msg = r#"{"method": "hidden_ws", "params": {"x": 41}, "id": 1}"#;
+    let result = svc.ws_handle_message(msg);
+    assert!(result.is_ok());
+    let response: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+    assert_eq!(response["result"], serde_json::json!(42));
+}
+
+#[tokio::test]
+async fn test_ws_hidden_method_still_dispatchable_async() {
+    let svc = HiddenWsService;
+    let msg = r#"{"method": "hidden_ws", "params": {"x": 9}, "id": 1}"#;
+    let result = svc.ws_handle_message_async(msg).await;
+    assert!(result.is_ok());
+    let response: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+    assert_eq!(response["result"], serde_json::json!(10));
+}
+
+#[test]
+fn test_ws_hidden_method_not_in_openapi_summary() {
+    let paths = HiddenWsService::ws_openapi_paths();
+    assert_eq!(paths.len(), 1);
+    let path = &paths[0];
+    // The x-websocket-protocol extension lists methods; hidden must not appear
+    let extra_str = serde_json::to_string(&path.operation.extra).unwrap();
+    assert!(extra_str.contains("public_ws"), "public_ws must be in WS openapi extra");
+    assert!(!extra_str.contains("hidden_ws"), "hidden_ws must not be in WS openapi extra");
 }

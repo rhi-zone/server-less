@@ -149,7 +149,7 @@ use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
 
-use crate::server_attrs::has_server_skip;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 
 // Import Context helpers
 use crate::context::{
@@ -369,7 +369,8 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         });
 
         // Always collect for http_openapi_paths() (used by #[openapi] and #[serve])
-        if !overrides.hidden {
+        // Exclude from OpenAPI if hidden via #[route(hidden)] or #[server(hidden)]
+        if !overrides.hidden && !has_server_hidden(method) {
             openapi_methods.push((
                 (*method).clone(),
                 overrides.clone(),

@@ -55,7 +55,7 @@
 //! // {"jsonrpc": "2.0", "result": 8, "id": 1}
 //! ```
 
-use crate::server_attrs::has_server_skip;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
@@ -114,21 +114,29 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
     let partitioned = partition_methods(&methods, has_server_skip);
 
+    // Separate hidden from visible leaf methods.
+    // Hidden methods are still dispatchable but absent from method listings.
+    let visible_leaf: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .copied()
+        .filter(|m| !has_server_hidden(m))
+        .collect();
+
     let dispatch_arms_async: Vec<_> = partitioned
         .leaf
         .iter()
         .map(|m| generate_dispatch_arm(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
-    let method_names: Vec<_> = partitioned
-        .leaf
+    // method_names for jsonrpc_methods() and OpenRPC listing: visible only
+    let method_names: Vec<_> = visible_leaf
         .iter()
         .map(|m| m.name.to_string())
         .collect();
 
-    // Build method documentation
-    let jsonrpc_method_doc_entries: Vec<String> = partitioned
-        .leaf
+    // Build method documentation (visible methods only)
+    let jsonrpc_method_doc_entries: Vec<String> = visible_leaf
         .iter()
         .map(|m| {
             let name = m.name.to_string();

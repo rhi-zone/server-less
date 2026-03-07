@@ -153,7 +153,7 @@
 //! }
 //! ```
 
-use crate::server_attrs::has_server_skip;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name, partition_methods};
@@ -332,7 +332,16 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
     let partitioned = partition_methods(&methods, has_server_skip);
 
-    // Generate dispatch match arms (sync and async versions) for leaf methods only
+    // Separate hidden from visible leaf methods.
+    // Hidden methods are still dispatchable but absent from method listings.
+    let visible_leaf: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .copied()
+        .filter(|m| !has_server_hidden(m))
+        .collect();
+
+    // Generate dispatch match arms (sync and async versions) for ALL leaf methods
     let dispatch_arms_sync: Vec<_> = partitioned
         .leaf
         .iter()
@@ -345,16 +354,14 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         .map(|m| generate_dispatch_arm_async(m, has_qualified_ctx, has_qualified_sender))
         .collect::<syn::Result<Vec<_>>>()?;
 
-    // Method names for leaf methods
-    let method_names: Vec<_> = partitioned
-        .leaf
+    // Method names for visible leaf methods only
+    let method_names: Vec<_> = visible_leaf
         .iter()
         .map(|m| m.name.to_string())
         .collect();
 
-    // Build method documentation
-    let ws_method_doc_entries: Vec<String> = partitioned
-        .leaf
+    // Build method documentation (visible methods only)
+    let ws_method_doc_entries: Vec<String> = visible_leaf
         .iter()
         .map(|m| {
             let name = m.name.to_string();

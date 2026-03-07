@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use server_less::mcp;
+use server_less::{mcp, server};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -526,4 +526,63 @@ fn test_mcp_namespace_trait_implemented() {
     let result =
         <UserTools as McpNamespace>::mcp_namespace_call(&svc, "list", serde_json::json!({}));
     assert!(result.is_ok());
+}
+
+// ============================================================================
+// Hidden Method Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct HiddenService;
+
+#[mcp]
+impl HiddenService {
+    /// Public tool
+    pub fn public_tool(&self) -> String {
+        "public".to_string()
+    }
+
+    /// Hidden tool - callable but not listed
+    #[server(hidden)]
+    pub fn hidden_tool(&self) -> String {
+        "hidden".to_string()
+    }
+}
+
+#[test]
+fn test_mcp_hidden_method_not_in_tool_list() {
+    let tools = HiddenService::mcp_tools();
+    let names: Vec<_> = tools
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .collect();
+
+    // Public method appears in tool list
+    assert!(names.contains(&"public_tool"));
+    // Hidden method does NOT appear in tool list
+    assert!(!names.contains(&"hidden_tool"));
+}
+
+#[test]
+fn test_mcp_hidden_method_not_in_tool_names() {
+    let names = HiddenService::mcp_tool_names();
+    assert!(names.contains(&"public_tool".to_string()));
+    assert!(!names.contains(&"hidden_tool".to_string()));
+}
+
+#[test]
+fn test_mcp_hidden_method_still_callable() {
+    let svc = HiddenService;
+    // Hidden method must still be dispatchable even though it's not in the listing
+    let result = svc.mcp_call("hidden_tool", serde_json::json!({}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!("hidden"));
+}
+
+#[tokio::test]
+async fn test_mcp_hidden_method_callable_async() {
+    let svc = HiddenService;
+    let result = svc.mcp_call_async("hidden_tool", serde_json::json!({})).await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), serde_json::json!("hidden"));
 }

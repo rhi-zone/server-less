@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde_json::json;
-use server_less::jsonrpc;
+use server_less::{jsonrpc, server};
 
 #[derive(Clone)]
 struct Calculator;
@@ -470,4 +470,61 @@ async fn test_jsonrpc_iterator_strings_serializes_to_array() {
 
     assert!(response["result"].is_array(), "iterator result must be a JSON array");
     assert_eq!(response["result"], json!(["hello", "world"]));
+}
+
+// ============================================================================
+// Hidden Method Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct HiddenRpcService;
+
+#[jsonrpc]
+impl HiddenRpcService {
+    /// Public method
+    pub fn public_method(&self) -> String {
+        "public".to_string()
+    }
+
+    /// Hidden method - callable but not listed
+    #[server(hidden)]
+    pub fn hidden_method(&self, value: i32) -> i32 {
+        value * 2
+    }
+}
+
+#[test]
+fn test_jsonrpc_hidden_method_not_in_methods_list() {
+    let methods = HiddenRpcService::jsonrpc_methods();
+    // Public method appears in listing
+    assert!(methods.contains(&"public_method".to_string()));
+    // Hidden method does NOT appear in listing
+    assert!(!methods.contains(&"hidden_method".to_string()));
+}
+
+#[tokio::test]
+async fn test_jsonrpc_hidden_method_still_callable() {
+    let svc = HiddenRpcService;
+    // Hidden method must still dispatch even though it's absent from jsonrpc_methods()
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "hidden_method",
+        "params": {"value": 21},
+        "id": 1
+    });
+    let response = svc.jsonrpc_handle(request).await;
+    assert_eq!(response["result"], json!(42));
+}
+
+#[test]
+fn test_jsonrpc_hidden_method_absent_from_openapi_paths() {
+    let paths = HiddenRpcService::jsonrpc_openapi_paths();
+    // There is exactly one path (the JSON-RPC endpoint).
+    assert_eq!(paths.len(), 1);
+    // The method enum in the request body must not list the hidden method.
+    let path = &paths[0];
+    let body = path.operation.request_body.as_ref().unwrap();
+    let body_str = body.to_string();
+    assert!(body_str.contains("public_method"), "public_method must be in OpenRPC body");
+    assert!(!body_str.contains("hidden_method"), "hidden_method must not be in OpenRPC body");
 }

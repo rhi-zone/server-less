@@ -84,7 +84,7 @@ use quote::quote;
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{ItemImpl, Token, parse::Parse};
 
-use crate::server_attrs::has_server_skip;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 
 /// Arguments for the #[graphql] attribute
 #[derive(Default)]
@@ -157,7 +157,16 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     let methods = extract_methods(&impl_block)?;
 
     let partitioned = partition_methods(&methods, has_server_skip);
-    let leaf_methods = &partitioned.leaf;
+
+    // Hidden methods are excluded from schema/SDL (not visible in type) but remain callable.
+    let visible_leaf: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .copied()
+        .filter(|m| !has_server_hidden(m))
+        .collect();
+
+    let leaf_methods = &visible_leaf;
 
     let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = leaf_methods
         .iter()

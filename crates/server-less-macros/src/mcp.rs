@@ -54,7 +54,7 @@
 //!
 //! Also implements `McpNamespace` trait for composition.
 
-use crate::server_attrs::has_server_skip;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
@@ -123,14 +123,22 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
 
     let partitioned = partition_methods(&methods, has_server_skip);
 
-    // Generate tool definitions for leaf methods
-    let leaf_tool_definitions: Vec<_> = partitioned
+    // Separate hidden from visible leaf methods.
+    // Hidden methods are still dispatchable but absent from tool listings.
+    let visible_leaf: Vec<_> = partitioned
         .leaf
+        .iter()
+        .copied()
+        .filter(|m| !has_server_hidden(m))
+        .collect();
+
+    // Generate tool definitions for visible leaf methods only
+    let leaf_tool_definitions: Vec<_> = visible_leaf
         .iter()
         .map(|m| generate_tool_definition(&namespace_prefix, m))
         .collect();
 
-    // Generate dispatch match arms for leaf methods (sync and async)
+    // Generate dispatch match arms for ALL leaf methods (hidden methods remain callable)
     let leaf_dispatch_sync: Vec<_> = partitioned
         .leaf
         .iter()
@@ -143,9 +151,8 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .map(|m| generate_dispatch_arm_async(&namespace_prefix, m))
         .collect();
 
-    // Tool names for leaf methods
-    let leaf_tool_names: Vec<_> = partitioned
-        .leaf
+    // Tool names for visible leaf methods only
+    let leaf_tool_names: Vec<_> = visible_leaf
         .iter()
         .map(|m| format!("{}{}", namespace_prefix, m.name))
         .collect();
@@ -189,9 +196,8 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         )
         .collect::<syn::Result<Vec<_>>>()?;
 
-    // Build tool documentation
-    let tool_doc_entries: Vec<String> = partitioned
-        .leaf
+    // Build tool documentation (visible methods only)
+    let tool_doc_entries: Vec<String> = visible_leaf
         .iter()
         .map(|m| {
             let name = format!("{}{}", namespace_prefix, m.name);
