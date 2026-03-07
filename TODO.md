@@ -243,7 +243,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [ ] **`#[param]` has zero integration tests**: `http_tests.rs` comment says it can't be tested on stable. Verify MSRV / edition 2024 claim and add tests.
 
-- [ ] **`Path<T>`, `Query<T>`, `Json<T>` in `extract.rs` are dead code**: Defined with Deref impls but never referenced in generated code or tests.
+- [x] **`Path<T>`, `Query<T>`, `Json<T>` in `extract.rs` are dead code** ✅ Removed (54 lines); confirmed unused via grep across all crates.: Defined with Deref impls but never referenced in generated code or tests.
 
 - [ ] **`ErrorCode` missing `jsonrpc_code() -> i32`**: Has `http_status()`, `grpc_code()`, `exit_code()` but no JSON-RPC error code mapping.
 
@@ -257,9 +257,9 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **`if true { }` / `if false { }` in WS generated code** ✅ Moved uses_injected_params branch into Rust code to avoid dead warnings. (`ws.rs:795`): Produces dead_code/unreachable warnings in user's build output.
 
-- [ ] **Module doc in `cli.rs` missing async methods**: `cli_run_async`, `cli_run_with_async`, `cli_dispatch_async` not listed in module-level doc comment.
+- [x] **Module doc in `cli.rs` missing async methods** ✅ Listed cli_run_async, cli_run_with_async, cli_dispatch_async in generated methods section.: `cli_run_async`, `cli_run_with_async`, `cli_dispatch_async` not listed in module-level doc comment.
 
-- [ ] **`no_sync`/`no_async` trait semantics undocumented**: These suppress convenience methods only, not `cli_dispatch`/`cli_dispatch_async` on the trait. Surprising to users who expect full suppression.
+- [x] **`no_sync`/`no_async` trait semantics undocumented** ✅ Expanded CliArgs field doc comments explaining what is and is not suppressed and why.: These suppress convenience methods only, not `cli_dispatch`/`cli_dispatch_async` on the trait. Surprising to users who expect full suppression.
 
 - [x] **Only 4 compile-fail test fixtures** ✅ Added 5 fixtures: invalid_cli_attribute, invalid_param_attribute, serverless_error_on_struct, cli_on_non_impl, graphql_input_non_named_fields.: Missing coverage for invalid attribute syntax, conflicting attributes, multiple `#[cli(default)]` methods, `ServerlessError` on struct, etc.
 - [ ] **Multiple `#[cli(default)]` silently ignored**: When two methods are marked default, the macro takes the first silently. Should emit a compile error.
@@ -268,7 +268,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **Async return types untested** ✅ Added tests for Result<T,E> ok path, Option<T> some/none (via --json), and () unit return.
 
-- [ ] **Async + output flags untested**: `--json`, `--jq`, `--params-json`, `--input-schema`/`--output-schema` untested through async dispatch path.
+- [x] **Async + output flags untested** ✅ Added 4 tokio tests for --json, --jq, --output-schema, --params-json via cli_run_with_async.: `--json`, `--jq`, `--params-json`, `--input-schema`/`--output-schema` untested through async dispatch path.
 
 - [x] **Async slug mount dispatch untested** ✅ Added SlugParent/SlugChild test exercising generate_slug_mount_arm_async at runtime.
 
@@ -276,11 +276,11 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 ### LOW
 
-- [ ] **Pluralization produces "indexs", "statuss"** (`server-less-core` `infer_path`): Naive `+ "s"` heuristic.
+- [x] **Pluralization produces "indexs", "statuss"** ✅ Added pluralize() helper with es/ies/s rules; infer_path now uses it. (`server-less-core` `infer_path`): Naive `+ "s"` heuristic.
 
 - [ ] **CLI default output documented as `Display`, actually pretty-printed JSON**: `cli_format_output` default contradicts the design doc.
 
-- [ ] **`camel_to_sentence` unwrap** (`error.rs:255`): Safe in practice but should use explicit char handling.
+- [x] **`camel_to_sentence` unwrap** ✅ Replaced .next().unwrap() with for-loop over ToLowercase iterator. (`error.rs:255`): Safe in practice but should use explicit char handling.
 
 - [ ] **GraphQL: no mount point / composition tests**
 
