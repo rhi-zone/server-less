@@ -1546,3 +1546,97 @@ fn test_generic_service_compiles_and_dispatches() {
     let svc = GenericSvc { val: 42i32 };
     assert!(svc.cli_run_with(["generic-svc", "show"]).is_ok());
 }
+
+// ============================================================================
+// Async dispatch + output formatting flag tests
+// ============================================================================
+//
+// Cover --json, --jq, --output-schema, and --params-json going through the
+// async dispatch path (cli_run_with_async).
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+struct StatusInfo {
+    code: u32,
+    message: String,
+}
+
+impl std::fmt::Display for StatusInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+#[derive(Clone)]
+struct AsyncFormattingService;
+
+#[cli(name = "async-fmt-app")]
+impl AsyncFormattingService {
+    /// Return a structured status object
+    pub async fn status(&self) -> StatusInfo {
+        StatusInfo {
+            code: 200,
+            message: "ok".to_string(),
+        }
+    }
+
+    /// Echo a message with a count
+    pub async fn report(&self, label: String, count: u32) -> StatusInfo {
+        StatusInfo {
+            code: count,
+            message: label,
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_async_json_flag() {
+    let svc = AsyncFormattingService;
+    let result = svc
+        .cli_run_with_async(["async-fmt-app", "--json", "status"])
+        .await;
+    assert!(result.is_ok(), "async --json dispatch failed: {:?}", result);
+}
+
+#[tokio::test]
+async fn test_async_jq_flag() {
+    let svc = AsyncFormattingService;
+    let result = svc
+        .cli_run_with_async(["async-fmt-app", "--jq", ".message", "status"])
+        .await;
+    assert!(
+        result.is_ok(),
+        "async --jq dispatch failed: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn test_async_output_schema_flag() {
+    let svc = AsyncFormattingService;
+    let result = svc
+        .cli_run_with_async(["async-fmt-app", "--output-schema", "status"])
+        .await;
+    assert!(
+        result.is_ok(),
+        "async --output-schema dispatch failed: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn test_async_params_json_flag() {
+    let svc = AsyncFormattingService;
+    let result = svc
+        .cli_run_with_async([
+            "async-fmt-app",
+            "--params-json",
+            r#"{"label":"test","count":42}"#,
+            "report",
+        ])
+        .await;
+    assert!(
+        result.is_ok(),
+        "async --params-json dispatch failed: {:?}",
+        result
+    );
+}
