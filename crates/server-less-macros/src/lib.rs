@@ -11,6 +11,43 @@ use syn::ItemEnum;
 use syn::ItemStruct;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
 
+/// Compute the Levenshtein edit distance between two strings.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let m = a.len();
+    let n = b.len();
+    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+    for i in 0..=m {
+        dp[i][0] = i;
+    }
+    for j in 0..=n {
+        dp[0][j] = j;
+    }
+    for i in 1..=m {
+        for j in 1..=n {
+            dp[i][j] = if a[i - 1] == b[j - 1] {
+                dp[i - 1][j - 1]
+            } else {
+                1 + dp[i - 1][j - 1].min(dp[i - 1][j]).min(dp[i][j - 1])
+            };
+        }
+    }
+    dp[m][n]
+}
+
+/// Return the closest candidate to `input` within edit distance ≤ 2, or `None`.
+pub(crate) fn did_you_mean<'a>(input: &str, candidates: &[&'a str]) -> Option<&'a str> {
+    candidates
+        .iter()
+        .filter_map(|&c| {
+            let d = levenshtein(input, c);
+            if d <= 2 { Some((d, c)) } else { None }
+        })
+        .min_by_key(|&(d, _)| d)
+        .map(|(_, c)| c)
+}
+
 /// When `SERVER_LESS_DEBUG=1` is set at build time, print the generated token
 /// stream to stderr so implementors can inspect macro output without `cargo expand`.
 fn debug_emit(macro_name: &str, type_name: &str, tokens: &TokenStream2) {

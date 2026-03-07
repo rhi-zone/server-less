@@ -1,4 +1,4 @@
-error: unknown attribute `nonexistent_param_attr`
+error: unknown attribute `hlep` — did you mean `help`?
 
        Valid attributes: name, default, query, path, body, header, short, help, positional
 
@@ -10,7 +10,7 @@ error: unknown attribute `nonexistent_param_attr`
        - #[param(short = 'v')]
        - #[param(help = "Enable verbose output")]
        - #[param(positional)]
- --> tests/fixtures/invalid_param_attribute.rs:9:33
+ --> tests/fixtures/typo_suggestion_param.rs:9:33
   |
-9 |     pub fn hello(&self, #[param(nonexistent_param_attr)] name: String) -> String {
-  |                                 ^^^^^^^^^^^^^^^^^^^^^^
+9 |     pub fn hello(&self, #[param(hlep = "A greeting")] name: String) -> String {
+  |                                 ^^^^

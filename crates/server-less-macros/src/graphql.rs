@@ -125,10 +125,14 @@ impl Parse for GraphqlArgs {
                     args.inputs = input_types.into_iter().collect();
                 }
                 other => {
+                    const VALID: &[&str] = &["name", "enums", "inputs"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`\n\
+                            "unknown argument `{other}`{suggestion}\n\
                              \n\
                              Valid arguments: name, enums, inputs\n\
                              \n\

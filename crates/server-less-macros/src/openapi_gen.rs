@@ -103,8 +103,18 @@ impl RouteOverride {
                         .collect();
                     Ok(())
                 } else {
-                    Err(meta.error(
-                        "unknown attribute\n\
+                    const VALID: &[&str] =
+                        &["method", "path", "skip", "hidden", "tags", "deprecated"];
+                    let unknown = meta
+                        .path
+                        .get_ident()
+                        .map(|i| i.to_string())
+                        .unwrap_or_default();
+                    let suggestion = crate::did_you_mean(&unknown, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
+                    Err(meta.error(format!(
+                        "unknown attribute `{unknown}`{suggestion}\n\
                          \n\
                          Valid attributes: method, path, skip, hidden, tags, deprecated\n\
                          \n\
@@ -115,8 +125,8 @@ impl RouteOverride {
                          - #[route(tags = \"users,admin\")]\n\
                          - #[route(deprecated)]\n\
                          \n\
-                         Note: Use doc comments for descriptions (first line = summary, full = description)",
-                    ))
+                         Note: Use doc comments for descriptions (first line = summary, full = description)"
+                    )))
                 }
             })?;
         }
@@ -169,8 +179,18 @@ impl ResponseOverride {
                     result.description = Some(value.value());
                     Ok(())
                 } else {
-                    Err(meta.error(
-                        "unknown attribute\n\
+                    const VALID: &[&str] =
+                        &["status", "content_type", "header", "value", "description"];
+                    let unknown = meta
+                        .path
+                        .get_ident()
+                        .map(|i| i.to_string())
+                        .unwrap_or_default();
+                    let suggestion = crate::did_you_mean(&unknown, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
+                    Err(meta.error(format!(
+                        "unknown attribute `{unknown}`{suggestion}\n\
                          \n\
                          Valid attributes: status, content_type, header, value, description\n\
                          \n\
@@ -178,8 +198,8 @@ impl ResponseOverride {
                          - #[response(status = 201)]\n\
                          - #[response(content_type = \"application/octet-stream\")]\n\
                          - #[response(header = \"X-Custom\", value = \"foo\")]\n\
-                         - #[response(description = \"User created successfully\")]",
-                    ))
+                         - #[response(description = \"User created successfully\")]"
+                    )))
                 }
             })?;
         }

@@ -304,6 +304,43 @@ pub struct ParsedParamAttrs {
     pub positional: bool,
 }
 
+/// Compute Levenshtein edit distance between two strings.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let m = a.len();
+    let n = b.len();
+    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+    for i in 0..=m {
+        dp[i][0] = i;
+    }
+    for j in 0..=n {
+        dp[0][j] = j;
+    }
+    for i in 1..=m {
+        for j in 1..=n {
+            dp[i][j] = if a[i - 1] == b[j - 1] {
+                dp[i - 1][j - 1]
+            } else {
+                1 + dp[i - 1][j - 1].min(dp[i - 1][j]).min(dp[i][j - 1])
+            };
+        }
+    }
+    dp[m][n]
+}
+
+/// Return the closest candidate to `input` within edit distance ≤ 2, or `None`.
+fn did_you_mean<'a>(input: &str, candidates: &[&'a str]) -> Option<&'a str> {
+    candidates
+        .iter()
+        .filter_map(|&c| {
+            let d = levenshtein(input, c);
+            if d <= 2 { Some((d, c)) } else { None }
+        })
+        .min_by_key(|&(d, _)| d)
+        .map(|(_, c)| c)
+}
+
 /// Parse #[param(...)] attributes from a parameter
 pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAttrs> {
     let mut wire_name = None;
@@ -375,8 +412,20 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                 positional = true;
                 Ok(())
             } else {
-                Err(meta.error(
-                    "unknown attribute\n\
+                const VALID: &[&str] = &[
+                    "name", "default", "query", "path", "body", "header", "short", "help",
+                    "positional",
+                ];
+                let unknown = meta
+                    .path
+                    .get_ident()
+                    .map(|i| i.to_string())
+                    .unwrap_or_default();
+                let suggestion = did_you_mean(&unknown, VALID)
+                    .map(|s| format!(" — did you mean `{s}`?"))
+                    .unwrap_or_default();
+                Err(meta.error(format!(
+                    "unknown attribute `{unknown}`{suggestion}\n\
                      \n\
                      Valid attributes: name, default, query, path, body, header, short, help, positional\n\
                      \n\
@@ -387,8 +436,8 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                      - #[param(header, name = \"X-API-Key\")]\n\
                      - #[param(short = 'v')]\n\
                      - #[param(help = \"Enable verbose output\")]\n\
-                     - #[param(positional)]",
-                ))
+                     - #[param(positional)]"
+                )))
             }
         })?;
     }

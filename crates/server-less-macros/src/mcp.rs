@@ -89,10 +89,14 @@ impl Parse for McpArgs {
                     args.namespace = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] = &["namespace"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`. Valid arguments: namespace\n\
+                            "unknown argument `{other}`{suggestion}. Valid arguments: namespace\n\
                              \n\
                              Related: #[tool] preset (MCP + JSON Schema), #[jsonschema] (standalone schema)"
                         ),

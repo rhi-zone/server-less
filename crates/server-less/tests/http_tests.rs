@@ -1276,3 +1276,89 @@ fn test_param_help_route_in_openapi() {
         "#[param(help = \"...\")] should populate the OpenAPI parameter description"
     );
 }
+
+// ============================================================================
+// #[http(debug = true)] Tests
+// ============================================================================
+
+/// Service with debug enabled on the impl block — all methods get debug logging.
+#[derive(Clone)]
+struct DebugService;
+
+#[http(debug = true)]
+impl DebugService {
+    /// List items (debug on whole impl block)
+    pub fn list_debug_items(&self) -> Vec<String> {
+        vec!["a".to_string(), "b".to_string()]
+    }
+
+    /// Get item by ID (also gets debug from impl block)
+    pub fn get_debug_item(&self, item_id: String) -> Option<String> {
+        if item_id == "1" {
+            Some("found".to_string())
+        } else {
+            None
+        }
+    }
+}
+
+#[test]
+fn test_debug_impl_block_compiles_and_router_created() {
+    // Verifies that #[http(debug = true)] on an impl block compiles without error
+    // and produces a working router.
+    let service = DebugService;
+    let _router = service.http_router();
+}
+
+#[test]
+fn test_debug_impl_block_openapi_still_works() {
+    // Debug flag must not interfere with OpenAPI generation.
+    let spec = DebugService::openapi_spec();
+    assert_eq!(spec.get("openapi").unwrap(), "3.0.0");
+    let paths = spec.get("paths").unwrap().as_object().unwrap();
+    // list_debug_items → GET /debug_items, get_debug_item → GET /debug_items/{id}
+    assert!(
+        !paths.is_empty(),
+        "Expected OpenAPI paths from DebugService; got empty"
+    );
+}
+
+/// Service with debug enabled only on one method via per-method attribute.
+#[derive(Clone)]
+struct PerMethodDebugService;
+
+#[http]
+impl PerMethodDebugService {
+    /// This method has debug logging enabled.
+    #[http(debug = true)]
+    pub fn list_verbose_items(&self) -> Vec<String> {
+        vec!["x".to_string()]
+    }
+
+    /// This method does NOT have debug logging.
+    pub fn list_quiet_items(&self) -> Vec<String> {
+        vec!["y".to_string()]
+    }
+}
+
+#[test]
+fn test_per_method_debug_compiles_and_router_created() {
+    // Verifies that #[http(debug = true)] on a single method compiles without error.
+    let service = PerMethodDebugService;
+    let _router = service.http_router();
+}
+
+#[test]
+fn test_per_method_debug_openapi_still_works() {
+    // Both methods should still appear in OpenAPI regardless of debug flag.
+    let paths = PerMethodDebugService::http_openapi_paths();
+    assert_eq!(
+        paths.len(),
+        2,
+        "Both methods should appear in OpenAPI; got: {:?}",
+        paths
+            .iter()
+            .map(|p| p.operation.operation_id.as_deref().unwrap_or("?"))
+            .collect::<Vec<_>>()
+    );
+}

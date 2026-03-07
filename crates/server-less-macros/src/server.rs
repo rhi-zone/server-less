@@ -64,6 +64,7 @@ pub(crate) fn expand_server(args: ServerArgs, impl_block: ItemImpl) -> syn::Resu
     let http_args = HttpArgs {
         prefix: args.prefix,
         openapi: args.openapi,
+        debug: false,
     };
     let http_tokens = http::expand_http(http_args, impl_block.clone())?;
 

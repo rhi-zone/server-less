@@ -184,6 +184,11 @@ pub(crate) struct HttpArgs {
     pub prefix: Option<String>,
     /// Whether to generate OpenAPI spec (default: true)
     pub openapi: Option<bool>,
+    /// Whether to emit debug logging in generated handlers (default: false).
+    /// When true, each handler emits `eprintln!` lines before and after the
+    /// method call. Set on the impl block to enable for all methods, or on a
+    /// specific method via `#[http(debug = true)]`.
+    pub debug: bool,
 }
 
 impl Parse for HttpArgs {
@@ -203,15 +208,24 @@ impl Parse for HttpArgs {
                     let lit: syn::LitBool = input.parse()?;
                     args.openapi = Some(lit.value());
                 }
+                "debug" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.debug = lit.value();
+                }
                 other => {
+                    const VALID: &[&str] = &["prefix", "openapi", "debug"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`\n\
-                             Valid arguments: prefix, openapi\n\
+                            "unknown argument `{other}`{suggestion}\n\
+                             Valid arguments: prefix, openapi, debug\n\
                              Examples:\n\
                              - #[http(prefix = \"/api/v1\")]\n\
                              - #[http(openapi = false)]\n\
+                             - #[http(debug = true)]\n\
                              \n\
                              Related: #[serve] (multi-protocol), #[openapi] (standalone API docs), #[server] (blessed preset)"
                         ),
@@ -228,17 +242,19 @@ impl Parse for HttpArgs {
     }
 }
 
-/// Strip `#[param]`, `#[route]`, and `#[response]` attributes from the impl block
-/// before re-emitting it, so rustc does not encounter unknown or macro attributes
-/// on function parameters / methods in the generated output.
+/// Strip `#[param]`, `#[route]`, `#[response]`, and per-method `#[http]` attributes
+/// from the impl block before re-emitting it, so rustc does not encounter unknown
+/// or macro attributes on function parameters / methods in the generated output.
 fn strip_http_attrs(impl_block: &ItemImpl) -> ItemImpl {
     let mut block = impl_block.clone();
     for item in &mut block.items {
         if let syn::ImplItem::Fn(method) = item {
-            // Strip method-level HTTP attributes.
-            method
-                .attrs
-                .retain(|attr| !attr.path().is_ident("route") && !attr.path().is_ident("response"));
+            // Strip method-level HTTP attributes (route, response, and per-method http).
+            method.attrs.retain(|attr| {
+                !attr.path().is_ident("route")
+                    && !attr.path().is_ident("response")
+                    && !attr.path().is_ident("http")
+            });
             // Strip #[param(...)] from function parameters.
             for input in &mut method.sig.inputs {
                 if let syn::FnArg::Typed(pat_type) = input {
@@ -262,6 +278,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
     let prefix = args.prefix.unwrap_or_default();
     let generate_openapi = args.openapi.unwrap_or(true);
+    let impl_debug = args.debug;
 
     let partitioned = partition_methods(&methods, has_server_skip);
 
@@ -379,7 +396,9 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         );
         route_docs.push(format!("- `{}`", route_sig));
 
-        let handler = generate_handler(&struct_name, self_ty, method, &response_overrides, has_qualified)?;
+        // Per-method debug flag: method-level `#[http(debug = true)]` OR impl-level flag.
+        let method_debug = impl_debug || has_http_debug(method);
+        let handler = generate_handler(&struct_name, self_ty, method, &response_overrides, has_qualified, method_debug)?;
         handlers.push(handler);
 
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
@@ -514,10 +533,12 @@ fn generate_handler(
     method: &MethodInfo,
     response_overrides: &ResponseOverride,
     has_qualified: bool,
+    debug: bool,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
+    let method_name_str = method_name.to_string();
 
     let (param_extractions, param_calls) = generate_param_handling(method, has_qualified)?;
 
@@ -529,17 +550,61 @@ fn generate_handler(
 
     let response = generate_response_handling(method, &call, response_overrides)?;
 
-    let handler = quote! {
-        async fn #handler_name(
-            state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
-            #(#param_extractions),*
-        ) -> impl ::axum::response::IntoResponse {
-            let state = state_extractor.0;
-            #response
+    let handler = if debug {
+        quote! {
+            async fn #handler_name(
+                state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
+                #(#param_extractions),*
+            ) -> impl ::axum::response::IntoResponse {
+                let state = state_extractor.0;
+                eprintln!("[server-less] {} called", #method_name_str);
+                let __sl_response = #response;
+                eprintln!("[server-less] {} returned", #method_name_str);
+                __sl_response
+            }
+        }
+    } else {
+        quote! {
+            async fn #handler_name(
+                state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
+                #(#param_extractions),*
+            ) -> impl ::axum::response::IntoResponse {
+                let state = state_extractor.0;
+                #response
+            }
         }
     };
 
     Ok(handler)
+}
+
+/// Returns `true` if the method has `#[http(debug = true)]` on it directly.
+fn has_http_debug(method: &MethodInfo) -> bool {
+    for attr in &method.method.attrs {
+        if attr.path().is_ident("http") {
+            let mut found = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("debug") {
+                    if meta.input.peek(syn::Token![=]) {
+                        let value: syn::LitBool = meta.value()?.parse()?;
+                        if value.value() {
+                            found = true;
+                        }
+                    } else {
+                        found = true;
+                    }
+                } else if meta.input.peek(syn::Token![=]) {
+                    // Consume other key = value pairs to avoid parse errors.
+                    let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
+            if found {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn generate_param_handling(
@@ -1117,10 +1182,15 @@ impl Parse for ServeArgs {
                     }
                 }
                 other => {
+                    const VALID: &[&str] =
+                        &["http", "ws", "jsonrpc", "graphql", "health", "openapi"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`\n\
+                            "unknown argument `{other}`{suggestion}\n\
                              \n\
                              Valid protocols: http, ws, jsonrpc, graphql\n\
                              Valid options: health, openapi\n\

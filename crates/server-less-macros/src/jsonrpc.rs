@@ -85,9 +85,13 @@ impl Parse for JsonRpcArgs {
                     args.path = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] = &["path"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: path"),
+                        format!("unknown argument `{other}`{suggestion}. Valid arguments: path"),
                     ));
                 }
             }
