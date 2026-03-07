@@ -205,6 +205,88 @@ How do implementors know what server-less can do, at the moment they need it?
 
 ---
 
+## Audit Findings (2026-03-07)
+
+Six-agent audit of the codebase. Items are new discoveries — not duplicates of existing queue items.
+
+### CRITICAL — pre-publish blockers
+
+- [ ] **Generic impl blocks broken** (`server-less-parse/src/lib.rs` `get_impl_name`): Discards type parameters — `impl<T> MyService<T>` generates `impl MyService { }`, breaking all generic services with confusing compiler errors.
+
+- [ ] **Substring type inference produces wrong schemas** (`server-less-rpc/src/lib.rs` `infer_json_type`, `cli.rs` type_to_json_schema, `graphql_input.rs`): Uses `.contains("String")` etc., so `Vec<String>` → `"string"`, `HashMap<String, i32>` → `"string"`, user type named `Stringer` → `"string"`. Wrong schemas across MCP/JSON-RPC/WS/OpenAPI/CLI.
+
+### HIGH — embarrassing on crates.io
+
+- [ ] **`__trellis_` naming in generated code** (`http.rs`, `ws.rs`, `jsonrpc.rs`): Old project name visible in `cargo expand` output. Rename to `__server_less_`.
+
+- [ ] **`Box::leak` on every call in tool/method name fns** (`mcp.rs`, `jsonrpc.rs`, `ws.rs`): `mcp_tool_names()`, `jsonrpc_methods()`, `ws_methods()` call `Box::leak` on every invocation, leaking memory if called more than once. Fix: use `OnceLock` or return owned `String`s.
+
+- [ ] **`#[server(skip)]` ignored by GraphQL** (`graphql.rs`): Methods marked `#[server(skip)]` still appear in GraphQL schema. GraphQL doesn't call `partition_methods` at all.
+
+- [ ] **HTTP `partition_methods(|_| false)` skip bug** (`http.rs`): Passes hardcoded never-skip predicate to `partition_methods`, then manually checks `has_server_skip` afterwards — means skipped `&T`-returning methods still get classified as mount points.
+
+- [ ] **Context injection missing from MCP and GraphQL** (`mcp.rs`, `graphql.rs`): `server_less::Context` parameters treated as regular tool inputs/arguments instead of being injected. Breaks "annotate once, project anywhere" for any method using Context.
+
+- [ ] **`#[server(hidden)]` only respected by CLI**: Methods hidden from CLI help still appear in MCP tool lists, JSON-RPC method listings, OpenAPI specs, etc.
+
+- [ ] **`ServerlessError` → HTTP status uses string matching, not `IntoErrorCode`**: HTTP handler infers status codes from error message text ("not found" → 404) rather than the `IntoErrorCode` trait. `#[error(code = 409)]` may silently not work.
+
+- [ ] **lib.rs doc examples use `#[ignore]` and wrong version**: Main crate docs show `use server_less::prelude::*` with `#[ignore]` examples that don't compile; version shows `"0.1"` instead of current version. Bad on docs.rs.
+
+- [ ] **`JsonRpcMount` has no sync dispatch method**: Inconsistent with MCP, WS, and CLI which all have both sync and async variants.
+
+- [ ] **`.unwrap()` on `reference_inner` in mount code**: Multiple sites across `cli.rs`, `mcp.rs`, `jsonrpc.rs`, `ws.rs`, `http.rs` — should be `syn::Error` with span instead of macro panic.
+
+- [ ] **Nested tokio runtime panic in `cli_run()`**: If called from within a `#[tokio::main]` or `#[tokio::test]`, tokio panics with "Cannot start a runtime from within a runtime". Consider `Handle::try_current()` to return a proper `Err`.
+
+### MEDIUM
+
+- [ ] **`#[param]` has zero integration tests**: `http_tests.rs` comment says it can't be tested on stable. Verify MSRV / edition 2024 claim and add tests.
+
+- [ ] **`Path<T>`, `Query<T>`, `Json<T>` in `extract.rs` are dead code**: Defined with Deref impls but never referenced in generated code or tests.
+
+- [ ] **`ErrorCode` missing `jsonrpc_code() -> i32`**: Has `http_status()`, `grpc_code()`, `exit_code()` but no JSON-RPC error code mapping.
+
+- [ ] **HTTP mount OpenAPI composition incomplete**: Mounted child OpenAPI paths not merged into parent spec (acknowledged in test comment).
+
+- [ ] **`panic!` in generated schema file writers**: `grpc.rs`, `smithy.rs`, `thrift.rs`, `capnp.rs` use `panic!` in generated `write_*` methods for I/O errors. Should propagate errors.
+
+- [ ] **Stacking `#[cli]` + `#[http]` on same impl block doesn't compose**: Each macro re-emits the impl block; stacking two raw protocol macros duplicates user methods. Presets work via `strip_first_impl` but raw composition does not.
+
+- [ ] **Iterator types silently fail in RPC dispatch** (`server-less-rpc`): `impl Iterator<Item = T>` return type has no handling in `generate_json_response` — falls through to `serde_json::to_value(iterator)` which fails at runtime. CLI handles iterators correctly.
+
+- [ ] **`if true { }` / `if false { }` in WS generated code** (`ws.rs:795`): Produces dead_code/unreachable warnings in user's build output.
+
+- [ ] **Module doc in `cli.rs` missing async methods**: `cli_run_async`, `cli_run_with_async`, `cli_dispatch_async` not listed in module-level doc comment.
+
+- [ ] **`no_sync`/`no_async` trait semantics undocumented**: These suppress convenience methods only, not `cli_dispatch`/`cli_dispatch_async` on the trait. Surprising to users who expect full suppression.
+
+- [ ] **Only 4 compile-fail test fixtures**: Missing coverage for invalid attribute syntax, conflicting attributes, multiple `#[cli(default)]` methods, `ServerlessError` on struct, etc.
+
+### MEDIUM — async CLI (from targeted audit)
+
+- [ ] **Async return types untested**: No tests for async methods returning `Result<T,E>`, `Option<T>`, or `()` — all have distinct codegen branches.
+
+- [ ] **Async + output flags untested**: `--json`, `--jq`, `--params-json`, `--input-schema`/`--output-schema` untested through async dispatch path.
+
+- [ ] **Async slug mount dispatch untested**: `generate_slug_mount_arm_async` exercised only at compile time, never at runtime.
+
+- [ ] **`no_sync`/`no_async` compile-fail tests missing**: No fixture verifying that suppressed methods truly don't exist on the trait.
+
+### LOW
+
+- [ ] **Pluralization produces "indexs", "statuss"** (`server-less-core` `infer_path`): Naive `+ "s"` heuristic.
+
+- [ ] **CLI default output documented as `Display`, actually pretty-printed JSON**: `cli_format_output` default contradicts the design doc.
+
+- [ ] **`camel_to_sentence` unwrap** (`error.rs:255`): Safe in practice but should use explicit char handling.
+
+- [ ] **GraphQL: no mount point / composition tests**
+
+- [ ] **`serve` macro never tested with GraphQL**
+
+---
+
 ## Ideas / Research
 
 These need more design work before implementation:
