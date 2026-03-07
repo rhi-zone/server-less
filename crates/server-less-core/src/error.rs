@@ -125,6 +125,51 @@ pub trait IntoErrorCode {
     fn message(&self) -> String;
 }
 
+/// Fallback trait used by [`HttpStatusHelper`] when the concrete error type
+/// does not implement [`IntoErrorCode`].
+///
+/// This is part of the autoref specialization pattern. Generated HTTP handler
+/// code brings this trait into scope with `use ... as _` so that
+/// `HttpStatusHelper(&err).http_status_code()` resolves to 500 when the error
+/// type does not implement `IntoErrorCode`, without requiring specialization.
+///
+/// **Not intended for direct use.** Call `HttpStatusHelper(&err).http_status_code()`
+/// from generated code instead.
+pub trait HttpStatusFallback {
+    /// Returns the HTTP status code for this error, defaulting to 500.
+    fn http_status_code(&self) -> u16;
+}
+
+/// Helper wrapper used by generated HTTP handler code to map error values to
+/// HTTP status codes.
+///
+/// Method resolution picks the inherent impl (using [`IntoErrorCode`]) when the
+/// wrapped type implements [`IntoErrorCode`], and falls back to the
+/// [`HttpStatusFallback`] trait impl (which returns 500) otherwise.
+///
+/// # Example (generated code pattern)
+///
+/// ```ignore
+/// use ::server_less::HttpStatusFallback as _;
+/// let status_u16 = ::server_less::HttpStatusHelper(&err).http_status_code();
+/// ```
+pub struct HttpStatusHelper<'a, T>(pub &'a T);
+
+impl<T: IntoErrorCode> HttpStatusHelper<'_, T> {
+    /// Returns the HTTP status code derived from [`IntoErrorCode::error_code`].
+    pub fn http_status_code(&self) -> u16 {
+        self.0.error_code().http_status()
+    }
+}
+
+impl<T> HttpStatusFallback for HttpStatusHelper<'_, T> {
+    /// Fallback: returns 500 Internal Server Error for types that do not
+    /// implement [`IntoErrorCode`].
+    fn http_status_code(&self) -> u16 {
+        500
+    }
+}
+
 // Implement for common error types
 impl IntoErrorCode for std::io::Error {
     fn error_code(&self) -> ErrorCode {

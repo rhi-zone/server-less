@@ -5,7 +5,10 @@
 pub mod error;
 pub mod extract;
 
-pub use error::{ErrorCode, ErrorResponse, IntoErrorCode, SchemaValidationError};
+pub use error::{
+    ErrorCode, ErrorResponse, HttpStatusFallback, HttpStatusHelper, IntoErrorCode,
+    SchemaValidationError,
+};
 pub use extract::Context;
 
 #[cfg(feature = "ws")]

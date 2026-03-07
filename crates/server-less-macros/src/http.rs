@@ -679,11 +679,12 @@ fn generate_response_handling(
         quote! {
             {
                 use ::axum::response::IntoResponse;
+                use ::server_less::HttpStatusFallback as _;
                 match #call {
                     Ok(value) => ::axum::Json(value).into_response(),
                     Err(err) => {
-                        let code = ::server_less::ErrorCode::infer_from_name(&format!("{:?}", err));
-                        let status = ::axum::http::StatusCode::from_u16(code.http_status())
+                        let status_u16 = ::server_less::HttpStatusHelper(&err).http_status_code();
+                        let status = ::axum::http::StatusCode::from_u16(status_u16)
                             .unwrap_or(::axum::http::StatusCode::INTERNAL_SERVER_ERROR);
                         let body = ::server_less::serde_json::json!({
                             "error": format!("{:?}", err),
