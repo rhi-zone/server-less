@@ -260,10 +260,26 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
         );
 
         // Strip #[server(...)] from impl-level attrs (e.g. groups(...))
+        // Also strip #[param(...)] from function parameter attrs so rustc
+        // doesn't see them as unknown attributes in the emitted impl block.
         let mut clean_impl = impl_block;
         clean_impl
             .attrs
             .retain(|attr| !attr.path().is_ident("server"));
+        for item in &mut clean_impl.items {
+            if let syn::ImplItem::Fn(method) = item {
+                // Strip method-level HTTP attributes forwarded from parse stage.
+                method
+                    .attrs
+                    .retain(|attr| !attr.path().is_ident("route") && !attr.path().is_ident("response"));
+                // Strip #[param(...)] from function parameters.
+                for input in &mut method.sig.inputs {
+                    if let syn::FnArg::Typed(pat_type) = input {
+                        pat_type.attrs.retain(|attr| !attr.path().is_ident("param"));
+                    }
+                }
+            }
+        }
 
         // Only emit the impl block if no higher-priority protocol sibling is present.
         let maybe_impl = if crate::is_protocol_impl_emitter(&clean_impl, "openapi") {

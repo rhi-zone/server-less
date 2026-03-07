@@ -546,7 +546,11 @@ pub fn generate_openapi_spec(
             .map(|p| {
                 let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
-                quote! { (#name, "path", #json_type, true) }
+                let description_tokens = match &p.help_text {
+                    Some(text) => quote! { Some(#text) },
+                    None => quote! { None::<&str> },
+                };
+                quote! { (#name, "path", #json_type, true, #description_tokens) }
             })
             .collect();
 
@@ -556,7 +560,11 @@ pub fn generate_openapi_spec(
                 let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 let required = !p.is_optional && p.default_value.is_none();
-                quote! { (#name, "query", #json_type, #required) }
+                let description_tokens = match &p.help_text {
+                    Some(text) => quote! { Some(#text) },
+                    None => quote! { None::<&str> },
+                };
+                quote! { (#name, "query", #json_type, #required, #description_tokens) }
             })
             .collect();
 
@@ -566,7 +574,11 @@ pub fn generate_openapi_spec(
                 let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 let required = !p.is_optional && p.default_value.is_none();
-                quote! { (#name, "header", #json_type, #required) }
+                let description_tokens = match &p.help_text {
+                    Some(text) => quote! { Some(#text) },
+                    None => quote! { None::<&str> },
+                };
+                quote! { (#name, "header", #json_type, #required, #description_tokens) }
             })
             .collect();
 
@@ -639,35 +651,50 @@ pub fn generate_openapi_spec(
                 let mut parameters: Vec<::server_less::serde_json::Value> = Vec::new();
                 #(
                     {
-                        let (name, location, schema_type, required): (&str, &str, &str, bool) = #path_param_specs;
-                        parameters.push(::server_less::serde_json::json!({
+                        let (name, location, schema_type, required, description): (&str, &str, &str, bool, Option<&str>) = #path_param_specs;
+                        let mut param = ::server_less::serde_json::json!({
                             "name": name,
                             "in": location,
                             "required": required,
                             "schema": { "type": schema_type }
-                        }));
+                        });
+                        if let Some(desc) = description {
+                            param.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                                .insert("description".to_string(), ::server_less::serde_json::Value::String(desc.to_string()));
+                        }
+                        parameters.push(param);
                     }
                 )*
                 #(
                     {
-                        let (name, location, schema_type, required): (&str, &str, &str, bool) = #query_param_specs;
-                        parameters.push(::server_less::serde_json::json!({
+                        let (name, location, schema_type, required, description): (&str, &str, &str, bool, Option<&str>) = #query_param_specs;
+                        let mut param = ::server_less::serde_json::json!({
                             "name": name,
                             "in": location,
                             "required": required,
                             "schema": { "type": schema_type }
-                        }));
+                        });
+                        if let Some(desc) = description {
+                            param.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                                .insert("description".to_string(), ::server_less::serde_json::Value::String(desc.to_string()));
+                        }
+                        parameters.push(param);
                     }
                 )*
                 #(
                     {
-                        let (name, location, schema_type, required): (&str, &str, &str, bool) = #header_param_specs;
-                        parameters.push(::server_less::serde_json::json!({
+                        let (name, location, schema_type, required, description): (&str, &str, &str, bool, Option<&str>) = #header_param_specs;
+                        let mut param = ::server_less::serde_json::json!({
                             "name": name,
                             "in": location,
                             "required": required,
                             "schema": { "type": schema_type }
-                        }));
+                        });
+                        if let Some(desc) = description {
+                            param.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                                .insert("description".to_string(), ::server_less::serde_json::Value::String(desc.to_string()));
+                        }
+                        parameters.push(param);
                     }
                 )*
 

@@ -363,3 +363,89 @@ fn test_openapi_hidden_excludes_from_spec() {
         serde_json::to_string_pretty(paths).unwrap()
     );
 }
+
+// ============================================================================
+// param(help) wired into standalone #[openapi] JSON
+// ============================================================================
+
+#[derive(Clone)]
+struct ParamHelpStandaloneService;
+
+#[openapi(prefix = "/api")]
+impl ParamHelpStandaloneService {
+    /// Find users by name
+    pub fn find_users(
+        &self,
+        #[param(help = "Substring to match against user names")]
+        name: String,
+    ) -> Vec<String> {
+        vec![name]
+    }
+
+    /// Get item by ID
+    pub fn get_item(
+        &self,
+        id: String,
+        #[param(help = "Maximum number of results")]
+        limit: Option<u32>,
+    ) -> String {
+        id
+    }
+}
+
+#[test]
+fn test_param_help_in_standalone_openapi_query_param() {
+    let spec = ParamHelpStandaloneService::openapi_spec();
+    let paths = &spec["paths"];
+
+    let find_users = &paths["/api/users"]["get"];
+    assert!(
+        find_users.is_object(),
+        "Should have GET /api/users. Paths: {}",
+        serde_json::to_string_pretty(paths).unwrap()
+    );
+
+    let parameters = find_users["parameters"]
+        .as_array()
+        .expect("Should have parameters array");
+
+    let name_param = parameters
+        .iter()
+        .find(|p| p["name"].as_str() == Some("name"))
+        .expect("'name' parameter should appear in find_users OpenAPI spec");
+
+    assert_eq!(
+        name_param["description"].as_str(),
+        Some("Substring to match against user names"),
+        "#[param(help = \"...\")] should populate the OpenAPI parameter description in standalone mode"
+    );
+}
+
+#[test]
+fn test_param_help_in_standalone_openapi_optional_query_param() {
+    let spec = ParamHelpStandaloneService::openapi_spec();
+    let paths = &spec["paths"];
+
+    // get_item -> GET /api/items/{id}
+    let get_item = &paths["/api/items/{id}"]["get"];
+    assert!(
+        get_item.is_object(),
+        "Should have GET /api/items/{{id}}. Paths: {}",
+        serde_json::to_string_pretty(paths).unwrap()
+    );
+
+    let parameters = get_item["parameters"]
+        .as_array()
+        .expect("Should have parameters array");
+
+    let limit_param = parameters
+        .iter()
+        .find(|p| p["name"].as_str() == Some("limit"))
+        .expect("'limit' parameter should appear in get_item OpenAPI spec");
+
+    assert_eq!(
+        limit_param["description"].as_str(),
+        Some("Maximum number of results"),
+        "#[param(help = \"...\")] should populate the description for optional query params in standalone mode"
+    );
+}
