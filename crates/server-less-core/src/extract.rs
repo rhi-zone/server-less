@@ -266,60 +266,6 @@ impl WsSender {
     }
 }
 
-/// Marker type for parameters that should be extracted from the URL path
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Path<T>(pub T);
-
-impl<T> Path<T> {
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> std::ops::Deref for Path<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// Marker type for parameters that should be extracted from query string
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Query<T>(pub T);
-
-impl<T> Query<T> {
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> std::ops::Deref for Query<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// Marker type for parameters that should be extracted from request body
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Json<T>(pub T);
-
-impl<T> Json<T> {
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> std::ops::Deref for Json<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
