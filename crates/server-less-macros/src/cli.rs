@@ -747,6 +747,19 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 let matches = Self::cli_command().get_matches();
                 <Self as ::server_less::CliSubcommand>::cli_dispatch_async(self, &matches).await
             }
+
+            /// Run the CLI asynchronously with custom arguments.
+            ///
+            /// Like [`cli_run_async`] but accepts an iterator of arguments instead of process args.
+            /// Useful for testing async CLI dispatch.
+            pub async fn cli_run_with_async<I, T>(&self, args: I) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<::std::ffi::OsString> + Clone,
+            {
+                let matches = Self::cli_command().get_matches_from(args);
+                <Self as ::server_less::CliSubcommand>::cli_dispatch_async(self, &matches).await
+            }
         }
     } else {
         quote! {}

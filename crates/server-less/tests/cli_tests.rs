@@ -1204,3 +1204,181 @@ mod enum_param_tests {
         );
     }
 }
+
+// ============================================================================
+// Async dispatch tests
+// ============================================================================
+
+#[derive(Clone)]
+struct AsyncService {
+    log: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl AsyncService {
+    fn new() -> Self {
+        Self {
+            log: std::sync::Arc::new(std::sync::Mutex::new(vec![])),
+        }
+    }
+    fn logged(&self) -> Vec<String> {
+        self.log.lock().unwrap().clone()
+    }
+}
+
+#[cli(name = "async-app")]
+impl AsyncService {
+    /// Async method returning a value
+    pub async fn ping(&self) -> String {
+        self.log.lock().unwrap().push("ping".to_string());
+        "pong".to_string()
+    }
+
+    /// Async method with an argument
+    pub async fn echo(&self, msg: String) -> String {
+        self.log.lock().unwrap().push(format!("echo:{msg}"));
+        msg
+    }
+
+    /// Sync method on the same service
+    pub fn version(&self) -> String {
+        "1.0".to_string()
+    }
+}
+
+#[tokio::test]
+async fn test_async_dispatch_via_run_with_async() {
+    let svc = AsyncService::new();
+    let result = svc.cli_run_with_async(["async-app", "ping"]).await;
+    assert!(result.is_ok());
+    assert_eq!(svc.logged(), vec!["ping"]);
+}
+
+#[tokio::test]
+async fn test_async_dispatch_with_arg() {
+    let svc = AsyncService::new();
+    let result = svc
+        .cli_run_with_async(["async-app", "echo", "--msg", "hello"])
+        .await;
+    assert!(result.is_ok());
+    assert_eq!(svc.logged(), vec!["echo:hello"]);
+}
+
+#[tokio::test]
+async fn test_sync_method_via_async_dispatch() {
+    // Sync methods work fine through the async dispatch path
+    let svc = AsyncService::new();
+    let result = svc.cli_run_with_async(["async-app", "version"]).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_async_trait_dispatch_directly() {
+    use server_less::CliSubcommand;
+    let svc = AsyncService::new();
+    let matches = AsyncService::cli_command().get_matches_from(["async-app", "ping"]);
+    let result = <AsyncService as CliSubcommand>::cli_dispatch_async(&svc, &matches).await;
+    assert!(result.is_ok());
+    assert_eq!(svc.logged(), vec!["ping"]);
+}
+
+// Async mount point: child with async methods mounted under a parent.
+
+#[derive(Clone)]
+struct AsyncChild {
+    log: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl AsyncChild {
+    fn new_shared(log: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> Self {
+        Self { log }
+    }
+}
+
+#[cli(name = "async-child")]
+impl AsyncChild {
+    pub async fn work(&self) -> String {
+        self.log.lock().unwrap().push("work".to_string());
+        "done".to_string()
+    }
+}
+
+#[derive(Clone)]
+struct AsyncParent {
+    child: AsyncChild,
+}
+
+impl AsyncParent {
+    fn new() -> Self {
+        let log = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+        Self {
+            child: AsyncChild::new_shared(log),
+        }
+    }
+    fn logged(&self) -> Vec<String> {
+        self.child.log.lock().unwrap().clone()
+    }
+}
+
+#[cli(name = "async-parent")]
+impl AsyncParent {
+    pub async fn local(&self) -> String {
+        "local".to_string()
+    }
+
+    pub fn child(&self) -> &AsyncChild {
+        &self.child
+    }
+}
+
+#[tokio::test]
+async fn test_async_mount_local_method() {
+    let app = AsyncParent::new();
+    assert!(app.cli_run_with_async(["async-parent", "local"]).await.is_ok());
+}
+
+#[tokio::test]
+async fn test_async_mount_child_dispatch() {
+    let app = AsyncParent::new();
+    assert!(
+        app.cli_run_with_async(["async-parent", "child", "work"])
+            .await
+            .is_ok()
+    );
+    assert_eq!(app.logged(), vec!["work"]);
+}
+
+// no_sync: only async entrypoints generated.
+
+#[derive(Clone)]
+struct NoSyncService;
+
+#[cli(name = "no-sync-app", no_sync)]
+impl NoSyncService {
+    pub async fn run(&self) -> String {
+        "ran".to_string()
+    }
+}
+
+#[tokio::test]
+async fn test_no_sync_async_entrypoint_works() {
+    let svc = NoSyncService;
+    assert!(svc.cli_run_with_async(["no-sync-app", "run"]).await.is_ok());
+}
+
+// no_async: only sync entrypoints generated.
+
+#[derive(Clone)]
+struct NoAsyncService;
+
+#[cli(name = "no-async-app", no_async)]
+impl NoAsyncService {
+    pub fn run(&self) -> String {
+        "ran".to_string()
+    }
+}
+
+#[test]
+fn test_no_async_sync_entrypoint_works() {
+    let svc = NoAsyncService;
+    assert!(svc.cli_run_with(["no-async-app", "run"]).is_ok());
+}
