@@ -278,32 +278,50 @@ pub fn generate_dispatch_arm_with_injections(
     }
 }
 
-/// Infer JSON schema type from Rust type.
+/// Infer JSON schema type from Rust type using AST inspection.
+///
+/// Checks the outermost type name, not substrings, so `Vec<String>` → `"array"`,
+/// not `"string"`. Recurses into `Option<T>` to get the inner type.
 pub fn infer_json_type(ty: &syn::Type) -> &'static str {
-    let ty_str = quote!(#ty).to_string();
-
-    if ty_str.contains("String") || ty_str.contains("str") {
-        "string"
-    } else if ty_str.contains("i8")
-        || ty_str.contains("i16")
-        || ty_str.contains("i32")
-        || ty_str.contains("i64")
-        || ty_str.contains("u8")
-        || ty_str.contains("u16")
-        || ty_str.contains("u32")
-        || ty_str.contains("u64")
-        || ty_str.contains("isize")
-        || ty_str.contains("usize")
-    {
-        "integer"
-    } else if ty_str.contains("f32") || ty_str.contains("f64") {
-        "number"
-    } else if ty_str.contains("bool") {
-        "boolean"
-    } else if ty_str.contains("Vec") || ty_str.contains("[]") {
-        "array"
-    } else {
-        "object"
+    use syn::{GenericArgument, PathArguments, Type};
+    match ty {
+        Type::Path(type_path) => {
+            if let Some(segment) = type_path.path.segments.last() {
+                match segment.ident.to_string().as_str() {
+                    "String" => "string",
+                    "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "isize"
+                    | "usize" => "integer",
+                    "f32" | "f64" => "number",
+                    "bool" => "boolean",
+                    "Vec" => "array",
+                    "HashMap" | "BTreeMap" | "IndexMap" => "object",
+                    "Option" => {
+                        // Recurse into Option<T> to get the inner type's schema type
+                        if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                                return infer_json_type(inner);
+                            }
+                        }
+                        "object"
+                    }
+                    _ => "object",
+                }
+            } else {
+                "object"
+            }
+        }
+        // &str and &T
+        Type::Reference(r) => {
+            if let Type::Path(tp) = r.elem.as_ref()
+                && tp.path.is_ident("str")
+            {
+                "string"
+            } else {
+                infer_json_type(&r.elem)
+            }
+        }
+        Type::Slice(_) => "array",
+        _ => "object",
     }
 }
 
@@ -425,12 +443,10 @@ mod tests {
     }
 
     #[test]
-    fn infer_json_type_vec_string_matches_string_first() {
-        // Note: infer_json_type uses string matching, so Vec<String>
-        // matches "String" before "Vec", returning "string".
-        // This documents the current behavior.
+    fn infer_json_type_vec_string_is_array() {
+        // Vec<String> → outer type is Vec → "array"
         let ty: syn::Type = syn::parse_quote!(Vec<String>);
-        assert_eq!(infer_json_type(&ty), "string");
+        assert_eq!(infer_json_type(&ty), "array");
     }
 
     #[test]
@@ -1014,17 +1030,22 @@ mod tests {
 
     #[test]
     fn infer_json_type_option_string_is_string() {
-        // Option<String> contains "String" so it maps to "string"
+        // Option<T> recurses into T, so Option<String> → "string"
         let ty: syn::Type = syn::parse_quote!(Option<String>);
         assert_eq!(infer_json_type(&ty), "string");
     }
 
     #[test]
-    fn infer_json_type_vec_u8_matches_integer_first() {
-        // Vec<u8> matches "u8" (integer) before "Vec" (array) due to
-        // string-based matching order. This documents the current behavior.
+    fn infer_json_type_vec_u8_is_array() {
+        // Vec<u8> → outer type is Vec → "array"
         let ty: syn::Type = syn::parse_quote!(Vec<u8>);
-        assert_eq!(infer_json_type(&ty), "integer");
+        assert_eq!(infer_json_type(&ty), "array");
+    }
+
+    #[test]
+    fn infer_json_type_hashmap_is_object() {
+        let ty: syn::Type = syn::parse_quote!(HashMap<String, i32>);
+        assert_eq!(infer_json_type(&ty), "object");
     }
 
     #[test]

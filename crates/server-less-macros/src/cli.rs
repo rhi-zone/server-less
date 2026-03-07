@@ -936,39 +936,59 @@ fn generate_slug_mount_subcommand(
 
 /// Map a syn::Type to a JSON Schema `serde_json::json!(...)` token expression.
 ///
-/// Mirrors the pattern in `jsonschema.rs::get_type_schema` but emits token
-/// expressions rather than strings so the schema is built at compile time.
+/// Uses AST inspection instead of string matching so that `Vec<String>` → array
+/// and `Option<String>` → string (not "null|object").
 fn type_to_json_schema(ty: &Option<syn::Type>) -> TokenStream2 {
     let Some(ty) = ty else {
         return quote! { ::server_less::serde_json::json!({"type": "null"}) };
     };
+    type_to_json_schema_ty(ty)
+}
 
-    let type_str = quote!(#ty).to_string();
-
-    if type_str.contains("Vec<") || type_str.contains("Vec <") {
-        quote! { ::server_less::serde_json::json!({"type": "array", "items": {}}) }
-    } else if type_str.contains("Option<") || type_str.contains("Option <") {
-        quote! { ::server_less::serde_json::json!({"type": ["null", "object"]}) }
-    } else if type_str.contains("HashMap") || type_str.contains("BTreeMap") {
-        quote! { ::server_less::serde_json::json!({"type": "object", "additionalProperties": true}) }
-    } else if type_str.contains("String") || type_str.contains("str") {
-        quote! { ::server_less::serde_json::json!({"type": "string"}) }
-    } else if type_str.contains("i8")
-        || type_str.contains("i16")
-        || type_str.contains("i32")
-        || type_str.contains("i64")
-        || type_str.contains("u8")
-        || type_str.contains("u16")
-        || type_str.contains("u32")
-        || type_str.contains("u64")
-    {
-        quote! { ::server_less::serde_json::json!({"type": "integer"}) }
-    } else if type_str.contains("f32") || type_str.contains("f64") {
-        quote! { ::server_less::serde_json::json!({"type": "number"}) }
-    } else if type_str.contains("bool") {
-        quote! { ::server_less::serde_json::json!({"type": "boolean"}) }
-    } else {
-        quote! { ::server_less::serde_json::json!({"type": "object"}) }
+fn type_to_json_schema_ty(ty: &syn::Type) -> TokenStream2 {
+    use syn::{GenericArgument, PathArguments, Type};
+    match ty {
+        Type::Path(type_path) => {
+            let Some(segment) = type_path.path.segments.last() else {
+                return quote! { ::server_less::serde_json::json!({"type": "object"}) };
+            };
+            match segment.ident.to_string().as_str() {
+                "String" => quote! { ::server_less::serde_json::json!({"type": "string"}) },
+                "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "isize"
+                | "usize" => quote! { ::server_less::serde_json::json!({"type": "integer"}) },
+                "f32" | "f64" => quote! { ::server_less::serde_json::json!({"type": "number"}) },
+                "bool" => quote! { ::server_less::serde_json::json!({"type": "boolean"}) },
+                "Vec" => {
+                    quote! { ::server_less::serde_json::json!({"type": "array", "items": {}}) }
+                }
+                "HashMap" | "BTreeMap" | "IndexMap" => {
+                    quote! { ::server_less::serde_json::json!({"type": "object", "additionalProperties": true}) }
+                }
+                "Option" => {
+                    // Recurse into Option<T> — schema mirrors the inner type
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                        if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                            return type_to_json_schema_ty(inner);
+                        }
+                    }
+                    quote! { ::server_less::serde_json::json!({"type": "object"}) }
+                }
+                _ => quote! { ::server_less::serde_json::json!({"type": "object"}) },
+            }
+        }
+        Type::Reference(r) => {
+            if let Type::Path(tp) = r.elem.as_ref()
+                && tp.path.is_ident("str")
+            {
+                quote! { ::server_less::serde_json::json!({"type": "string"}) }
+            } else {
+                type_to_json_schema_ty(&r.elem)
+            }
+        }
+        Type::Slice(_) => {
+            quote! { ::server_less::serde_json::json!({"type": "array", "items": {}}) }
+        }
+        _ => quote! { ::server_less::serde_json::json!({"type": "object"}) },
     }
 }
 
