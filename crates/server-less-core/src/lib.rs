@@ -30,7 +30,9 @@ pub trait CliSubcommand {
     fn cli_dispatch_async<'a>(
         &'a self,
         matches: &'a ::clap::ArgMatches,
-    ) -> impl std::future::Future<Output = Result<(), Box<dyn std::error::Error>>> + 'a;
+    ) -> impl std::future::Future<Output = Result<(), Box<dyn std::error::Error>>> + 'a {
+        async move { self.cli_dispatch(matches) }
+    }
 }
 
 /// Trait for types that can be mounted as MCP tool namespaces.
