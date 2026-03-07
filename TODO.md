@@ -242,7 +242,8 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 ### MEDIUM
 
-- [ ] **`#[param]` has zero integration tests**: `http_tests.rs` comment says it can't be tested on stable. Verify MSRV / edition 2024 claim and add tests.
+- [x] **`#[param]` has zero integration tests** ✅ Added 8 tests covering name, query, path, body, default, header, help; fixed strip_http_attrs bug that was blocking compilation. Gap: help_text not wired to OpenAPI description.: `http_tests.rs` comment says it can't be tested on stable. Verify MSRV / edition 2024 claim and add tests.
+- [ ] **`#[param(help)]` not wired to OpenAPI description**: `ParamInfo::help_text` is parsed but `openapi_gen.rs` hardcodes `description: None` for all parameters.
 
 - [x] **`Path<T>`, `Query<T>`, `Json<T>` in `extract.rs` are dead code** ✅ Removed (54 lines); confirmed unused via grep across all crates.: Defined with Deref impls but never referenced in generated code or tests.
 
@@ -263,7 +264,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 - [x] **`no_sync`/`no_async` trait semantics undocumented** ✅ Expanded CliArgs field doc comments explaining what is and is not suppressed and why.: These suppress convenience methods only, not `cli_dispatch`/`cli_dispatch_async` on the trait. Surprising to users who expect full suppression.
 
 - [x] **Only 4 compile-fail test fixtures** ✅ Added 5 fixtures: invalid_cli_attribute, invalid_param_attribute, serverless_error_on_struct, cli_on_non_impl, graphql_input_non_named_fields.: Missing coverage for invalid attribute syntax, conflicting attributes, multiple `#[cli(default)]` methods, `ServerlessError` on struct, etc.
-- [ ] **Multiple `#[cli(default)]` silently ignored**: When two methods are marked default, the macro takes the first silently. Should emit a compile error.
+- [x] **Multiple `#[cli(default)]` silently ignored** ✅ Now emits syn::Error::new_spanned pointing at second default, naming the first. Compile-fail fixture added.: When two methods are marked default, the macro takes the first silently. Should emit a compile error.
 
 ### MEDIUM — async CLI (from targeted audit)
 
