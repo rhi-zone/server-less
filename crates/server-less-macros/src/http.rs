@@ -230,6 +230,8 @@ impl Parse for HttpArgs {
 
 pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     // PASS 1: Scan for qualified server_less::Context usage
@@ -342,7 +344,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         );
         route_docs.push(format!("- `{}`", route_sig));
 
-        let handler = generate_handler(&struct_name, method, &response_overrides, has_qualified)?;
+        let handler = generate_handler(&struct_name, self_ty, method, &response_overrides, has_qualified)?;
         handlers.push(handler);
 
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
@@ -419,7 +421,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     Ok(quote! {
         #impl_block
 
-        impl ::server_less::HttpMount for #struct_name {
+        impl #impl_generics ::server_less::HttpMount for #self_ty #where_clause {
             fn http_mount_router(self: ::std::sync::Arc<Self>) -> ::axum::Router {
                 use ::axum::routing::{get, post, put, patch, delete};
 
@@ -435,7 +437,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #router_doc]
             pub fn http_router(self) -> ::axum::Router
             where
@@ -461,6 +463,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
 fn generate_handler(
     struct_name: &syn::Ident,
+    self_ty: &syn::Type,
     method: &MethodInfo,
     response_overrides: &ResponseOverride,
     has_qualified: bool,
@@ -481,7 +484,7 @@ fn generate_handler(
 
     let handler = quote! {
         async fn #handler_name(
-            state_extractor: ::axum::extract::State<::std::sync::Arc<#struct_name>>,
+            state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
             #(#param_extractions),*
         ) -> impl ::axum::response::IntoResponse {
             let state = state_extractor.0;
@@ -1094,6 +1097,8 @@ impl Parse for ServeArgs {
 /// Coordinate multiple protocol handlers into a single server.
 pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
 
     let openapi_enabled = args.openapi_enabled();
     let health_path = args.health_path.unwrap_or_else(|| "/health".to_string());
@@ -1138,7 +1143,7 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
 
     // Generate the serve method
     let serve_impl = quote! {
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             /// Start serving all configured protocols.
             pub async fn serve(self, addr: impl ::std::convert::AsRef<str>) -> ::std::io::Result<()>
             where

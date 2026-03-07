@@ -150,6 +150,8 @@ impl Parse for GraphqlArgs {
 
 pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = methods
@@ -238,7 +240,7 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     Ok(quote! {
         #impl_block
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             /// Build the GraphQL dynamic schema
             pub fn graphql_schema(self) -> ::async_graphql::dynamic::Schema
             where

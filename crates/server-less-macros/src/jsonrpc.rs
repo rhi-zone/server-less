@@ -103,6 +103,8 @@ impl Parse for JsonRpcArgs {
 
 pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     // PASS 1: Scan for qualified server_less::Context usage
@@ -286,7 +288,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     Ok(quote! {
         #impl_block
 
-        impl ::server_less::JsonRpcMount for #struct_name {
+        impl #impl_generics ::server_less::JsonRpcMount for #self_ty #where_clause {
             fn jsonrpc_mount_methods() -> Vec<String> {
                 Self::jsonrpc_methods().into_iter().map(|s| s.to_string()).collect()
             }
@@ -300,7 +302,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #jsonrpc_methods_doc]
             pub fn jsonrpc_methods() -> Vec<&'static str> {
                 let mut names: Vec<&'static str> = vec![#(#method_names),*];
@@ -495,7 +497,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
         }
 
         async fn #handler_name(
-            ::axum::extract::State(state): ::axum::extract::State<::std::sync::Arc<#struct_name>>,
+            ::axum::extract::State(state): ::axum::extract::State<::std::sync::Arc<#self_ty>>,
             __context_headers: ::axum::http::HeaderMap,
             ::axum::Json(request): ::axum::Json<::server_less::serde_json::Value>,
         ) -> impl ::axum::response::IntoResponse {

@@ -320,6 +320,8 @@ impl Parse for WsArgs {
 
 pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     // PASS 1: Scan for qualified server_less::Context and server_less::WsSender usage
@@ -560,7 +562,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
     Ok(quote! {
         #impl_block
 
-        impl ::server_less::WsMount for #struct_name {
+        impl #impl_generics ::server_less::WsMount for #self_ty #where_clause {
             fn ws_mount_methods() -> Vec<String> {
                 Self::ws_methods().into_iter().map(|s| s.to_string()).collect()
             }
@@ -582,7 +584,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #ws_methods_doc]
             pub fn ws_methods() -> Vec<&'static str> {
                 let mut names: Vec<&'static str> = vec![#(#method_names),*];
@@ -785,7 +787,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         // WebSocket upgrade handler
         async fn #handler_name(
             ws: ::axum::extract::WebSocketUpgrade,
-            state_extractor: ::axum::extract::State<::std::sync::Arc<#struct_name>>,
+            state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
             __context_headers: ::axum::http::HeaderMap,
         ) -> impl ::axum::response::IntoResponse {
             let state = state_extractor.0;
@@ -813,7 +815,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         // Handle individual WebSocket connection
         async fn #connection_fn_name(
             socket: ::axum::extract::ws::WebSocket,
-            state: ::std::sync::Arc<#struct_name>,
+            state: ::std::sync::Arc<#self_ty>,
             __ctx: ::server_less::Context,
         ) {
             use ::futures::stream::StreamExt;

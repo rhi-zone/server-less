@@ -109,7 +109,9 @@ impl Parse for McpArgs {
 }
 
 pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
-    let struct_name = get_impl_name(&impl_block)?;
+    let _struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     let namespace = args.namespace.unwrap_or_default();
@@ -218,7 +220,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     Ok(quote! {
         #impl_block
 
-        impl ::server_less::McpNamespace for #struct_name {
+        impl #impl_generics ::server_less::McpNamespace for #self_ty #where_clause {
             fn mcp_namespace_tools() -> Vec<::server_less::serde_json::Value> {
                 Self::mcp_tools()
             }
@@ -244,7 +246,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #mcp_tools_doc]
             pub fn mcp_tools() -> Vec<::server_less::serde_json::Value> {
                 let mut tools = vec![

@@ -320,6 +320,8 @@ fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
 
 pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
     // PASS 1: Scan for qualified server_less::Context usage
@@ -649,7 +651,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     Ok(quote! {
         #clean_impl_block
 
-        impl ::server_less::CliSubcommand for #struct_name {
+        impl #impl_generics ::server_less::CliSubcommand for #self_ty #where_clause {
             fn cli_command() -> ::clap::Command {
                 ::clap::Command::new(#app_name)
                     .version(#version)
@@ -677,7 +679,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
         }
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             #[doc = #cli_command_doc]
             pub fn cli_command() -> ::clap::Command {
                 <Self as ::server_less::CliSubcommand>::cli_command()
@@ -690,10 +692,10 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
 
             /// Run the CLI with custom arguments
-            pub fn cli_run_with<I, T>(&self, args: I) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
+            pub fn cli_run_with<__CliI, __CliArg>(&self, args: __CliI) -> ::std::result::Result<(), Box<dyn ::std::error::Error>>
             where
-                I: IntoIterator<Item = T>,
-                T: Into<::std::ffi::OsString> + Clone,
+                __CliI: IntoIterator<Item = __CliArg>,
+                __CliArg: Into<::std::ffi::OsString> + Clone,
             {
                 let matches = Self::cli_command().get_matches_from(args);
                 <Self as ::server_less::CliSubcommand>::cli_dispatch(self, &matches)

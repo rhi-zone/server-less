@@ -103,6 +103,8 @@ pub(crate) fn expand_asyncapi(
     impl_block: ItemImpl,
 ) -> syn::Result<TokenStream2> {
     let struct_name = get_impl_name(&impl_block)?;
+    let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
+    let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
 
@@ -123,7 +125,7 @@ pub(crate) fn expand_asyncapi(
     Ok(quote! {
         #impl_block
 
-        impl #struct_name {
+        impl #impl_generics #self_ty #where_clause {
             /// Get the AsyncAPI specification for this service.
             pub fn asyncapi_spec() -> ::server_less::serde_json::Value {
                 let channels_str = concat!("{", #channels_json, "}");
