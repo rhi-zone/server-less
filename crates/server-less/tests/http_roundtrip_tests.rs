@@ -4,6 +4,9 @@
 //! complementing the macro expansion tests in http_tests.rs.
 
 #![allow(dead_code)]
+// `response` is an attribute macro consumed by #[http]; after strip_http_attrs
+// removes it from the re-emitted impl block the import appears unused to rustc.
+#![allow(unused_imports)]
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};

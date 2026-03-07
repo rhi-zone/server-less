@@ -2,6 +2,11 @@
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
+// `response` and `route` are attribute macros consumed by #[http]; after
+// strip_http_attrs removes them from the re-emitted impl block, they no longer
+// appear in the compiled output, so rustc cannot see them as "used".  The
+// imports are still needed at the source level for the macro attribute syntax.
+#![allow(unused_imports)]
 
 use serde::{Deserialize, Serialize};
 use server_less::{http, response, route, server};
@@ -743,26 +748,11 @@ fn test_http_mount_trait_implemented() {
 }
 
 // ============================================================================
-// Parameter Customization
+// Parameter Customization Tests
 // ============================================================================
-// The #[param(...)] attribute for parameter customization is implemented and
-// functional, but cannot be tested in this file due to Rust stable not supporting
-// custom attributes on function parameters.
-//
-// The feature works correctly and is demonstrated in examples/param_service.rs
-// (which requires nightly Rust to compile).
-//
-// Supported syntax:
-// - #[param(name = "q")] - Custom wire name
-// - #[param(default = 10)] - Default value
-// - #[param(query/path/body/header)] - Location override
-//
-// The parsing logic is tested in server-less-parse, and the HTTP macro
-// correctly uses wire_name and default_value when generating handlers.
-
-// ============================================================================
-// Hidden Method Tests (#[server(hidden)])
-// ============================================================================
+// Custom attributes on function parameters (#[param(...)]) have been stable
+// since Rust 1.63 (edition 2021+). This crate uses edition 2024 / MSRV 1.89,
+// so all #[param] attributes can be tested here on stable without any caveats.
 
 #[derive(Clone)]
 struct HiddenHttpService;
@@ -931,4 +921,332 @@ async fn test_serverless_error_ok_returns_200() {
         "Expected HTTP 200 for Ok case, got: {}",
         response.status()
     );
+}
+
+// Custom attributes on function parameters (#[param(...)]) have been stable
+// since Rust 1.63 (edition 2021+). This crate uses edition 2024 / MSRV 1.89,
+// so all #[param] attributes can be tested here on stable without any caveats.
+
+#[derive(Clone)]
+struct ParamService;
+
+#[http(prefix = "/api")]
+impl ParamService {
+    /// Search with custom wire name
+    ///
+    /// Uses #[param(name = "q")] to map `query` → wire key "q".
+    pub fn search_items(
+        &self,
+        #[param(name = "q")] query: String,
+    ) -> Vec<String> {
+        vec![query]
+    }
+
+    /// Explicit query location
+    ///
+    /// Forces `filter` into the query string even on a POST-like name.
+    #[route(method = "GET", path = "/param-query")]
+    pub fn get_param_query(
+        &self,
+        #[param(query)] filter: String,
+    ) -> String {
+        filter
+    }
+
+    /// Explicit path location
+    ///
+    /// Forces `slug` to be extracted from the path segment.
+    #[route(path = "/by-slug/{slug}")]
+    pub fn get_by_slug(
+        &self,
+        #[param(path)] slug: String,
+    ) -> Option<String> {
+        Some(slug)
+    }
+
+    /// Explicit body location on a GET-inferred method
+    ///
+    /// Overrides the default (query) to body for `payload`.
+    #[route(method = "POST", path = "/param-body")]
+    pub fn post_param_body(
+        &self,
+        #[param(body)] payload: String,
+    ) -> String {
+        payload
+    }
+
+    /// Default value when query param absent
+    ///
+    /// `page` defaults to 1 and `size` defaults to 20 if not supplied.
+    pub fn list_with_defaults(
+        &self,
+        #[param(default = 1)] page: u32,
+        #[param(default = 20)] size: u32,
+    ) -> Vec<String> {
+        vec![format!("page={page},size={size}")]
+    }
+
+    /// Header-sourced parameter
+    ///
+    /// `api_key` is read from the `X-Api-Key` header.
+    pub fn get_secured(
+        &self,
+        #[param(header, name = "X-Api-Key")] api_key: Option<String>,
+    ) -> String {
+        api_key.unwrap_or_default()
+    }
+
+    /// Help text annotation
+    ///
+    /// #[param(help = "...")] carries description metadata parsed into
+    /// ParamInfo::help_text.  It is available to the OpenAPI generator but
+    /// currently not wired into OpenApiParameter::description (tracked in
+    /// TODO.md).  The test below verifies the macro compiles and the route
+    /// appears in the spec; once the gap is closed the description assertion
+    /// can be enabled.
+    pub fn find_users(
+        &self,
+        #[param(help = "Substring to match against user names")] name: Option<String>,
+    ) -> Vec<String> {
+        vec![name.unwrap_or_default()]
+    }
+}
+
+// ── compile / router-creation tests ──────────────────────────────────────────
+
+#[test]
+fn test_param_service_router_created() {
+    let service = ParamService;
+    let _router = service.http_router();
+}
+
+// ── OpenAPI structural tests ──────────────────────────────────────────────────
+
+/// #[param(name = "q")] — the OpenAPI parameter name should be "q", not "query".
+#[test]
+fn test_param_custom_wire_name_in_openapi() {
+    let paths = ParamService::http_openapi_paths();
+
+    let search = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("search_items".to_string()))
+        .expect("search_items path missing");
+
+    let param_names: Vec<&str> = search
+        .operation
+        .parameters
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+
+    assert!(
+        param_names.contains(&"q"),
+        "#[param(name = \"q\")] should rename the wire parameter to 'q'; got: {:?}",
+        param_names
+    );
+    assert!(
+        !param_names.contains(&"query"),
+        "original Rust name 'query' should not appear as the wire name; got: {:?}",
+        param_names
+    );
+}
+
+/// #[param(query)] — parameter should appear as a query parameter in OpenAPI.
+#[test]
+fn test_param_explicit_query_in_openapi() {
+    let paths = ParamService::http_openapi_paths();
+
+    let route = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("get_param_query".to_string()))
+        .expect("get_param_query path missing");
+
+    let filter_param = route
+        .operation
+        .parameters
+        .iter()
+        .find(|p| p.name == "filter")
+        .expect("'filter' parameter missing from get_param_query OpenAPI spec");
+
+    assert_eq!(
+        filter_param.location, "query",
+        "#[param(query)] should place the parameter in query location; got: {:?}",
+        filter_param.location
+    );
+}
+
+/// #[param(path)] — parameter should appear as a path parameter in OpenAPI.
+#[test]
+fn test_param_explicit_path_in_openapi() {
+    let paths = ParamService::http_openapi_paths();
+
+    let route = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("get_by_slug".to_string()))
+        .expect("get_by_slug path missing");
+
+    let slug_param = route
+        .operation
+        .parameters
+        .iter()
+        .find(|p| p.name == "slug")
+        .expect("'slug' parameter missing from get_by_slug OpenAPI spec");
+
+    assert_eq!(
+        slug_param.location, "path",
+        "#[param(path)] should place the parameter in path location; got: {:?}",
+        slug_param.location
+    );
+    assert!(
+        slug_param.required,
+        "path parameters must be required in OpenAPI"
+    );
+}
+
+/// #[param(body)] — parameter should appear in the request body, not parameters list.
+#[test]
+fn test_param_explicit_body_in_openapi() {
+    let paths = ParamService::http_openapi_paths();
+
+    let route = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("post_param_body".to_string()))
+        .expect("post_param_body path missing");
+
+    // Body parameters are encoded in requestBody, not the parameters array.
+    assert!(
+        route.operation.request_body.is_some(),
+        "#[param(body)] should produce a requestBody; got: {:?}",
+        route.operation
+    );
+
+    // The parameters array should NOT contain 'payload'.
+    let param_names: Vec<&str> = route
+        .operation
+        .parameters
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+    assert!(
+        !param_names.contains(&"payload"),
+        "#[param(body)] param should not appear in parameters array; got: {:?}",
+        param_names
+    );
+
+    // Verify the body schema includes the 'payload' property.
+    let body = route.operation.request_body.as_ref().unwrap();
+    let schema = body
+        .get("content")
+        .and_then(|c| c.get("application/json"))
+        .and_then(|j| j.get("schema"))
+        .and_then(|s| s.get("properties"))
+        .expect("requestBody should have content.application/json.schema.properties");
+
+    assert!(
+        schema.get("payload").is_some(),
+        "'payload' should be a property in the request body schema; got: {:?}",
+        schema
+    );
+}
+
+/// #[param(default = N)] — parameter should be marked optional (not required) in OpenAPI
+/// because a default value means the caller may omit it.
+#[test]
+fn test_param_default_value_not_required_in_openapi() {
+    let paths = ParamService::http_openapi_paths();
+
+    let route = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("list_with_defaults".to_string()))
+        .expect("list_with_defaults path missing");
+
+    for param in &route.operation.parameters {
+        if param.name == "page" || param.name == "size" {
+            assert!(
+                !param.required,
+                "#[param(default = ...)] parameter '{}' should be optional in OpenAPI; \
+                 got required=true",
+                param.name
+            );
+        }
+    }
+
+    let param_names: Vec<&str> = route
+        .operation
+        .parameters
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+    assert!(
+        param_names.contains(&"page"),
+        "expected 'page' parameter; got: {:?}",
+        param_names
+    );
+    assert!(
+        param_names.contains(&"size"),
+        "expected 'size' parameter; got: {:?}",
+        param_names
+    );
+}
+
+/// #[param(header, name = "X-Api-Key")] — parameter should appear as a header
+/// parameter with the correct wire name in the OpenAPI spec.
+#[test]
+fn test_param_header_in_openapi() {
+    let paths = ParamService::http_openapi_paths();
+
+    let route = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("get_secured".to_string()))
+        .expect("get_secured path missing");
+
+    let header_param = route
+        .operation
+        .parameters
+        .iter()
+        .find(|p| p.name == "X-Api-Key")
+        .expect("'X-Api-Key' header parameter missing from get_secured OpenAPI spec");
+
+    assert_eq!(
+        header_param.location, "header",
+        "#[param(header)] should place the parameter in header location; got: {:?}",
+        header_param.location
+    );
+}
+
+/// #[param(help = "...")] — the route compiles and appears in the OpenAPI spec.
+///
+/// NOTE: `help_text` is parsed into `ParamInfo::help_text` but is currently
+/// not forwarded to `OpenApiParameter::description` (hardcoded to `None` in
+/// openapi_gen.rs line ~354).  This is tracked in TODO.md.  Once that gap is
+/// closed, uncomment the description assertion below.
+#[test]
+fn test_param_help_route_in_openapi() {
+    let paths = ParamService::http_openapi_paths();
+
+    let route = paths
+        .iter()
+        .find(|p| p.operation.operation_id == Some("find_users".to_string()))
+        .expect("find_users path missing");
+
+    // The parameter must at least appear in the OpenAPI spec.
+    let name_param = route
+        .operation
+        .parameters
+        .iter()
+        .find(|p| p.name == "name");
+    assert!(
+        name_param.is_some(),
+        "'name' parameter should appear in find_users OpenAPI spec; got: {:?}",
+        route.operation.parameters
+    );
+
+    // Once ParamInfo::help_text is wired into OpenApiParameter::description,
+    // enable this assertion:
+    //
+    // assert_eq!(
+    //     name_param.unwrap().description.as_deref(),
+    //     Some("Substring to match against user names"),
+    //     "#[param(help = \"...\")] should populate the OpenAPI parameter description"
+    // );
 }
