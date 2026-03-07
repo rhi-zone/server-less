@@ -105,18 +105,11 @@ Prioritized backlog of pending features and improvements.
 
 ### Client Generation
 
-- [ ] TypeScript client generator from OpenAPI spec
-- [ ] Python client generator from OpenAPI spec
-- [ ] Rust client generator from OpenAPI spec
-- [ ] CLI tool: `server-less generate-client --lang ts --output ./client`
+> **Not planned here** — spun out to `rhizone/normalize`. Client generation (TS/Python/Rust stubs from OpenAPI) lives there.
 
 ### gRPC Runtime
 
-- [ ] tonic integration for `#[grpc]`
-- [ ] Generate server trait implementation
-- [ ] Generate client stub
-- [ ] Error code mapping (Rust errors → gRPC status codes)
-- [ ] Metadata/header support
+> **Not planned here** — spun out to `rhizone/normalize`. tonic integration and gRPC client/server codegen lives there.
 
 ### Implementor DX — Capability Discovery
 
