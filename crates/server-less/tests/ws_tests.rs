@@ -67,11 +67,11 @@ impl TestService {
 fn test_ws_methods_generated() {
     let methods = TestService::ws_methods();
     assert_eq!(methods.len(), 5);
-    assert!(methods.contains(&"echo"));
-    assert!(methods.contains(&"add"));
-    assert!(methods.contains(&"next_id"));
-    assert!(methods.contains(&"create_item"));
-    assert!(methods.contains(&"search"));
+    assert!(methods.contains(&"echo".to_string()));
+    assert!(methods.contains(&"add".to_string()));
+    assert!(methods.contains(&"next_id".to_string()));
+    assert!(methods.contains(&"create_item".to_string()));
+    assert!(methods.contains(&"search".to_string()));
 }
 
 #[test]
@@ -392,11 +392,11 @@ fn test_ws_static_mount_methods_listed() {
     let methods = WsApp::ws_methods();
 
     // Leaf method
-    assert!(methods.contains(&"ping"));
+    assert!(methods.contains(&"ping".to_string()));
     // Mounted methods (dot-separated)
-    assert!(methods.contains(&"math.add"));
-    assert!(methods.contains(&"math.double"));
-    assert!(methods.contains(&"echo_svc.echo"));
+    assert!(methods.contains(&"math.add".to_string()));
+    assert!(methods.contains(&"math.double".to_string()));
+    assert!(methods.contains(&"echo_svc.echo".to_string()));
 }
 
 #[test]
@@ -459,8 +459,8 @@ impl WsSlugApp {
 fn test_ws_slug_mount_methods_listed() {
     let methods = WsSlugApp::ws_methods();
 
-    assert!(methods.contains(&"calc.add"));
-    assert!(methods.contains(&"calc.double"));
+    assert!(methods.contains(&"calc.add".to_string()));
+    assert!(methods.contains(&"calc.double".to_string()));
 }
 
 #[test]

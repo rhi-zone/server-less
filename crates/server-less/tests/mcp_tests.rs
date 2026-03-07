@@ -69,7 +69,7 @@ fn test_mcp_tools_generated() {
 fn test_mcp_tool_names() {
     let names = TestService::mcp_tool_names();
     assert_eq!(names.len(), 4);
-    assert!(names.contains(&"test_list_items"));
+    assert!(names.contains(&"test_list_items".to_string()));
 }
 
 #[test]

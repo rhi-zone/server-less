@@ -521,9 +521,9 @@ fn test_server_hidden_present_but_hidden_in_cli() {
 #[test]
 fn test_server_skip_excluded_from_mcp() {
     let tool_names: Vec<_> = SkipMcp::mcp_tool_names().to_vec();
-    assert!(tool_names.contains(&"visible"), "visible should be a tool");
+    assert!(tool_names.contains(&"visible".to_string()), "visible should be a tool");
     assert!(
-        !tool_names.contains(&"internal"),
+        !tool_names.contains(&"internal".to_string()),
         "internal should be skipped"
     );
 }

@@ -35,10 +35,10 @@ impl Calculator {
 #[test]
 fn test_jsonrpc_methods_list() {
     let methods = Calculator::jsonrpc_methods();
-    assert!(methods.contains(&"add"));
-    assert!(methods.contains(&"subtract"));
-    assert!(methods.contains(&"multiply"));
-    assert!(methods.contains(&"echo"));
+    assert!(methods.contains(&"add".to_string()));
+    assert!(methods.contains(&"subtract".to_string()));
+    assert!(methods.contains(&"multiply".to_string()));
+    assert!(methods.contains(&"echo".to_string()));
 }
 
 #[tokio::test]
@@ -212,7 +212,7 @@ impl CustomPathService {
 fn test_jsonrpc_custom_path_compiles() {
     // Just verify it compiles with custom path
     let methods = CustomPathService::jsonrpc_methods();
-    assert!(methods.contains(&"ping"));
+    assert!(methods.contains(&"ping".to_string()));
 }
 
 #[test]
@@ -303,11 +303,11 @@ fn test_jsonrpc_static_mount_methods_listed() {
     let methods = JsonRpcApp::jsonrpc_methods();
 
     // Leaf method
-    assert!(methods.contains(&"ping"));
+    assert!(methods.contains(&"ping".to_string()));
     // Mounted methods (dot-separated)
-    assert!(methods.contains(&"math.add"));
-    assert!(methods.contains(&"math.double"));
-    assert!(methods.contains(&"strings.upper"));
+    assert!(methods.contains(&"math.add".to_string()));
+    assert!(methods.contains(&"math.double".to_string()));
+    assert!(methods.contains(&"strings.upper".to_string()));
 }
 
 #[tokio::test]
@@ -388,8 +388,8 @@ impl JsonRpcSlugApp {
 fn test_jsonrpc_slug_mount_methods_listed() {
     let methods = JsonRpcSlugApp::jsonrpc_methods();
 
-    assert!(methods.contains(&"calc.add"));
-    assert!(methods.contains(&"calc.double"));
+    assert!(methods.contains(&"calc.add".to_string()));
+    assert!(methods.contains(&"calc.double".to_string()));
 }
 
 #[tokio::test]

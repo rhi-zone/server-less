@@ -562,7 +562,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
         impl ::server_less::WsMount for #struct_name {
             fn ws_mount_methods() -> Vec<String> {
-                Self::ws_methods().into_iter().map(|s| s.to_string()).collect()
+                Self::ws_methods()
             }
 
             fn ws_mount_dispatch(
@@ -584,8 +584,8 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
         impl #struct_name {
             #[doc = #ws_methods_doc]
-            pub fn ws_methods() -> Vec<&'static str> {
-                let mut names: Vec<&'static str> = vec![#(#method_names),*];
+            pub fn ws_methods() -> Vec<String> {
+                let mut names: Vec<String> = vec![#(#method_names.to_string()),*];
                 #(#mount_method_names)*
                 names
             }
@@ -953,7 +953,7 @@ fn generate_ws_mount_method_names(method: &MethodInfo) -> TokenStream2 {
             let child_methods = <#inner_ty as ::server_less::WsMount>::ws_mount_methods();
             for child_name in child_methods {
                 let prefixed = format!("{}{}", #mount_prefix, child_name);
-                names.push(Box::leak(prefixed.into_boxed_str()));
+                names.push(prefixed);
             }
         }
     }

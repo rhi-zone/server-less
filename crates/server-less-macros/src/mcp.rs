@@ -224,7 +224,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
 
             fn mcp_namespace_tool_names() -> Vec<String> {
-                Self::mcp_tool_names().into_iter().map(|s| s.to_string()).collect()
+                Self::mcp_tool_names()
             }
 
             fn mcp_namespace_call(
@@ -255,8 +255,8 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
 
             /// Get tool names
-            pub fn mcp_tool_names() -> Vec<&'static str> {
-                let mut names: Vec<&'static str> = vec![#(#leaf_tool_names),*];
+            pub fn mcp_tool_names() -> Vec<String> {
+                let mut names: Vec<String> = vec![#(#leaf_tool_names.to_string()),*];
                 #(#mount_tool_names)*
                 names
             }
@@ -426,14 +426,12 @@ fn generate_mount_tool_names(namespace_prefix: &str, method: &MethodInfo) -> Tok
     let full_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
 
-    // Note: these names are dynamic (come from the child), so we leak them for 'static lifetime.
-    // This is fine since tool name lists are typically built once and cached.
     quote! {
         {
             let child_names = <#inner_ty as ::server_less::McpNamespace>::mcp_namespace_tool_names();
             for child_name in child_names {
                 let prefixed = format!("{}{}", #full_prefix, child_name);
-                names.push(Box::leak(prefixed.into_boxed_str()));
+                names.push(prefixed);
             }
         }
     }

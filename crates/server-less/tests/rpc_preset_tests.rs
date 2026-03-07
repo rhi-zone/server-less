@@ -26,8 +26,8 @@ impl BasicCalc {
 #[test]
 fn test_rpc_basic_methods() {
     let methods = BasicCalc::jsonrpc_methods();
-    assert!(methods.contains(&"add"));
-    assert!(methods.contains(&"multiply"));
+    assert!(methods.contains(&"add".to_string()));
+    assert!(methods.contains(&"multiply".to_string()));
 }
 
 #[tokio::test]
@@ -86,7 +86,7 @@ impl NoSpecCalc {
 #[test]
 fn test_rpc_no_openrpc() {
     let methods = NoSpecCalc::jsonrpc_methods();
-    assert!(methods.contains(&"add"));
+    assert!(methods.contains(&"add".to_string()));
     // openrpc_spec() should NOT be available — verified by compilation
 }
 

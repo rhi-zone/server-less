@@ -288,7 +288,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
         impl ::server_less::JsonRpcMount for #struct_name {
             fn jsonrpc_mount_methods() -> Vec<String> {
-                Self::jsonrpc_methods().into_iter().map(|s| s.to_string()).collect()
+                Self::jsonrpc_methods()
             }
 
             async fn jsonrpc_mount_dispatch(
@@ -302,8 +302,8 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
         impl #struct_name {
             #[doc = #jsonrpc_methods_doc]
-            pub fn jsonrpc_methods() -> Vec<&'static str> {
-                let mut names: Vec<&'static str> = vec![#(#method_names),*];
+            pub fn jsonrpc_methods() -> Vec<String> {
+                let mut names: Vec<String> = vec![#(#method_names.to_string()),*];
                 #(#mount_method_names)*
                 names
             }
@@ -577,7 +577,7 @@ fn generate_mount_method_names(method: &MethodInfo) -> TokenStream2 {
             let child_methods = <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_methods();
             for child_name in child_methods {
                 let prefixed = format!("{}{}", #mount_prefix, child_name);
-                names.push(Box::leak(prefixed.into_boxed_str()));
+                names.push(prefixed);
             }
         }
     }

@@ -135,5 +135,5 @@ fn test_asyncapi_with_ws() {
     assert_eq!(spec["info"]["title"], "Combined WebSocket API");
 
     let methods = CombinedService::ws_methods();
-    assert!(methods.contains(&"echo"));
+    assert!(methods.contains(&"echo".to_string()));
 }

@@ -163,5 +163,5 @@ fn test_openrpc_with_jsonrpc() {
     assert_eq!(spec["info"]["title"], "Combined Service");
 
     let methods = CombinedService::jsonrpc_methods();
-    assert!(methods.contains(&"greet"));
+    assert!(methods.contains(&"greet".to_string()));
 }
