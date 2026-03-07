@@ -236,7 +236,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **`JsonRpcMount` has no sync dispatch method** ✅ Added jsonrpc_mount_dispatch() sync variant to trait and generated impl; async-only methods return clear error from sync path.: Inconsistent with MCP, WS, and CLI which all have both sync and async variants.
 
-- [ ] **`.unwrap()` on `reference_inner` in mount code**: Multiple sites across `cli.rs`, `mcp.rs`, `jsonrpc.rs`, `ws.rs`, `http.rs` — should be `syn::Error` with span instead of macro panic.
+- [x] **`.unwrap()` on `reference_inner` in mount code** ✅ Remaining two sites in `jsonrpc.rs` (`generate_static_mount_dispatch_sync`, `generate_slug_mount_dispatch_sync`) converted to `ok_or_else(syn::Error)` + `syn::Result` return types.
 
 - [x] **Nested tokio runtime panic in `cli_run()`** ✅ Handle::try_current() guard added; returns proper Err if called inside tokio context.: If called from within a `#[tokio::main]` or `#[tokio::test]`, tokio panics with "Cannot start a runtime from within a runtime". Consider `Handle::try_current()` to return a proper `Err`.
 

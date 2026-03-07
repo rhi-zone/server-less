@@ -665,3 +665,51 @@ async fn test_mcp_context_param_method_callable_async() {
     assert!(result.is_ok(), "Async call should succeed: {:?}", result);
     assert_eq!(result.unwrap(), serde_json::json!("Hello, Bob!"));
 }
+
+// ============================================================================
+// #[param(help)] in MCP tool input schema
+// ============================================================================
+
+#[derive(Clone)]
+struct HelpParamService;
+
+#[mcp]
+impl HelpParamService {
+    pub fn greet(
+        &self,
+        #[param(help = "The name to greet")] name: String,
+        #[param(help = "Optional title prefix")] title: Option<String>,
+    ) -> String {
+        match title {
+            Some(t) => format!("{} {}!", t, name),
+            None => format!("Hello, {}!", name),
+        }
+    }
+}
+
+#[test]
+fn test_mcp_param_help_in_input_schema() {
+    let tools = HelpParamService::mcp_tools();
+    let tool = tools
+        .iter()
+        .find(|t| t.get("name").unwrap().as_str().unwrap() == "greet")
+        .expect("greet tool should exist");
+
+    let props = tool
+        .get("inputSchema")
+        .unwrap()
+        .get("properties")
+        .unwrap()
+        .as_object()
+        .unwrap();
+
+    let name_desc = props["name"].get("description").unwrap().as_str().unwrap();
+    assert_eq!(name_desc, "The name to greet");
+
+    let title_desc = props["title"]
+        .get("description")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(title_desc, "Optional title prefix");
+}

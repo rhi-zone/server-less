@@ -109,11 +109,29 @@ impl Parse for McpArgs {
     }
 }
 
+/// Strip `#[param(...)]` attributes from function parameters in the re-emitted impl block.
+/// These are consumed by the `#[mcp]` macro during parsing; leaving them in the output
+/// would cause "cannot find attribute `param`" errors if `#[http]` is not also applied.
+fn strip_param_attrs(impl_block: &ItemImpl) -> ItemImpl {
+    let mut block = impl_block.clone();
+    for item in &mut block.items {
+        if let syn::ImplItem::Fn(method) = item {
+            for input in &mut method.sig.inputs {
+                if let syn::FnArg::Typed(pat_type) = input {
+                    pat_type.attrs.retain(|attr| !attr.path().is_ident("param"));
+                }
+            }
+        }
+    }
+    block
+}
+
 pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     let _struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
+    let clean_impl = strip_param_attrs(&impl_block);
 
     let namespace = args.namespace.unwrap_or_default();
     let namespace_prefix = if namespace.is_empty() {
@@ -228,7 +246,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     };
 
     Ok(quote! {
-        #impl_block
+        #clean_impl
 
         impl #impl_generics ::server_less::McpNamespace for #self_ty #where_clause {
             fn mcp_namespace_tools() -> Vec<::server_less::serde_json::Value> {

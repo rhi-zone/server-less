@@ -341,7 +341,10 @@ pub fn generate_param_schema(params: &[ParamInfo]) -> (Vec<TokenStream>, Vec<Str
         .map(|p| {
             let param_name = p.name.to_string();
             let param_type = infer_json_type(&p.ty);
-            let description = format!("Parameter: {}", param_name);
+            let description = p
+                .help_text
+                .clone()
+                .unwrap_or_else(|| format!("Parameter: {}", param_name));
 
             quote! {
                 (#param_name, #param_type, #description)
@@ -365,7 +368,10 @@ pub fn generate_param_schema_for(params: &[&ParamInfo]) -> (Vec<TokenStream>, Ve
         .map(|p| {
             let param_name = p.name.to_string();
             let param_type = infer_json_type(&p.ty);
-            let description = format!("Parameter: {}", param_name);
+            let description = p
+                .help_text
+                .clone()
+                .unwrap_or_else(|| format!("Parameter: {}", param_name));
 
             quote! {
                 (#param_name, #param_type, #description)
