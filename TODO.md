@@ -120,14 +120,11 @@ Prioritized backlog of pending features and improvements.
 
 How do implementors know what server-less can do, at the moment they need it?
 
-**Compiler-driven discovery (highest priority):**
-- [ ] Contextual hints when macros detect patterns they can help with
-  - e.g., `#[http]` sees `&SubService` return → note about mount points
-  - e.g., method returns `Result<_, E>` but no `ServerlessError` → hint about error mapping
-  - e.g., multiple protocol attrs without `#[openapi]` → hint about OpenAPI composition
-- [ ] "Did you mean X?" suggestions for attribute typos
+**Compiler-driven discovery:**
+- [x] "Did you mean X?" suggestions for attribute typos ✅ Levenshtein (≤2) across all 10 attribute parsers.
 - [ ] "Add `async` to use `.await`" hints
 - [ ] Show snippet of generated code in complex errors
+- [ ] Contextual hints at expansion time — **not feasible** for cross-item cases (e.g. "add `#[http]` to `Users`") since proc macros only see the item they're applied to. Intra-item patterns (malformed signatures, conflicting attrs) are covered by existing errors.
 
 **Inline examples in diagnostics:**
 - [ ] Error messages include short code snippets showing the fix
@@ -135,7 +132,7 @@ How do implementors know what server-less can do, at the moment they need it?
 
 **Introspection tooling:**
 - [ ] `cargo serverless explain <topic>` CLI — dumps available attributes, inferred behaviors
-- [x] `SERVER_LESS_DEBUG=1` env var prints generated code to stderr ✅ `debug_emit()` in `lib.rs` called for every macro; checks `== Ok("1")` (not just set).
+- [x] `SERVER_LESS_DEBUG=1` env var prints generated code to stderr ✅
 - [x] `#[http(debug = true)]` verbose request/response logging ✅
 - [ ] `#[http(trace = true)]` parameter extraction tracing
 
@@ -145,7 +142,7 @@ How do implementors know what server-less can do, at the moment they need it?
 
 **Other diagnostics:**
 - [ ] Warn about unused parameters
-- [ ] Warn about methods that could be `&self` instead of `&mut self`
+- > `&mut self` → `&self` warning is clippy's job, not ours.
 
 ### Development Tools
 
