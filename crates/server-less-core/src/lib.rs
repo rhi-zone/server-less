@@ -140,12 +140,20 @@ pub struct HttpMountPathInfo {
     pub summary: Option<String>,
 }
 
-/// Format CLI output according to output flags.
+/// Format a `serde_json::Value` according to the active JSON output flag.
 ///
-/// - `jsonl`: one JSON object per line for array values
-/// - `json`: machine-readable JSON (no whitespace)
-/// - `jq`: filter using jaq (jq implemented in Rust, no external binary needed)
-/// - Default: pretty-printed JSON
+/// This function is only called when at least one JSON flag is active
+/// (`--json`, `--jsonl`, or `--jq`). The overall CLI default output path
+/// (human-readable `Display` text) is generated directly by the `#[cli]`
+/// macro and does not go through this function.
+///
+/// Flag precedence (first match wins):
+///
+/// - `jq`: filter the value using jaq (jq implemented in Rust, no external binary needed)
+/// - `jsonl`: one compact JSON object per line (arrays are unwrapped; non-arrays emit a single line)
+/// - `json` (`true`): compact JSON — `serde_json::to_string`, no whitespace
+/// - `json` (`false`) with no other flag active: pretty-printed JSON — only reachable when called
+///   directly, not from `#[cli]`-generated code (which always sets at least one flag)
 #[cfg(feature = "cli")]
 pub fn cli_format_output(
     value: serde_json::Value,
