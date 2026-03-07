@@ -131,7 +131,12 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
-    let clean_impl = strip_param_attrs(&impl_block);
+    let clean_impl = if crate::is_protocol_impl_emitter(&impl_block, "mcp") {
+        let stripped = strip_param_attrs(&impl_block);
+        quote! { #stripped }
+    } else {
+        quote! {}
+    };
 
     let namespace = args.namespace.unwrap_or_default();
     let namespace_prefix = if namespace.is_empty() {

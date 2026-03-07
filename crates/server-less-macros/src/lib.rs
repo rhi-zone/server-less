@@ -62,6 +62,49 @@ fn strip_first_impl(tokens: TokenStream2) -> TokenStream2 {
     quote::quote! { #(#remaining)* }
 }
 
+/// Priority-ordered list of protocol macro attribute names.
+///
+/// When multiple protocol macros are stacked on the same impl block, Rust expands
+/// each independently (outputs are concatenated, not pipelined).  To avoid emitting
+/// the impl block multiple times, exactly ONE macro — the one with the highest
+/// priority that's present — takes responsibility for emitting it.
+const PROTOCOL_PRIORITY: &[&str] = &[
+    "cli", "http", "mcp", "jsonrpc", "ws", "graphql", "openapi", "openrpc",
+];
+
+/// Returns `true` if this protocol macro should emit the original impl block.
+///
+/// A macro emits the impl when no higher-priority protocol sibling is present on
+/// the same impl block.  This ensures exactly one copy is emitted when macros are
+/// stacked, preventing duplicate method definitions.
+pub(crate) fn is_protocol_impl_emitter(impl_block: &ItemImpl, current: &str) -> bool {
+    let current_pos = PROTOCOL_PRIORITY
+        .iter()
+        .position(|&p| p == current)
+        .unwrap_or(usize::MAX);
+    // Emit if no sibling with LOWER index (higher priority) is present.
+    !impl_block.attrs.iter().any(|attr| {
+        PROTOCOL_PRIORITY[..current_pos]
+            .iter()
+            .any(|name| attr.path().is_ident(name))
+    })
+}
+
+/// Strip all protocol macro attributes from an impl block's outer attribute list.
+///
+/// Called by the designated impl-emitter before re-emitting the impl block so that
+/// the remaining protocol attrs are not processed again (which would cause double
+/// expansion).
+pub(crate) fn strip_protocol_impl_attrs(impl_block: &ItemImpl) -> ItemImpl {
+    let mut block = impl_block.clone();
+    block.attrs.retain(|attr| {
+        !PROTOCOL_PRIORITY
+            .iter()
+            .any(|name| attr.path().is_ident(name))
+    });
+    block
+}
+
 #[cfg(feature = "asyncapi")]
 mod asyncapi;
 #[cfg(feature = "capnp")]

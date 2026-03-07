@@ -331,8 +331,14 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
         )
     };
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "jsonrpc") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics ::server_less::JsonRpcMount for #self_ty #where_clause {
             fn jsonrpc_mount_methods() -> Vec<String> {

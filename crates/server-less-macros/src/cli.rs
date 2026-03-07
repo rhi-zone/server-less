@@ -672,8 +672,18 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         )
     };
 
-    // Strip #[cli(...)] attrs from the emitted impl block
-    let clean_impl_block = strip_cli_attrs(&impl_block);
+    // Emit the impl block only if this is the highest-priority protocol macro present.
+    // When multiple protocol macros are stacked, exactly one emits the impl block;
+    // others skip it to prevent duplicate method definitions.
+    // Emit the impl block only if this is the highest-priority protocol macro present.
+    // Keep sibling protocol attrs on the re-emitted impl so the pipeline processes them next.
+    // Only strip cli-specific method-level attrs; leave #[http], #[mcp], etc. intact.
+    let clean_impl_block = if crate::is_protocol_impl_emitter(&impl_block, "cli") {
+        let stripped = strip_cli_attrs(&impl_block);
+        quote! { #stripped }
+    } else {
+        quote! {}
+    };
 
     // Generate global flag args on root command
     let global_flag_args: Vec<_> = global_flags_with_help

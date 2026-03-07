@@ -588,8 +588,14 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
         }
     };
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "ws") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics ::server_less::WsMount for #self_ty #where_clause {
             fn ws_mount_methods() -> Vec<String> {

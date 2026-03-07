@@ -458,7 +458,12 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         quote! {}
     };
 
-    let clean_impl = strip_http_attrs(&impl_block);
+    let clean_impl = if crate::is_protocol_impl_emitter(&impl_block, "http") {
+        let stripped = strip_http_attrs(&impl_block);
+        quote! { #stripped }
+    } else {
+        quote! {}
+    };
 
     Ok(quote! {
         #clean_impl

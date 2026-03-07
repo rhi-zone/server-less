@@ -7,7 +7,7 @@
 //! apply macros to generate protocol handlers, and verify the results match.
 
 use serde::{Deserialize, Serialize};
-use server_less::{cli, http, mcp, server, ws};
+use server_less::{cli, http, jsonrpc, mcp, server, ws};
 
 // ============================================================================
 // Reference Implementation
@@ -564,4 +564,96 @@ fn test_ws_visible_still_callable_alongside_skip() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_str(&response).unwrap();
     assert_eq!(json["result"], "visible");
+}
+
+// ============================================================================
+// Raw Protocol Stacking Tests
+// ============================================================================
+// Verifies that multiple protocol macros can be applied to the same impl block
+// without duplicating method definitions.  The outermost macro skips re-emitting
+// the impl; the innermost emits it exactly once.
+
+#[derive(Clone)]
+struct MultiProtocolService;
+
+#[cli(name = "multi")]
+#[http]
+#[mcp]
+impl MultiProtocolService {
+    /// Greet someone
+    pub fn greet(&self, name: String) -> String {
+        format!("Hello, {}!", name)
+    }
+
+    /// Add two numbers
+    pub fn add(&self, a: i64, b: i64) -> i64 {
+        a + b
+    }
+}
+
+#[test]
+fn test_stacked_cli_http_mcp_compiles_and_methods_work() {
+    // Verify user methods are accessible (impl block emitted exactly once)
+    let svc = MultiProtocolService;
+    assert_eq!(svc.greet("World".to_string()), "Hello, World!");
+    assert_eq!(svc.add(3, 4), 7);
+}
+
+#[test]
+fn test_stacked_cli_command_generated() {
+    let cmd = MultiProtocolService::cli_command();
+    assert_eq!(cmd.get_name(), "multi");
+    assert!(cmd.find_subcommand("greet").is_some());
+    assert!(cmd.find_subcommand("add").is_some());
+}
+
+#[test]
+fn test_stacked_http_mount_router_generated() {
+    let router = <MultiProtocolService as server_less::HttpMount>::http_mount_router(
+        std::sync::Arc::new(MultiProtocolService),
+    );
+    let _ = router; // router creation succeeds
+}
+
+#[test]
+fn test_stacked_mcp_tools_generated() {
+    let tools = MultiProtocolService::mcp_tools();
+    let names: Vec<_> = tools
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"greet"));
+    assert!(names.contains(&"add"));
+}
+
+// Two-protocol stack: cli + jsonrpc
+#[derive(Clone)]
+struct DualService;
+
+#[cli(name = "dual")]
+#[jsonrpc]
+impl DualService {
+    /// Echo value
+    pub fn echo(&self, value: String) -> String {
+        value
+    }
+}
+
+#[tokio::test]
+async fn test_stacked_cli_jsonrpc_compiles() {
+    let svc = DualService;
+    assert_eq!(svc.echo("hi".to_string()), "hi");
+
+    // Both protocol methods generated
+    let cmd = DualService::cli_command();
+    assert!(cmd.find_subcommand("echo").is_some());
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "echo",
+        "params": {"value": "hello"},
+        "id": 1
+    });
+    let response = svc.jsonrpc_handle(request).await;
+    assert_eq!(response["result"], "hello");
 }

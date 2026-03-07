@@ -374,8 +374,14 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     let merge_query_helper = generate_merge_query_helper(&struct_name, &query_methods, has_qualified);
     let merge_mutation_helper = generate_merge_mutation_helper(&struct_name, &mutation_methods, has_qualified);
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "graphql") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
             /// Build the GraphQL dynamic schema
