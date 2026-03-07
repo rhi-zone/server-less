@@ -1,0 +1,12 @@
+error: GraphQL input types must have named fields
+
+       Example:
+       #[graphql_input]
+       struct CreateUserInput {
+       name: String,
+       email: String,
+       }
+ --> tests/fixtures/graphql_input_non_named_fields.rs:5:1
+  |
+5 | struct MyInput(String, u32);
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

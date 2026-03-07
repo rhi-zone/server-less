@@ -1,0 +1,16 @@
+error: unknown attribute
+
+       Valid attributes: name, default, query, path, body, header, short, help, positional
+
+       Examples:
+       - #[param(name = "q")]
+       - #[param(default = 10)]
+       - #[param(query)]
+       - #[param(header, name = "X-API-Key")]
+       - #[param(short = 'v')]
+       - #[param(help = "Enable verbose output")]
+       - #[param(positional)]
+ --> tests/fixtures/invalid_param_attribute.rs:9:33
+  |
+9 |     pub fn hello(&self, #[param(nonexistent_param_attr)] name: String) -> String {
+  |                                 ^^^^^^^^^^^^^^^^^^^^^^

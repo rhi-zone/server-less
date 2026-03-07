@@ -1,0 +1,12 @@
+error: unknown argument `nonexistent_attr`
+
+       Valid arguments: name, version, about, global, defaults, no_sync, no_async
+
+       Example: #[cli(name = "my-app", version = "1.0.0", about = "My CLI tool")]
+       Bare flags: #[cli(no_sync)] or #[cli(no_async)]
+
+       Related: #[program] preset (CLI + markdown docs), #[markdown] (standalone docs)
+ --> tests/fixtures/invalid_cli_attribute.rs:7:7
+  |
+7 | #[cli(nonexistent_attr = "val")]
+  |       ^^^^^^^^^^^^^^^^
