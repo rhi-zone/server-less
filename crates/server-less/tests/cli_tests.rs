@@ -1527,3 +1527,22 @@ async fn test_cli_run_with_inside_tokio_returns_err() {
     );
 }
 
+// Generic service test — verifies that `#[cli]` preserves generic parameters
+#[derive(Clone)]
+struct GenericSvc<T: Clone + std::fmt::Display + Send + Sync + 'static> {
+    val: T,
+}
+
+#[cli(name = "generic-svc")]
+impl<T: Clone + std::fmt::Display + Send + Sync + 'static> GenericSvc<T> {
+    /// Show the value
+    pub fn show(&self) -> String {
+        self.val.to_string()
+    }
+}
+
+#[test]
+fn test_generic_service_compiles_and_dispatches() {
+    let svc = GenericSvc { val: 42i32 };
+    assert!(svc.cli_run_with(["generic-svc", "show"]).is_ok());
+}

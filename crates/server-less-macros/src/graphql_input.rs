@@ -86,6 +86,7 @@ pub(crate) fn expand_graphql_input(item: ItemStruct) -> syn::Result<TokenStream2
     let struct_name = &item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let struct_name_str = struct_name.to_string();
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
 
     // Only support named fields
     let fields = match &item.fields {
