@@ -163,12 +163,13 @@ How do implementors know what server-less can do, at the moment they need it?
 
 ### "Server" Blessed Preset
 
-- [x] Design `#[derive(Server)]` expansion ✅
-- [ ] `ServerCore` trait for base functionality
-- [ ] `OpenApi` derive for spec generation
-- [ ] `Metrics` derive for prometheus metrics
-- [ ] `HealthCheck` derive for `/health` endpoint
+- [x] `#[server]` attribute macro ✅ — `expand_server` in `server.rs`; composes `#[http]` + `#[serve]` + optional OpenAPI; 8 tests in `server_tests.rs`.
 - [x] `#[server(openapi = false)]` toggle ✅
+- [x] `#[server(health = "/healthz")]` custom health endpoint ✅
+- [ ] `ServerCore` trait for base functionality — future; requires design
+- [ ] `OpenApi` derive for spec generation — future; `#[openapi]` attr already covers most cases
+- [ ] `Metrics` derive for prometheus metrics — future
+- [ ] `HealthCheck` derive for `/health` endpoint — future; `/health` already included in `#[server]`
 
 ### IDE Integration
 
