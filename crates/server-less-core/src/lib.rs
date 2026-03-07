@@ -406,6 +406,34 @@ impl HttpMethod {
     }
 }
 
+/// Pluralize an English word using common rules.
+///
+/// Rules applied in order:
+/// - Already ends in `s`, `x`, `z`, `ch`, or `sh` → append `es`
+/// - Ends in a consonant followed by `y` → replace `y` with `ies`
+/// - Everything else → append `s`
+fn pluralize(word: &str) -> String {
+    if word.ends_with('s')
+        || word.ends_with('x')
+        || word.ends_with('z')
+        || word.ends_with("ch")
+        || word.ends_with("sh")
+    {
+        format!("{word}es")
+    } else if word.ends_with('y')
+        && word.len() >= 2
+        && !matches!(
+            word.as_bytes()[word.len() - 2],
+            b'a' | b'e' | b'i' | b'o' | b'u'
+        )
+    {
+        // consonant + y → drop y, add ies
+        format!("{}ies", &word[..word.len() - 1])
+    } else {
+        format!("{word}s")
+    }
+}
+
 /// Infer URL path from method name
 pub fn infer_path(method_name: &str, http_method: HttpMethod) -> String {
     // Strip common prefixes to get the resource name
@@ -427,11 +455,14 @@ pub fn infer_path(method_name: &str, http_method: HttpMethod) -> String {
         .or_else(|| method_name.strip_prefix("remove_"))
         .unwrap_or(method_name);
 
-    // Pluralize for collection endpoints
+    // Pluralize for collection endpoints.
+    // If the resource already ends in 's' it is likely already plural (e.g. the
+    // caller wrote `list_users` and we stripped the prefix to get "users").
+    // For singular forms we apply English pluralization rules.
     let path_resource = if resource.ends_with('s') {
         resource.to_string()
     } else {
-        format!("{resource}s")
+        pluralize(resource)
     };
 
     match http_method {
@@ -454,6 +485,23 @@ pub fn infer_path(method_name: &str, http_method: HttpMethod) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_pluralize() {
+        // ends in s/x/z/ch/sh → add es
+        assert_eq!(pluralize("index"), "indexes");
+        assert_eq!(pluralize("status"), "statuses");
+        assert_eq!(pluralize("match"), "matches");
+        assert_eq!(pluralize("box"), "boxes");
+        assert_eq!(pluralize("buzz"), "buzzes");
+        assert_eq!(pluralize("brush"), "brushes");
+        // consonant + y → ies
+        assert_eq!(pluralize("query"), "queries");
+        // vowel + y → plain s (key, day, …)
+        assert_eq!(pluralize("key"), "keys");
+        // default → add s
+        assert_eq!(pluralize("item"), "items");
+    }
 
     #[test]
     fn test_http_method_inference() {

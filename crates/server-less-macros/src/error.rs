@@ -252,7 +252,9 @@ fn camel_to_sentence(s: &str) -> String {
     for (i, c) in s.chars().enumerate() {
         if c.is_uppercase() && i > 0 {
             result.push(' ');
-            result.push(c.to_lowercase().next().unwrap());
+            for lower in c.to_lowercase() {
+                result.push(lower);
+            }
         } else {
             result.push(c);
         }
