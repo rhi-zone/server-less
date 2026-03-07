@@ -136,7 +136,7 @@ How do implementors know what server-less can do, at the moment they need it?
 **Introspection tooling:**
 - [ ] `cargo serverless explain <topic>` CLI — dumps available attributes, inferred behaviors
 - [x] `SERVER_LESS_DEBUG=1` env var prints generated code to stderr ✅ `debug_emit()` in `lib.rs` called for every macro; checks `== Ok("1")` (not just set).
-- [ ] `#[http(debug = true)]` verbose request/response logging
+- [x] `#[http(debug = true)]` verbose request/response logging ✅
 - [ ] `#[http(trace = true)]` parameter extraction tracing
 
 **Capability-oriented docs (lower priority):**
