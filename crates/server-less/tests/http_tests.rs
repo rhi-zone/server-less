@@ -1362,3 +1362,122 @@ fn test_per_method_debug_openapi_still_works() {
             .collect::<Vec<_>>()
     );
 }
+
+// ============================================================================
+// #[http(trace = true)] Tests
+// ============================================================================
+
+/// Service with trace enabled on the impl block — all methods get param tracing.
+#[derive(Clone)]
+struct TraceService;
+
+#[http(prefix = "/trace", trace = true)]
+impl TraceService {
+    /// List items (trace on whole impl block)
+    pub fn list_trace_items(&self) -> Vec<String> {
+        vec!["a".to_string(), "b".to_string()]
+    }
+
+    /// Get item by ID (also gets trace from impl block)
+    pub fn get_trace_item(&self, item_id: String) -> Option<String> {
+        if item_id == "1" {
+            Some("found".to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Filter items with query params (tests query param tracing)
+    #[route(path = "/filtered-trace-items")]
+    pub fn find_trace_items(&self, query: String, limit: Option<u32>) -> Vec<String> {
+        vec![format!("{}:{}", query, limit.unwrap_or(10))]
+    }
+}
+
+#[test]
+fn test_trace_impl_block_compiles_and_router_created() {
+    // Verifies that #[http(trace = true)] on an impl block compiles without error
+    // and produces a working router.
+    let service = TraceService;
+    let _router = service.http_router();
+}
+
+#[test]
+fn test_trace_impl_block_openapi_still_works() {
+    // Trace flag must not interfere with OpenAPI generation.
+    let spec = TraceService::openapi_spec();
+    assert_eq!(spec.get("openapi").unwrap(), "3.0.0");
+    let paths = spec.get("paths").unwrap().as_object().unwrap();
+    assert!(
+        !paths.is_empty(),
+        "Expected OpenAPI paths from TraceService; got empty"
+    );
+}
+
+/// Service with trace enabled only on one method via per-method attribute.
+#[derive(Clone)]
+struct PerMethodTraceService;
+
+#[http]
+impl PerMethodTraceService {
+    /// This method has trace logging enabled.
+    #[http(trace = true)]
+    pub fn list_verbose_trace(&self, kind: String) -> Vec<String> {
+        vec![kind]
+    }
+
+    /// This method does NOT have trace logging.
+    pub fn list_quiet_trace(&self) -> Vec<String> {
+        vec!["y".to_string()]
+    }
+}
+
+#[test]
+fn test_per_method_trace_compiles_and_router_created() {
+    // Verifies that #[http(trace = true)] on a single method compiles without error.
+    let service = PerMethodTraceService;
+    let _router = service.http_router();
+}
+
+#[test]
+fn test_per_method_trace_openapi_still_works() {
+    // Both methods should still appear in OpenAPI regardless of trace flag.
+    let paths = PerMethodTraceService::http_openapi_paths();
+    assert_eq!(
+        paths.len(),
+        2,
+        "Both methods should appear in OpenAPI; got: {:?}",
+        paths
+            .iter()
+            .map(|p| p.operation.operation_id.as_deref().unwrap_or("?"))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Verify that a traced handler actually returns the correct value at runtime.
+#[tokio::test]
+async fn test_trace_handler_returns_correct_response() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let router = TraceService.http_router();
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/trace/trace-items/1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Traced handler should return 200 OK; got: {}",
+        response.status()
+    );
+}

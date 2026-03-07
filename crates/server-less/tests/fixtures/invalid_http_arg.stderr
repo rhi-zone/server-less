@@ -1,9 +1,10 @@
 error: unknown argument `invalid_arg`
-       Valid arguments: prefix, openapi, debug
+       Valid arguments: prefix, openapi, debug, trace
        Examples:
        - #[http(prefix = "/api/v1")]
        - #[http(openapi = false)]
        - #[http(debug = true)]
+       - #[http(trace = true)]
 
        Related: #[serve] (multi-protocol), #[openapi] (standalone API docs), #[server] (blessed preset)
  --> tests/fixtures/invalid_http_arg.rs:5:8

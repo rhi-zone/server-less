@@ -189,6 +189,11 @@ pub(crate) struct HttpArgs {
     /// method call. Set on the impl block to enable for all methods, or on a
     /// specific method via `#[http(debug = true)]`.
     pub debug: bool,
+    /// Whether to emit per-parameter trace logging in generated handlers (default: false).
+    /// When true, each handler emits an `eprintln!` line after each parameter is extracted,
+    /// showing the parameter name and its `{:?}` value. Set on the impl block to enable for
+    /// all methods, or on a specific method via `#[http(trace = true)]`.
+    pub trace: bool,
 }
 
 impl Parse for HttpArgs {
@@ -212,8 +217,12 @@ impl Parse for HttpArgs {
                     let lit: syn::LitBool = input.parse()?;
                     args.debug = lit.value();
                 }
+                "trace" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.trace = lit.value();
+                }
                 other => {
-                    const VALID: &[&str] = &["prefix", "openapi", "debug"];
+                    const VALID: &[&str] = &["prefix", "openapi", "debug", "trace"];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -221,11 +230,12 @@ impl Parse for HttpArgs {
                         ident.span(),
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
-                             Valid arguments: prefix, openapi, debug\n\
+                             Valid arguments: prefix, openapi, debug, trace\n\
                              Examples:\n\
                              - #[http(prefix = \"/api/v1\")]\n\
                              - #[http(openapi = false)]\n\
                              - #[http(debug = true)]\n\
+                             - #[http(trace = true)]\n\
                              \n\
                              Related: #[serve] (multi-protocol), #[openapi] (standalone API docs), #[server] (blessed preset)"
                         ),
@@ -279,6 +289,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let prefix = args.prefix.unwrap_or_default();
     let generate_openapi = args.openapi.unwrap_or(true);
     let impl_debug = args.debug;
+    let impl_trace = args.trace;
 
     let partitioned = partition_methods(&methods, has_server_skip);
 
@@ -398,7 +409,9 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
         // Per-method debug flag: method-level `#[http(debug = true)]` OR impl-level flag.
         let method_debug = impl_debug || has_http_debug(method);
-        let handler = generate_handler(&struct_name, self_ty, method, &response_overrides, has_qualified, method_debug)?;
+        // Per-method trace flag: method-level `#[http(trace = true)]` OR impl-level flag.
+        let method_trace = impl_trace || has_http_trace(method);
+        let handler = generate_handler(&struct_name, self_ty, method, &response_overrides, has_qualified, method_debug, method_trace)?;
         handlers.push(handler);
 
         let route = generate_route(&prefix, method, &overrides, &struct_name)?;
@@ -534,18 +547,51 @@ fn generate_handler(
     response_overrides: &ResponseOverride,
     has_qualified: bool,
     debug: bool,
+    trace: bool,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
     let method_name_str = method_name.to_string();
 
-    let (param_extractions, param_calls) = generate_param_handling(method, has_qualified)?;
+    let (param_extractions, param_calls, param_names) =
+        generate_param_handling(method, has_qualified)?;
 
-    let call = if method.is_async {
-        quote! { state.#method_name(#(#param_calls),*).await }
+    // When tracing is enabled, bind each user-visible parameter to a named local variable
+    // (`__sl_param_{name}`) so we can log its value immediately after extraction.
+    let (call, param_trace_stmts) = if trace {
+        let mut trace_stmts: Vec<proc_macro2::TokenStream> = Vec::new();
+        let mut bound_calls: Vec<proc_macro2::TokenStream> = Vec::new();
+
+        for (call_expr, maybe_name) in param_calls.iter().zip(param_names.iter()) {
+            if let Some(name) = maybe_name {
+                let var_ident = format_ident!("__sl_param_{}", name);
+                let name_str = name.as_str();
+                trace_stmts.push(quote! {
+                    let #var_ident = #call_expr;
+                    eprintln!("[server-less] trace: param `{}` = {:?}", #name_str, #var_ident);
+                });
+                bound_calls.push(quote! { #var_ident });
+            } else {
+                // Context or other injected params: use inline expression, no trace line.
+                bound_calls.push(call_expr.clone());
+            }
+        }
+
+        let method_call = if method.is_async {
+            quote! { state.#method_name(#(#bound_calls),*).await }
+        } else {
+            quote! { state.#method_name(#(#bound_calls),*) }
+        };
+
+        (method_call, trace_stmts)
     } else {
-        quote! { state.#method_name(#(#param_calls),*) }
+        let method_call = if method.is_async {
+            quote! { state.#method_name(#(#param_calls),*).await }
+        } else {
+            quote! { state.#method_name(#(#param_calls),*) }
+        };
+        (method_call, Vec::new())
     };
 
     let response = generate_response_handling(method, &call, response_overrides)?;
@@ -558,9 +604,21 @@ fn generate_handler(
             ) -> impl ::axum::response::IntoResponse {
                 let state = state_extractor.0;
                 eprintln!("[server-less] {} called", #method_name_str);
+                #(#param_trace_stmts)*
                 let __sl_response = #response;
                 eprintln!("[server-less] {} returned", #method_name_str);
                 __sl_response
+            }
+        }
+    } else if trace {
+        quote! {
+            async fn #handler_name(
+                state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
+                #(#param_extractions),*
+            ) -> impl ::axum::response::IntoResponse {
+                let state = state_extractor.0;
+                #(#param_trace_stmts)*
+                #response
             }
         }
     } else {
@@ -607,14 +665,45 @@ fn has_http_debug(method: &MethodInfo) -> bool {
     false
 }
 
+/// Returns `true` if the method has `#[http(trace = true)]` on it directly.
+fn has_http_trace(method: &MethodInfo) -> bool {
+    for attr in &method.method.attrs {
+        if attr.path().is_ident("http") {
+            let mut found = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("trace") {
+                    if meta.input.peek(syn::Token![=]) {
+                        let value: syn::LitBool = meta.value()?.parse()?;
+                        if value.value() {
+                            found = true;
+                        }
+                    } else {
+                        found = true;
+                    }
+                } else if meta.input.peek(syn::Token![=]) {
+                    // Consume other key = value pairs to avoid parse errors.
+                    let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
+            if found {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn generate_param_handling(
     method: &MethodInfo,
     has_qualified: bool,
-) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>)> {
+) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>, Vec<Option<String>>)> {
     use server_less_parse::ParamLocation;
 
     let mut extractions = Vec::new();
     let mut calls = Vec::new();
+    // Parallel to `calls`: None for injected params (Context), Some(name) for user-visible params.
+    let mut param_names: Vec<Option<String>> = Vec::new();
 
     let http_method = infer_http_method(&method.name.to_string());
     let default_has_body = matches!(
@@ -630,6 +719,7 @@ fn generate_param_handling(
         let (extraction, call) = generate_http_context_extraction();
         extractions.push(extraction);
         calls.push(call);
+        param_names.push(None); // Context is injected; not user-visible for tracing
     }
 
     // Group regular parameters by their actual location (respecting overrides)
@@ -665,6 +755,7 @@ fn generate_param_handling(
                 path_extractor: ::axum::extract::Path<#ty>
             });
             calls.push(quote! { path_extractor.0 });
+            param_names.push(Some(param.name.to_string()));
         }
     }
 
@@ -691,6 +782,7 @@ fn generate_param_handling(
                         ::server_less::serde_json::from_value::<#ty>(body_extractor.0.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
                     });
             }
+            param_names.push(Some(param.name.to_string()));
         }
     }
 
@@ -738,6 +830,7 @@ fn generate_param_handling(
                     query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok()).unwrap_or_default()
                 });
             }
+            param_names.push(Some(param.name.to_string()));
         }
     }
 
@@ -770,10 +863,11 @@ fn generate_param_handling(
                         .unwrap_or_default()
                 });
             }
+            param_names.push(Some(param.name.to_string()));
         }
     }
 
-    Ok((extractions, calls))
+    Ok((extractions, calls, param_names))
 }
 
 fn generate_response_handling(
