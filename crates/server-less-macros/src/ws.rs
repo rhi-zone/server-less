@@ -764,13 +764,13 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
             }
 
             #[doc = #ws_router_doc]
-            pub fn ws_router(self) -> ::axum::Router
+            pub fn ws_router(self) -> ::server_less::axum::Router
             where
                 Self: Clone + Send + Sync + 'static,
             {
                 let state = ::std::sync::Arc::new(self);
-                ::axum::Router::new()
-                    .route(#path, ::axum::routing::get(#handler_name))
+                ::server_less::axum::Router::new()
+                    .route(#path, ::server_less::axum::routing::get(#handler_name))
                     .with_state(state)
             }
 
@@ -825,10 +825,10 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
         // WebSocket upgrade handler
         async fn #handler_name(
-            ws: ::axum::extract::WebSocketUpgrade,
-            state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
-            __context_headers: ::axum::http::HeaderMap,
-        ) -> impl ::axum::response::IntoResponse {
+            ws: ::server_less::axum::extract::WebSocketUpgrade,
+            state_extractor: ::server_less::axum::extract::State<::std::sync::Arc<#self_ty>>,
+            __context_headers: ::server_less::axum::http::HeaderMap,
+        ) -> impl ::server_less::axum::response::IntoResponse {
             let state = state_extractor.0;
 
             // Extract Context from HTTP upgrade headers
@@ -841,7 +841,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
         // Handle individual WebSocket connection
         async fn #connection_fn_name(
-            socket: ::axum::extract::ws::WebSocket,
+            socket: ::server_less::axum::extract::ws::WebSocket,
             state: ::std::sync::Arc<#self_ty>,
             __ctx: ::server_less::Context,
         ) {
@@ -855,7 +855,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
             while let Some(msg) = receiver.next().await {
                 match msg {
-                    Ok(::axum::extract::ws::Message::Text(text)) => {
+                    Ok(::server_less::axum::extract::ws::Message::Text(text)) => {
                         // Use async handler to support async methods
                         let response = #message_handler_call;
                         let reply = match response {
@@ -869,7 +869,7 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
                             break;
                         }
                     }
-                    Ok(::axum::extract::ws::Message::Close(_)) => break,
+                    Ok(::server_less::axum::extract::ws::Message::Close(_)) => break,
                     Ok(_) => {} // Ignore binary, ping, pong
                     Err(_) => break,
                 }

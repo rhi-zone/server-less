@@ -25,6 +25,11 @@ optional = true
 version = "4"
 optional = true
 
+[dependencies.tokio]
+version = "1"
+features = []
+optional = true
+
 [dependencies.futures]
 version = "0.3"
 optional = true
@@ -42,8 +47,8 @@ default = ["full"]
 
 # Runtime protocols (require external deps)
 mcp = ["server-less-macros/mcp", "server-less-core/mcp"]
-http = ["server-less-macros/http", "server-less-core/http", "axum", "server-less-openapi"]
-cli = ["server-less-macros/cli", "server-less-core/cli", "clap"]
+http = ["server-less-macros/http", "server-less-core/http", "axum", "server-less-openapi", "dep:tokio", "tokio/net"]
+cli = ["server-less-macros/cli", "server-less-core/cli", "clap", "dep:tokio", "tokio/rt-multi-thread"]
 ws = ["server-less-macros/ws", "server-less-core/ws", "axum", "futures", "server-less-openapi"]
 jsonrpc = ["server-less-macros/jsonrpc", "server-less-core/jsonrpc", "axum", "server-less-openapi"]
 graphql = ["server-less-macros/graphql", "async-graphql", "async-graphql-axum", "axum", "server-less-openapi"]

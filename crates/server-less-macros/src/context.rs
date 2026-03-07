@@ -131,7 +131,7 @@ pub fn partition_context_params(
 /// - `call` is the code to create and populate the Context
 pub fn generate_http_context_extraction() -> (TokenStream2, TokenStream2) {
     let extraction = quote! {
-        __context_headers: ::axum::http::HeaderMap
+        __context_headers: ::server_less::axum::http::HeaderMap
     };
 
     let call = quote! {

@@ -418,31 +418,31 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
             #merge_mutation_helper
 
             /// Create an axum router with GraphQL endpoint
-            pub fn graphql_router(self) -> ::axum::Router
+            pub fn graphql_router(self) -> ::server_less::axum::Router
             where
                 Self: Clone + Send + Sync + 'static,
             {
-                use ::axum::routing::{get, post};
-                use ::axum::response::IntoResponse;
+                use ::server_less::axum::routing::{get, post};
+                use ::server_less::axum::response::IntoResponse;
 
                 let schema = self.graphql_schema();
 
                 async fn graphql_handler(
-                    schema: ::axum::extract::State<::async_graphql::dynamic::Schema>,
+                    schema: ::server_less::axum::extract::State<::async_graphql::dynamic::Schema>,
                     req: ::async_graphql_axum::GraphQLRequest,
                 ) -> ::async_graphql_axum::GraphQLResponse {
                     schema.execute(req.into_inner()).await.into()
                 }
 
                 async fn playground() -> impl IntoResponse {
-                    ::axum::response::Html(
+                    ::server_less::axum::response::Html(
                         ::async_graphql::http::playground_source(
                             ::async_graphql::http::GraphQLPlaygroundConfig::new("/graphql")
                         )
                     )
                 }
 
-                ::axum::Router::new()
+                ::server_less::axum::Router::new()
                     .route("/graphql", get(playground).post(graphql_handler))
                     .with_state(schema)
             }

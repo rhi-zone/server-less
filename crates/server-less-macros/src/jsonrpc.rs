@@ -467,13 +467,13 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             #mount_dispatch_inner
 
             #[doc = #jsonrpc_router_doc]
-            pub fn jsonrpc_router(self) -> ::axum::Router
+            pub fn jsonrpc_router(self) -> ::server_less::axum::Router
             where
                 Self: Clone + Send + Sync + 'static,
             {
                 let state = ::std::sync::Arc::new(self);
-                ::axum::Router::new()
-                    .route(#path, ::axum::routing::post(#handler_name))
+                ::server_less::axum::Router::new()
+                    .route(#path, ::server_less::axum::routing::post(#handler_name))
                     .with_state(state)
             }
 
@@ -563,11 +563,11 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
         }
 
         async fn #handler_name(
-            ::axum::extract::State(state): ::axum::extract::State<::std::sync::Arc<#self_ty>>,
-            __context_headers: ::axum::http::HeaderMap,
-            ::axum::Json(request): ::axum::Json<::server_less::serde_json::Value>,
-        ) -> impl ::axum::response::IntoResponse {
-            use ::axum::response::IntoResponse;
+            ::server_less::axum::extract::State(state): ::server_less::axum::extract::State<::std::sync::Arc<#self_ty>>,
+            __context_headers: ::server_less::axum::http::HeaderMap,
+            ::server_less::axum::Json(request): ::server_less::axum::Json<::server_less::serde_json::Value>,
+        ) -> impl ::server_less::axum::response::IntoResponse {
+            use ::server_less::axum::response::IntoResponse;
 
             // Extract Context from headers
             let mut __ctx = ::server_less::Context::new();
@@ -584,9 +584,9 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
             let response = #handler_call;
             if response.is_null() {
-                ::axum::http::StatusCode::NO_CONTENT.into_response()
+                ::server_less::axum::http::StatusCode::NO_CONTENT.into_response()
             } else {
-                ::axum::Json(response).into_response()
+                ::server_less::axum::Json(response).into_response()
             }
         }
     })

@@ -701,9 +701,9 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 .unwrap_or_default();
             quote! {
                 .arg(
-                    ::clap::Arg::new(#kebab)
+                    ::server_less::clap::Arg::new(#kebab)
                         .long(#kebab)
-                        .action(::clap::ArgAction::SetTrue)
+                        .action(::server_less::clap::ArgAction::SetTrue)
                         .global(true)
                         #help_clause
                 )
@@ -714,41 +714,41 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     // Built-in output formatting flags (always present)
     let format_flags = quote! {
         .arg(
-            ::clap::Arg::new("jsonl")
+            ::server_less::clap::Arg::new("jsonl")
                 .long("jsonl")
-                .action(::clap::ArgAction::SetTrue)
+                .action(::server_less::clap::ArgAction::SetTrue)
                 .global(true)
                 .help("Output one JSON object per line (for arrays)")
         )
         .arg(
-            ::clap::Arg::new("json")
+            ::server_less::clap::Arg::new("json")
                 .long("json")
-                .action(::clap::ArgAction::SetTrue)
+                .action(::server_less::clap::ArgAction::SetTrue)
                 .global(true)
                 .help("Output machine-readable JSON")
         )
         .arg(
-            ::clap::Arg::new("jq")
+            ::server_less::clap::Arg::new("jq")
                 .long("jq")
                 .global(true)
                 .help("Filter output through jq expression")
         )
         .arg(
-            ::clap::Arg::new("input-schema")
+            ::server_less::clap::Arg::new("input-schema")
                 .long("input-schema")
-                .action(::clap::ArgAction::SetTrue)
+                .action(::server_less::clap::ArgAction::SetTrue)
                 .global(true)
                 .help("Print JSON Schema of the subcommand's input parameters and exit")
         )
         .arg(
-            ::clap::Arg::new("output-schema")
+            ::server_less::clap::Arg::new("output-schema")
                 .long("output-schema")
-                .action(::clap::ArgAction::SetTrue)
+                .action(::server_less::clap::ArgAction::SetTrue)
                 .global(true)
                 .help("Print JSON Schema of the subcommand's return type and exit")
         )
         .arg(
-            ::clap::Arg::new("params-json")
+            ::server_less::clap::Arg::new("params-json")
                 .long("params-json")
                 .global(true)
                 .help("Provide all parameters as a JSON object instead of individual flags")
@@ -767,7 +767,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
             /// (async-std, smol, etc.), use [`cli_run_async`] instead and drive
             /// it with your own `#[runtime::main]`.
             pub fn cli_run(&self) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
-                if ::tokio::runtime::Handle::try_current().is_ok() {
+                if ::server_less::tokio::runtime::Handle::try_current().is_ok() {
                     return Err(
                         "cli_run() cannot be called from within an async context (e.g. #[tokio::test] or #[tokio::main]). \\
                          Use cli_run_async() instead.".into()
@@ -786,7 +786,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 __CliI: IntoIterator<Item = __CliArg>,
                 __CliArg: Into<::std::ffi::OsString> + Clone,
             {
-                if ::tokio::runtime::Handle::try_current().is_ok() {
+                if ::server_less::tokio::runtime::Handle::try_current().is_ok() {
                     return Err(
                         "cli_run_with() cannot be called from within an async context (e.g. #[tokio::test] or #[tokio::main]). \\
                          Use cli_run_with_async() instead.".into()
@@ -833,8 +833,8 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         #clean_impl_block
 
         impl #impl_generics ::server_less::CliSubcommand for #self_ty #where_clause {
-            fn cli_command() -> ::clap::Command {
-                ::clap::Command::new(#app_name)
+            fn cli_command() -> ::server_less::clap::Command {
+                ::server_less::clap::Command::new(#app_name)
                     .version(#version)
                     .about(#about)
                     #(#global_flag_args)*
@@ -846,7 +846,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                     #(.subcommand(#slug_mount_subcommands))*
             }
 
-            fn cli_dispatch(&self, matches: &::clap::ArgMatches) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
+            fn cli_dispatch(&self, matches: &::server_less::clap::ArgMatches) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
                 match matches.subcommand() {
                     #(#leaf_match_arms)*
                     #(#static_mount_arms)*
@@ -861,7 +861,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
 
             fn cli_dispatch_async<'__a>(
                 &'__a self,
-                matches: &'__a ::clap::ArgMatches,
+                matches: &'__a ::server_less::clap::ArgMatches,
             ) -> impl ::std::future::Future<Output = ::std::result::Result<(), Box<dyn ::std::error::Error>>> + '__a {
                 async move {
                     match matches.subcommand() {
@@ -880,7 +880,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
 
         impl #impl_generics #self_ty #where_clause {
             #[doc = #cli_command_doc]
-            pub fn cli_command() -> ::clap::Command {
+            pub fn cli_command() -> ::server_less::clap::Command {
                 <Self as ::server_less::CliSubcommand>::cli_command()
             }
 
@@ -927,7 +927,7 @@ fn generate_leaf_subcommand(
         .collect();
 
     Ok(quote! {
-        ::clap::Command::new(#name)
+        ::server_less::clap::Command::new(#name)
             .about(#about)
             #hide
             #(.arg(#args))*
@@ -986,7 +986,7 @@ fn generate_slug_mount_subcommand(
             let param_name = p.name.to_string().to_kebab_case();
             let idx = i + 1; // clap indices are 1-based
             quote! {
-                ::clap::Arg::new(#param_name)
+                ::server_less::clap::Arg::new(#param_name)
                     .required(true)
                     .index(#idx)
                     .help(concat!("The ", #param_name))
@@ -1101,10 +1101,10 @@ fn generate_arg(
             None => quote! { .help(concat!("Enable ", #name)) },
         };
         quote! {
-            ::clap::Arg::new(#name)
+            ::server_less::clap::Arg::new(#name)
                 .long(#name)
                 #short
-                .action(::clap::ArgAction::SetTrue)
+                .action(::server_less::clap::ArgAction::SetTrue)
                 #help
         }
     } else if param.is_vec {
@@ -1113,10 +1113,10 @@ fn generate_arg(
             None => quote! { .help(concat!("Repeatable: ", #name)) },
         };
         quote! {
-            ::clap::Arg::new(#name)
+            ::server_less::clap::Arg::new(#name)
                 .long(#name)
                 #short
-                .action(::clap::ArgAction::Append)
+                .action(::server_less::clap::ArgAction::Append)
                 .value_delimiter(',')
                 .required(false)
                 #value_parser
@@ -1129,7 +1129,7 @@ fn generate_arg(
             None => quote! { .help(concat!("The ", #name)) },
         };
         quote! {
-            ::clap::Arg::new(#name)
+            ::server_less::clap::Arg::new(#name)
                 .required(false)
                 .index(#idx)
                 #value_parser
@@ -1141,7 +1141,7 @@ fn generate_arg(
             None => quote! { .help(concat!("Optional: ", #name)) },
         };
         quote! {
-            ::clap::Arg::new(#name)
+            ::server_less::clap::Arg::new(#name)
                 .long(#name)
                 #short
                 .required(false)
@@ -1154,7 +1154,7 @@ fn generate_arg(
             None => quote! { .help(concat!("Required: ", #name)) },
         };
         quote! {
-            ::clap::Arg::new(#name)
+            ::server_less::clap::Arg::new(#name)
                 .long(#name)
                 #short
                 .required(false)
@@ -1416,7 +1416,7 @@ fn generate_leaf_match_arm(
                     quote! { self.#method_name(#(#names),*).await; }
                 } else {
                     quote! {
-                        ::tokio::runtime::Runtime::new()?
+                        ::server_less::tokio::runtime::Runtime::new()?
                             .block_on(self.#method_name(#(#names),*));
                     }
                 }
@@ -1430,7 +1430,7 @@ fn generate_leaf_match_arm(
                 quote! { let result = self.#method_name(#(#names),*).await; }
             } else {
                 quote! {
-                    let result = ::tokio::runtime::Runtime::new()?
+                    let result = ::server_less::tokio::runtime::Runtime::new()?
                         .block_on(self.#method_name(#(#names),*));
                 }
             }

@@ -501,11 +501,11 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         #clean_impl
 
         impl #impl_generics ::server_less::HttpMount for #self_ty #where_clause {
-            fn http_mount_router(self: ::std::sync::Arc<Self>) -> ::axum::Router {
-                use ::axum::routing::{get, post, put, patch, delete};
+            fn http_mount_router(self: ::std::sync::Arc<Self>) -> ::server_less::axum::Router {
+                use ::server_less::axum::routing::{get, post, put, patch, delete};
 
                 let state = self;
-                ::axum::Router::new()
+                ::server_less::axum::Router::new()
                     #(#routes)*
                     #(#mount_routes)*
                     .with_state(state)
@@ -518,14 +518,14 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
         impl #impl_generics #self_ty #where_clause {
             #[doc = #router_doc]
-            pub fn http_router(self) -> ::axum::Router
+            pub fn http_router(self) -> ::server_less::axum::Router
             where
                 Self: Clone + Send + Sync + 'static,
             {
-                use ::axum::routing::{get, post, put, patch, delete};
+                use ::server_less::axum::routing::{get, post, put, patch, delete};
 
                 let state = ::std::sync::Arc::new(self);
-                ::axum::Router::new()
+                ::server_less::axum::Router::new()
                     #(#routes)*
                     #(#mount_routes)*
                     .with_state(state)
@@ -599,9 +599,9 @@ fn generate_handler(
     let handler = if debug {
         quote! {
             async fn #handler_name(
-                state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
+                state_extractor: ::server_less::axum::extract::State<::std::sync::Arc<#self_ty>>,
                 #(#param_extractions),*
-            ) -> impl ::axum::response::IntoResponse {
+            ) -> impl ::server_less::axum::response::IntoResponse {
                 let state = state_extractor.0;
                 eprintln!("[server-less] {} called", #method_name_str);
                 #(#param_trace_stmts)*
@@ -613,9 +613,9 @@ fn generate_handler(
     } else if trace {
         quote! {
             async fn #handler_name(
-                state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
+                state_extractor: ::server_less::axum::extract::State<::std::sync::Arc<#self_ty>>,
                 #(#param_extractions),*
-            ) -> impl ::axum::response::IntoResponse {
+            ) -> impl ::server_less::axum::response::IntoResponse {
                 let state = state_extractor.0;
                 #(#param_trace_stmts)*
                 #response
@@ -624,9 +624,9 @@ fn generate_handler(
     } else {
         quote! {
             async fn #handler_name(
-                state_extractor: ::axum::extract::State<::std::sync::Arc<#self_ty>>,
+                state_extractor: ::server_less::axum::extract::State<::std::sync::Arc<#self_ty>>,
                 #(#param_extractions),*
-            ) -> impl ::axum::response::IntoResponse {
+            ) -> impl ::server_less::axum::response::IntoResponse {
                 let state = state_extractor.0;
                 #response
             }
@@ -752,7 +752,7 @@ fn generate_param_handling(
         for param in &path_params {
             let ty = &param.ty;
             extractions.push(quote! {
-                path_extractor: ::axum::extract::Path<#ty>
+                path_extractor: ::server_less::axum::extract::Path<#ty>
             });
             calls.push(quote! { path_extractor.0 });
             param_names.push(Some(param.name.to_string()));
@@ -762,7 +762,7 @@ fn generate_param_handling(
     // Generate body parameter extraction
     if !body_params.is_empty() {
         extractions.push(quote! {
-            body_extractor: ::axum::extract::Json<::server_less::serde_json::Value>
+            body_extractor: ::server_less::axum::extract::Json<::server_less::serde_json::Value>
         });
 
         for param in &body_params {
@@ -789,7 +789,7 @@ fn generate_param_handling(
     // Generate query parameter extraction
     if !query_params.is_empty() {
         extractions.push(quote! {
-            query_extractor: ::axum::extract::Query<::std::collections::HashMap<String, String>>
+            query_extractor: ::server_less::axum::extract::Query<::std::collections::HashMap<String, String>>
         });
 
         for param in &query_params {
@@ -837,7 +837,7 @@ fn generate_param_handling(
     // Generate header parameter extraction
     if !header_params.is_empty() {
         extractions.push(quote! {
-            headers: ::axum::http::HeaderMap
+            headers: ::server_less::axum::http::HeaderMap
         });
 
         for param in &header_params {
@@ -881,25 +881,25 @@ fn generate_response_handling(
         quote! {
             {
                 #call;
-                ::axum::http::StatusCode::NO_CONTENT
+                ::server_less::axum::http::StatusCode::NO_CONTENT
             }
         }
     } else if ret.is_result {
         quote! {
             {
-                use ::axum::response::IntoResponse;
+                use ::server_less::axum::response::IntoResponse;
                 use ::server_less::HttpStatusFallback as _;
                 match #call {
-                    Ok(value) => ::axum::Json(value).into_response(),
+                    Ok(value) => ::server_less::axum::Json(value).into_response(),
                     Err(err) => {
                         let status_u16 = ::server_less::HttpStatusHelper(&err).http_status_code();
-                        let status = ::axum::http::StatusCode::from_u16(status_u16)
-                            .unwrap_or(::axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+                        let status = ::server_less::axum::http::StatusCode::from_u16(status_u16)
+                            .unwrap_or(::server_less::axum::http::StatusCode::INTERNAL_SERVER_ERROR);
                         let body = ::server_less::serde_json::json!({
                             "error": format!("{:?}", err),
                             "message": format!("{}", err)
                         });
-                        (status, ::axum::Json(body)).into_response()
+                        (status, ::server_less::axum::Json(body)).into_response()
                     }
                 }
             }
@@ -907,10 +907,10 @@ fn generate_response_handling(
     } else if ret.is_option {
         quote! {
             {
-                use ::axum::response::IntoResponse;
+                use ::server_less::axum::response::IntoResponse;
                 match #call {
-                    Some(value) => ::axum::Json(value).into_response(),
-                    None => ::axum::http::StatusCode::NOT_FOUND.into_response(),
+                    Some(value) => ::server_less::axum::Json(value).into_response(),
+                    None => ::server_less::axum::http::StatusCode::NOT_FOUND.into_response(),
                 }
             }
         }
@@ -921,10 +921,10 @@ fn generate_response_handling(
                 let iter = #call;
                 let stream = ::server_less::futures::stream::iter(iter);
                 let boxed_stream = Box::pin(stream);
-                ::axum::response::sse::Sse::new(
+                ::server_less::axum::response::sse::Sse::new(
                     boxed_stream.map(|item| {
                         Ok::<_, std::convert::Infallible>(
-                            ::axum::response::sse::Event::default()
+                            ::server_less::axum::response::sse::Event::default()
                                 .json_data(item)
                                 .expect("BUG: failed to serialize SSE event as JSON — Iterator item type must implement serde::Serialize")
                         )
@@ -938,10 +938,10 @@ fn generate_response_handling(
                 use ::server_less::futures::StreamExt;
                 let stream = #call;
                 let boxed_stream = Box::pin(stream);
-                ::axum::response::sse::Sse::new(
+                ::server_less::axum::response::sse::Sse::new(
                     boxed_stream.map(|item| {
                         Ok::<_, std::convert::Infallible>(
-                            ::axum::response::sse::Event::default()
+                            ::server_less::axum::response::sse::Event::default()
                                 .json_data(item)
                                 .expect("BUG: failed to serialize SSE event as JSON — the Stream item type must implement serde::Serialize")
                         )
@@ -953,7 +953,7 @@ fn generate_response_handling(
         quote! {
             {
                 let result = #call;
-                ::axum::Json(result)
+                ::server_less::axum::Json(result)
             }
         }
     };
@@ -976,11 +976,11 @@ fn apply_response_overrides(
 ) -> syn::Result<TokenStream2> {
     let status_code = if let Some(status) = overrides.status {
         quote! {
-            ::axum::http::StatusCode::from_u16(#status)
-                .unwrap_or(::axum::http::StatusCode::OK)
+            ::server_less::axum::http::StatusCode::from_u16(#status)
+                .unwrap_or(::server_less::axum::http::StatusCode::OK)
         }
     } else {
-        quote! { ::axum::http::StatusCode::OK }
+        quote! { ::server_less::axum::http::StatusCode::OK }
     };
 
     let header_insertions: Vec<TokenStream2> = overrides
@@ -989,8 +989,8 @@ fn apply_response_overrides(
         .map(|(name, value)| {
             quote! {
                 headers.insert(
-                    ::axum::http::header::HeaderName::from_static(#name),
-                    ::axum::http::header::HeaderValue::from_static(#value)
+                    ::server_less::axum::http::header::HeaderName::from_static(#name),
+                    ::server_less::axum::http::header::HeaderValue::from_static(#value)
                 );
             }
         })
@@ -999,8 +999,8 @@ fn apply_response_overrides(
     let content_type_insertion = if let Some(ref ct) = overrides.content_type {
         quote! {
             headers.insert(
-                ::axum::http::header::CONTENT_TYPE,
-                ::axum::http::header::HeaderValue::from_static(#ct)
+                ::server_less::axum::http::header::CONTENT_TYPE,
+                ::server_less::axum::http::header::HeaderValue::from_static(#ct)
             );
         }
     } else {
@@ -1009,9 +1009,9 @@ fn apply_response_overrides(
 
     Ok(quote! {
         {
-            use ::axum::response::IntoResponse;
+            use ::server_less::axum::response::IntoResponse;
             let base_response = #base_response;
-            let mut headers = ::axum::http::HeaderMap::new();
+            let mut headers = ::server_less::axum::http::HeaderMap::new();
             #(#header_insertions)*
             #content_type_insertion
             (#status_code, headers, base_response).into_response()
@@ -1342,8 +1342,8 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
         let route = quote! {
             let router = router.route(
                 "/openapi.json",
-                ::axum::routing::get(|| async {
-                    ::axum::Json(#struct_name::combined_openapi_spec())
+                ::server_less::axum::routing::get(|| async {
+                    ::server_less::axum::Json(#struct_name::combined_openapi_spec())
                 })
             );
         };
@@ -1366,18 +1366,18 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
                 // Add health check
                 let router = router.route(
                     #health_path,
-                    ::axum::routing::get(|| async { "ok" })
+                    ::server_less::axum::routing::get(|| async { "ok" })
                 );
 
                 // Add OpenAPI spec endpoint
                 #openapi_route
 
-                let listener = ::tokio::net::TcpListener::bind(addr.as_ref()).await?;
-                ::axum::serve(listener, router).await
+                let listener = ::server_less::tokio::net::TcpListener::bind(addr.as_ref()).await?;
+                ::server_less::axum::serve(listener, router).await
             }
 
             /// Build the combined router without starting the server.
-            pub fn router(self) -> ::axum::Router
+            pub fn router(self) -> ::server_less::axum::Router
             where
                 Self: Clone + Send + Sync + 'static,
             {
@@ -1385,7 +1385,7 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
 
                 let router = router.route(
                     #health_path,
-                    ::axum::routing::get(|| async { "ok" })
+                    ::server_less::axum::routing::get(|| async { "ok" })
                 );
 
                 // Add OpenAPI spec endpoint
@@ -1463,7 +1463,7 @@ fn generate_router_setup(protocols: &[String]) -> TokenStream2 {
 
     if parts.is_empty() {
         quote! {
-            let router = ::axum::Router::new();
+            let router = ::server_less::axum::Router::new();
         }
     } else if parts.len() == 1 {
         let first = &parts[0];

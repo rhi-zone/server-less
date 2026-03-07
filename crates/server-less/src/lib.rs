@@ -233,6 +233,19 @@ pub use server_less_macros::program;
 // Error derive macro (always available - no deps, commonly needed)
 pub use server_less_macros::ServerlessError;
 
+// Re-export deps for generated code — users shouldn't need to add these directly
+#[cfg(feature = "clap")]
+#[doc(hidden)]
+pub use clap;
+
+#[cfg(any(feature = "cli", feature = "http"))]
+#[doc(hidden)]
+pub use tokio;
+
+#[cfg(feature = "axum")]
+#[doc(hidden)]
+pub use axum;
+
 // Re-export futures for generated WebSocket code
 #[cfg(feature = "ws")]
 pub use futures;
