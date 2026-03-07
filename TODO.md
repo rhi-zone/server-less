@@ -278,7 +278,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 - [x] **Pluralization produces "indexs", "statuss"** ✅ Added pluralize() helper with es/ies/s rules; infer_path now uses it. (`server-less-core` `infer_path`): Naive `+ "s"` heuristic.
 
-- [ ] **CLI default output documented as `Display`, actually pretty-printed JSON**: `cli_format_output` default contradicts the design doc.
+- [x] **CLI default output documented as `Display`, actually pretty-printed JSON** ✅ cli_format_output is only called on JSON-flagged paths; default Display path is in macro. Updated doc comment to reflect this.: `cli_format_output` default contradicts the design doc.
 
 - [x] **`camel_to_sentence` unwrap** ✅ Replaced .next().unwrap() with for-loop over ToLowercase iterator. (`error.rs:255`): Safe in practice but should use explicit char handling.
 
