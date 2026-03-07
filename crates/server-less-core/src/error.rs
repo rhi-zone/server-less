@@ -73,6 +73,26 @@ impl ErrorCode {
         }
     }
 
+    /// Convert to JSON-RPC error code.
+    ///
+    /// Standard codes: -32700 parse error, -32600 invalid request,
+    /// -32601 method not found, -32602 invalid params, -32603 internal error.
+    /// Server-defined codes are in the range -32000 to -32099.
+    pub fn jsonrpc_code(&self) -> i32 {
+        match self {
+            ErrorCode::InvalidInput => -32602,
+            ErrorCode::Unauthenticated => -32000,
+            ErrorCode::Forbidden => -32001,
+            ErrorCode::NotFound => -32002,
+            ErrorCode::Conflict => -32003,
+            ErrorCode::FailedPrecondition => -32004,
+            ErrorCode::RateLimited => -32005,
+            ErrorCode::Internal => -32603,
+            ErrorCode::NotImplemented => -32601,
+            ErrorCode::Unavailable => -32006,
+        }
+    }
+
     /// Infer error code from type/variant name (convention-based)
     pub fn infer_from_name(name: &str) -> Self {
         let name_lower = name.to_lowercase();
@@ -123,6 +143,14 @@ pub trait IntoErrorCode {
 
     /// Get a human-readable message
     fn message(&self) -> String;
+
+    /// Get the JSON-RPC numeric error code for this error.
+    ///
+    /// Defaults to the code derived from `error_code()`. Override this for
+    /// per-variant JSON-RPC codes (e.g. `-32602` for invalid params).
+    fn jsonrpc_code(&self) -> i32 {
+        self.error_code().jsonrpc_code()
+    }
 }
 
 // Implement for common error types
@@ -136,6 +164,46 @@ impl IntoErrorCode for std::io::Error {
             }
             _ => ErrorCode::Internal,
         }
+    }
+
+    fn message(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl IntoErrorCode for String {
+    fn error_code(&self) -> ErrorCode {
+        ErrorCode::Internal
+    }
+
+    fn message(&self) -> String {
+        self.clone()
+    }
+}
+
+impl IntoErrorCode for &str {
+    fn error_code(&self) -> ErrorCode {
+        ErrorCode::Internal
+    }
+
+    fn message(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl IntoErrorCode for Box<dyn std::error::Error> {
+    fn error_code(&self) -> ErrorCode {
+        ErrorCode::Internal
+    }
+
+    fn message(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl IntoErrorCode for Box<dyn std::error::Error + Send + Sync> {
+    fn error_code(&self) -> ErrorCode {
+        ErrorCode::Internal
     }
 
     fn message(&self) -> String {

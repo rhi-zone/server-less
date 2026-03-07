@@ -23,6 +23,8 @@ struct ErrorVariantArgs {
     code: Option<ErrorCodeSpec>,
     /// Custom message
     message: Option<String>,
+    /// JSON-RPC numeric error code override (e.g. -32602)
+    jsonrpc_code: Option<i32>,
 }
 
 enum ErrorCodeSpec {
@@ -84,10 +86,47 @@ impl Parse for ErrorVariantArgs {
                         ));
                     }
                 }
+                syn::Meta::NameValue(nv) if nv.path.is_ident("jsonrpc_code") => {
+                    // jsonrpc_code = -32602 (negative integer literal)
+                    let parsed_code: i32 = match &nv.value {
+                        syn::Expr::Unary(syn::ExprUnary {
+                            op: syn::UnOp::Neg(_),
+                            expr,
+                            ..
+                        }) => {
+                            if let syn::Expr::Lit(syn::ExprLit {
+                                lit: syn::Lit::Int(lit),
+                                ..
+                            }) = expr.as_ref()
+                            {
+                                let val: i32 = lit.base10_parse()?;
+                                -val
+                            } else {
+                                return Err(syn::Error::new_spanned(
+                                    &nv.value,
+                                    "jsonrpc_code must be an integer (e.g. -32602)",
+                                ));
+                            }
+                        }
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Int(lit),
+                            ..
+                        }) => lit.base10_parse()?,
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                &nv.value,
+                                "jsonrpc_code must be an integer\n\
+                                 \n\
+                                 Example: #[error(jsonrpc_code = -32602)]",
+                            ));
+                        }
+                    };
+                    args.jsonrpc_code = Some(parsed_code);
+                }
                 other => {
                     return Err(syn::Error::new_spanned(
                         other,
-                        "unknown attribute. Valid: code, message",
+                        "unknown attribute. Valid: code, message, jsonrpc_code",
                     ));
                 }
             }
@@ -120,6 +159,7 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
     };
 
     let mut error_code_arms = Vec::new();
+    let mut jsonrpc_code_arms = Vec::new();
     let mut message_arms = Vec::new();
     let mut display_arms = Vec::new();
 
@@ -177,7 +217,7 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
         let (pattern, display_format) = match &variant.fields {
             Fields::Unit => (
                 quote! { Self::#variant_name },
-                quote! { write!(f, "{}", self.message()) },
+                quote! { write!(f, "{}", ::server_less::IntoErrorCode::message(self)) },
             ),
             Fields::Unnamed(fields) => {
                 let field_names: Vec<_> = (0..fields.unnamed.len())
@@ -192,7 +232,7 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
                         quote! { write!(f, "{}: {}", #variant_name_str, _0) },
                     )
                 } else {
-                    (pattern, quote! { write!(f, "{}", self.message()) })
+                    (pattern, quote! { write!(f, "{}", ::server_less::IntoErrorCode::message(self)) })
                 }
             }
             Fields::Named(fields) => {
@@ -202,12 +242,22 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
                     .map(|f| f.ident.as_ref().unwrap())
                     .collect();
                 let pattern = quote! { Self::#variant_name { #(#field_names),* } };
-                (pattern, quote! { write!(f, "{}", self.message()) })
+                (pattern, quote! { write!(f, "{}", ::server_less::IntoErrorCode::message(self)) })
             }
         };
 
         error_code_arms.push(quote! {
             #pattern => #error_code
+        });
+
+        // Generate jsonrpc_code arm: use explicit override if provided, otherwise delegate to error_code
+        let jsonrpc_code_expr = if let Some(code) = args.jsonrpc_code {
+            quote! { #code }
+        } else {
+            quote! { #error_code.jsonrpc_code() }
+        };
+        jsonrpc_code_arms.push(quote! {
+            #pattern => #jsonrpc_code_expr
         });
 
         message_arms.push(quote! {
@@ -224,6 +274,12 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
             fn error_code(&self) -> ::server_less::ErrorCode {
                 match self {
                     #(#error_code_arms,)*
+                }
+            }
+
+            fn jsonrpc_code(&self) -> i32 {
+                match self {
+                    #(#jsonrpc_code_arms,)*
                 }
             }
 

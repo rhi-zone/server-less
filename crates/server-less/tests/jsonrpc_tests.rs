@@ -417,3 +417,148 @@ fn test_jsonrpc_mount_trait_implemented() {
     assert!(methods.contains(&"add".to_string()));
     assert!(methods.contains(&"double".to_string()));
 }
+
+/// Test sync dispatch via JsonRpcMount::jsonrpc_mount_dispatch
+#[test]
+fn test_jsonrpc_mount_dispatch_sync() {
+    use server_less::JsonRpcMount;
+
+    let math = MathTools;
+
+    // Sync dispatch of a sync method works
+    let result = math.jsonrpc_mount_dispatch("add", json!({"a": 7, "b": 3}));
+    assert!(result.is_ok(), "sync dispatch should succeed for sync method");
+    let val = result.unwrap();
+    assert_eq!(val, json!(10));
+
+    // Sync dispatch of another method
+    let result = math.jsonrpc_mount_dispatch("double", json!({"n": 6}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), json!(12));
+
+    // Sync dispatch of a missing method returns Err
+    let result = math.jsonrpc_mount_dispatch("nonexistent", json!({}));
+    assert!(result.is_err(), "sync dispatch of unknown method should return Err");
+}
+
+/// Test that async-only methods return Err when dispatched synchronously
+#[derive(Clone)]
+struct AsyncOnlyService;
+
+#[server_less::jsonrpc]
+impl AsyncOnlyService {
+    pub async fn only_async(&self, x: i32) -> i32 {
+        x * 2
+    }
+    pub fn sync_method(&self, x: i32) -> i32 {
+        x + 1
+    }
+}
+
+#[test]
+fn test_jsonrpc_mount_dispatch_sync_rejects_async() {
+    use server_less::JsonRpcMount;
+
+    let svc = AsyncOnlyService;
+
+    // Sync method works
+    let result = svc.jsonrpc_mount_dispatch("sync_method", json!({"x": 5}));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), json!(6));
+
+    // Async-only method returns Err in sync context
+    let result = svc.jsonrpc_mount_dispatch("only_async", json!({"x": 5}));
+    assert!(
+        result.is_err(),
+        "async method should return Err in sync dispatch context"
+    );
+    assert!(
+        result.unwrap_err().contains("sync context"),
+        "error message should mention sync context"
+    );
+}
+
+/// Test ErrorCode::jsonrpc_code() mapping
+#[test]
+fn test_error_code_jsonrpc_code() {
+    use server_less::ErrorCode;
+    // Standard invalid params code
+    assert_eq!(ErrorCode::InvalidInput.jsonrpc_code(), -32602);
+    // Internal error fallback
+    assert_eq!(ErrorCode::Internal.jsonrpc_code(), -32603);
+    // Method not found code maps to NotImplemented
+    assert_eq!(ErrorCode::NotImplemented.jsonrpc_code(), -32601);
+}
+
+/// Test that ServerlessError::jsonrpc_code() propagates to JSON-RPC response
+#[derive(Debug, server_less::ServerlessError)]
+enum RpcError {
+    #[error(code = InvalidInput, jsonrpc_code = -32602)]
+    BadParams,
+    #[error(code = NotFound)]
+    Missing,
+}
+
+#[derive(Clone)]
+struct ErrorService;
+
+#[server_less::jsonrpc]
+impl ErrorService {
+    fn get_item(&self, id: i32) -> Result<String, RpcError> {
+        if id < 0 {
+            Err(RpcError::BadParams)
+        } else if id == 0 {
+            Err(RpcError::Missing)
+        } else {
+            Ok(format!("item-{}", id))
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_jsonrpc_error_code_from_serverless_error() {
+    let svc = ErrorService;
+
+    // BadParams → jsonrpc_code -32602
+    let response = svc
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "get_item",
+            "params": {"id": -1},
+            "id": 1
+        }))
+        .await;
+    assert!(response["error"].is_object());
+    assert_eq!(
+        response["error"]["code"],
+        -32602,
+        "BadParams should produce JSON-RPC code -32602"
+    );
+
+    // Missing → jsonrpc_code derived from NotFound (-32002)
+    let response = svc
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "get_item",
+            "params": {"id": 0},
+            "id": 2
+        }))
+        .await;
+    assert!(response["error"].is_object());
+    assert_eq!(
+        response["error"]["code"],
+        server_less::ErrorCode::NotFound.jsonrpc_code(),
+        "Missing should produce the NotFound JSON-RPC code"
+    );
+
+    // Successful call
+    let response = svc
+        .jsonrpc_handle(json!({
+            "jsonrpc": "2.0",
+            "method": "get_item",
+            "params": {"id": 42},
+            "id": 3
+        }))
+        .await;
+    assert_eq!(response["result"], "item-42");
+}

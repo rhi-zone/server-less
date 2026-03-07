@@ -118,6 +118,12 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
         .map(|m| generate_dispatch_arm(m, has_qualified))
         .collect::<syn::Result<Vec<_>>>()?;
 
+    let dispatch_arms_sync: Vec<_> = partitioned
+        .leaf
+        .iter()
+        .map(|m| generate_sync_dispatch_arm(m, has_qualified))
+        .collect::<syn::Result<Vec<_>>>()?;
+
     let method_names: Vec<_> = partitioned
         .leaf
         .iter()
@@ -173,6 +179,18 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
         )
         .collect();
 
+    let mount_dispatch_arms_sync: Vec<_> = partitioned
+        .static_mounts
+        .iter()
+        .map(|m| generate_static_mount_dispatch_sync(m))
+        .chain(
+            partitioned
+                .slug_mounts
+                .iter()
+                .map(|m| generate_slug_mount_dispatch_sync(m)),
+        )
+        .collect();
+
     let mount_method_names: Vec<_> = partitioned
         .static_mounts
         .iter()
@@ -187,7 +205,9 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
             .unwrap_or(false)
     });
 
-    // Mount dispatch inner method — always takes (method, args) without Context
+    // Mount dispatch inner method — always takes (method, args) without Context.
+    // Maps the (i32, String) error from jsonrpc_dispatch down to a plain String
+    // for the JsonRpcMount::jsonrpc_mount_dispatch_async interface.
     let mount_dispatch_inner = if uses_context {
         quote! {
             async fn jsonrpc_mount_dispatch_inner(
@@ -196,7 +216,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                 args: ::server_less::serde_json::Value,
             ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
                 let __ctx = ::server_less::Context::new();
-                self.jsonrpc_dispatch(__ctx, method, args).await
+                self.jsonrpc_dispatch(__ctx, method, args).await.map_err(|(_, msg)| msg)
             }
         }
     } else {
@@ -206,7 +226,23 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                 method: &str,
                 args: ::server_less::serde_json::Value,
             ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
-                self.jsonrpc_dispatch(method, args).await
+                self.jsonrpc_dispatch(method, args).await.map_err(|(_, msg)| msg)
+            }
+        }
+    };
+
+    // Sync mount dispatch inner — returns Err for async-only methods
+    let mount_dispatch_sync_inner = quote! {
+        /// Internal sync dispatch for mount trait (no Context, returns Err for async-only methods).
+        fn jsonrpc_mount_dispatch_sync_inner(
+            &self,
+            method: &str,
+            args: ::server_less::serde_json::Value,
+        ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+            match method {
+                #(#dispatch_arms_sync)*
+                #(#mount_dispatch_arms_sync)*
+                _ => Err(format!("Method not found: {}", method)),
             }
         }
     };
@@ -214,7 +250,9 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     let struct_name_snake = struct_name.to_string().to_lowercase();
     let handler_name = format_ident!("__trellis_jsonrpc_handler_{}", struct_name_snake);
 
-    // Generate dispatch signature and public API based on Context usage
+    // Generate dispatch signature and public API based on Context usage.
+    // The private jsonrpc_dispatch returns Result<Value, (i32, String)> where
+    // the i32 is the JSON-RPC error code, enabling per-error code propagation.
     let (
         dispatch_sig,
         dispatch_call,
@@ -232,7 +270,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                     __ctx: ::server_less::Context,
                     method: &str,
                     args: ::server_less::serde_json::Value,
-                ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+                ) -> ::std::result::Result<::server_less::serde_json::Value, (i32, String)>
             },
             quote! { self.jsonrpc_dispatch(__ctx, method, params).await },
             quote! {
@@ -261,7 +299,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                     &self,
                     method: &str,
                     args: ::server_less::serde_json::Value,
-                ) -> ::std::result::Result<::server_less::serde_json::Value, String>
+                ) -> ::std::result::Result<::server_less::serde_json::Value, (i32, String)>
             },
             quote! { self.jsonrpc_dispatch(method, params).await },
             quote! {
@@ -291,7 +329,15 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                 Self::jsonrpc_methods().into_iter().map(|s| s.to_string()).collect()
             }
 
-            async fn jsonrpc_mount_dispatch(
+            fn jsonrpc_mount_dispatch(
+                &self,
+                method: &str,
+                params: ::server_less::serde_json::Value,
+            ) -> ::std::result::Result<::server_less::serde_json::Value, String> {
+                self.jsonrpc_mount_dispatch_sync_inner(method, params)
+            }
+
+            async fn jsonrpc_mount_dispatch_async(
                 &self,
                 method: &str,
                 params: ::server_less::serde_json::Value,
@@ -369,7 +415,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                             "id": id
                         })
                     }
-                    Err(err) => Self::jsonrpc_error(-32603, &err, id),
+                    Err((code, err)) => Self::jsonrpc_error(code, &err, id),
                 })
             }
 
@@ -392,9 +438,11 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
                 match method {
                     #(#dispatch_arms_async)*
                     #(#mount_dispatch_arms)*
-                    _ => Err(format!("Method not found: {}", method)),
+                    _ => Err((-32601i32, format!("Method not found: {}", method))),
                 }
             }
+
+            #mount_dispatch_sync_inner
 
             #mount_dispatch_inner
 
@@ -524,23 +572,172 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     })
 }
 
+/// Generate response handling for the private `jsonrpc_dispatch` method.
+///
+/// Unlike `server_less_rpc::generate_json_response`, this produces
+/// `Result<Value, (i32, String)>` so that the JSON-RPC error code is preserved.
+/// For `Result<T, E: IntoErrorCode>` returns, the code is taken from
+/// `IntoErrorCode::jsonrpc_code()`. For other returns, `-32603` (internal error)
+/// is used as the fallback.
+fn generate_jsonrpc_json_response(method: &MethodInfo) -> TokenStream2 {
+    let ret = &method.return_info;
+
+    if ret.is_unit {
+        quote! {
+            Ok(::server_less::serde_json::json!({"success": true}))
+        }
+    } else if ret.is_stream {
+        quote! {
+            {
+                use ::server_less::futures::StreamExt;
+                let collected: Vec<_> = result.collect().await;
+                Ok(::server_less::serde_json::to_value(collected)
+                    .map_err(|e| (-32603i32, format!("Serialization error: {}", e)))
+                    .map_err(|e| e)?)
+            }
+        }
+    } else if ret.is_result {
+        quote! {
+            match result {
+                Ok(value) => ::server_less::serde_json::to_value(value)
+                    .map(Ok)
+                    .map_err(|e| Err((-32603i32, format!("Serialization error: {}", e))))
+                    .unwrap_or_else(|e| e),
+                Err(err) => {
+                    let __code = ::server_less::IntoErrorCode::jsonrpc_code(&err);
+                    let __msg = ::server_less::IntoErrorCode::message(&err);
+                    Err((__code, __msg))
+                }
+            }
+        }
+    } else if ret.is_option {
+        quote! {
+            match result {
+                Some(value) => ::server_less::serde_json::to_value(value)
+                    .map(Ok)
+                    .map_err(|e| Err((-32603i32, format!("Serialization error: {}", e))))
+                    .unwrap_or_else(|e| e),
+                None => Ok(::server_less::serde_json::Value::Null),
+            }
+        }
+    } else {
+        quote! {
+            ::server_less::serde_json::to_value(result)
+                .map(Ok)
+                .map_err(|e| Err((-32603i32, format!("Serialization error: {}", e))))
+                .unwrap_or_else(|e| e)
+        }
+    }
+}
+
+/// Generate jsonrpc-specific param extraction that produces `(i32, String)` errors.
+///
+/// Like `server_less_rpc::generate_param_extraction` but maps errors to `(i32, String)`
+/// suitable for use in `jsonrpc_dispatch` which returns `Result<Value, (i32, String)>`.
+fn generate_jsonrpc_param_extraction(param: &server_less_parse::ParamInfo) -> TokenStream2 {
+    let name = &param.name;
+    let name_str = param.name.to_string();
+    let ty = &param.ty;
+
+    if param.is_optional {
+        quote! {
+            let #name: #ty = args.get(#name_str)
+                .and_then(|v| if v.is_null() { None } else {
+                    ::server_less::serde_json::from_value(v.clone()).ok()
+                });
+        }
+    } else {
+        quote! {
+            let __val = args.get(#name_str)
+                .ok_or_else(|| (-32602i32, format!("Missing required parameter: {}", #name_str)))?
+                .clone();
+            let #name: #ty = ::server_less::serde_json::from_value::<#ty>(__val)
+                .map_err(|e| (-32602i32, format!("Invalid parameter {}: {}", #name_str, e)))?;
+        }
+    }
+}
+
+/// Generate a sync dispatch arm for the mount trait's sync inner dispatch.
+///
+/// Returns `Err` for async-only methods, mirroring the WsMount sync pattern.
+fn generate_sync_dispatch_arm(
+    method: &MethodInfo,
+    has_qualified: bool,
+) -> syn::Result<TokenStream2> {
+    let method_name_str = method.name.to_string();
+
+    // Partition Context vs regular parameters
+    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+
+    // If no Context, use default RPC dispatch with AsyncHandling::Error
+    if context_param.is_none() {
+        return Ok(server_less_rpc::generate_dispatch_arm(
+            method,
+            None,
+            AsyncHandling::Error,
+        ));
+    }
+
+    // For Context methods: extract regular params but inject a fresh Context
+    let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
+
+    let mut arg_exprs = Vec::new();
+    for param in &method.params {
+        if crate::context::should_inject_context(&param.ty, has_qualified) {
+            arg_exprs.push(quote! { ::server_less::Context::new() });
+        } else {
+            let name = &param.name;
+            arg_exprs.push(quote! { #name });
+        }
+    }
+
+    let call =
+        server_less_rpc::generate_method_call_with_args(method, arg_exprs, AsyncHandling::Error);
+    let response = server_less_rpc::generate_json_response(method);
+
+    Ok(quote! {
+        #method_name_str => {
+            #(#param_extractions)*
+            #call
+            #response
+        }
+    })
+}
+
+/// Generate an async dispatch arm for the private `jsonrpc_dispatch` method.
+///
+/// Returns `Result<Value, (i32, String)>` arms so that JSON-RPC error codes
+/// are propagated from `IntoErrorCode` implementations.
 fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
     let method_name_str = method.name.to_string();
 
     // Partition Context vs regular parameters
     let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
 
-    // If no Context, use default RPC dispatch
+    let response = generate_jsonrpc_json_response(method);
+
     if context_param.is_none() {
-        return Ok(server_less_rpc::generate_dispatch_arm(
-            method,
-            None,
-            AsyncHandling::Await,
-        ));
+        // No Context injection: generate jsonrpc-specific param extractions and call directly
+        let param_extractions: Vec<_> = method
+            .params
+            .iter()
+            .map(generate_jsonrpc_param_extraction)
+            .collect();
+        let call = server_less_rpc::generate_method_call(method, AsyncHandling::Await);
+        return Ok(quote! {
+            #method_name_str => {
+                #(#param_extractions)*
+                #call
+                #response
+            }
+        });
     }
 
     // Generate extractions only for regular params (Context is already in scope as __ctx)
-    let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
+    let param_extractions: Vec<_> = regular_params
+        .iter()
+        .map(|p| generate_jsonrpc_param_extraction(p))
+        .collect();
 
     // Build argument list: Context first (if present), then regular params in order
     let mut arg_exprs = Vec::new();
@@ -555,7 +752,6 @@ fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Resul
 
     let call =
         server_less_rpc::generate_method_call_with_args(method, arg_exprs, AsyncHandling::Await);
-    let response = server_less_rpc::generate_json_response(method);
 
     Ok(quote! {
         #method_name_str => {
@@ -583,7 +779,10 @@ fn generate_mount_method_names(method: &MethodInfo) -> TokenStream2 {
     }
 }
 
-/// Generate dispatch for a static mount (`fn foo(&self) -> &T`).
+/// Generate dispatch for a static mount (`fn foo(&self) -> &T`) — async version.
+///
+/// Maps the `Result<Value, String>` from `jsonrpc_mount_dispatch_async` into
+/// `Result<Value, (i32, String)>` to match the private `jsonrpc_dispatch` return type.
 fn generate_static_mount_dispatch(method: &MethodInfo) -> TokenStream2 {
     let mount_name = method.name.to_string();
     let mount_prefix = format!("{}.", mount_name);
@@ -594,13 +793,59 @@ fn generate_static_mount_dispatch(method: &MethodInfo) -> TokenStream2 {
         __method if __method.starts_with(#mount_prefix) => {
             let __stripped = &__method[#mount_prefix.len()..];
             let __delegate = self.#method_name();
-            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch(__delegate, __stripped, args).await
+            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch_async(__delegate, __stripped, args).await
+                .map_err(|msg| (-32603i32, msg))
         }
     }
 }
 
-/// Generate dispatch for a slug mount (`fn foo(&self, id: Id) -> &T`).
+/// Generate dispatch for a static mount (`fn foo(&self) -> &T`) — sync version.
+fn generate_static_mount_dispatch_sync(method: &MethodInfo) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    quote! {
+        __method if __method.starts_with(#mount_prefix) => {
+            let __stripped = &__method[#mount_prefix.len()..];
+            let __delegate = self.#method_name();
+            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch(__delegate, __stripped, args)
+        }
+    }
+}
+
+/// Generate dispatch for a slug mount (`fn foo(&self, id: Id) -> &T`) — async version.
+///
+/// Maps the `Result<Value, String>` from `jsonrpc_mount_dispatch_async` into
+/// `Result<Value, (i32, String)>` to match the private `jsonrpc_dispatch` return type.
 fn generate_slug_mount_dispatch(method: &MethodInfo) -> TokenStream2 {
+    let mount_name = method.name.to_string();
+    let mount_prefix = format!("{}.", mount_name);
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().unwrap();
+
+    // Use jsonrpc-specific param extraction so errors produce (i32, String)
+    let slug_extractions: Vec<_> = method
+        .params
+        .iter()
+        .map(generate_jsonrpc_param_extraction)
+        .collect();
+    let slug_names: Vec<_> = method.params.iter().map(|p| &p.name).collect();
+
+    quote! {
+        __method if __method.starts_with(#mount_prefix) => {
+            let __stripped = &__method[#mount_prefix.len()..];
+            #(#slug_extractions)*
+            let __delegate = self.#method_name(#(#slug_names),*);
+            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch_async(__delegate, __stripped, args).await
+                .map_err(|msg| (-32603i32, msg))
+        }
+    }
+}
+
+/// Generate dispatch for a slug mount (`fn foo(&self, id: Id) -> &T`) — sync version.
+fn generate_slug_mount_dispatch_sync(method: &MethodInfo) -> TokenStream2 {
     let mount_name = method.name.to_string();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
@@ -618,7 +863,7 @@ fn generate_slug_mount_dispatch(method: &MethodInfo) -> TokenStream2 {
             let __stripped = &__method[#mount_prefix.len()..];
             #(#slug_extractions)*
             let __delegate = self.#method_name(#(#slug_names),*);
-            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch(__delegate, __stripped, args).await
+            <#inner_ty as ::server_less::JsonRpcMount>::jsonrpc_mount_dispatch(__delegate, __stripped, args)
         }
     }
 }
