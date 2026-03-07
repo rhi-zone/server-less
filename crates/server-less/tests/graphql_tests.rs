@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use server_less::{graphql, graphql_enum};
+use server_less::{graphql, graphql_enum, server};
 
 #[derive(Clone)]
 struct SimpleService {
@@ -639,6 +639,68 @@ async fn test_graphql_nested_object_in_list() {
         bob_profile
     );
     assert_eq!(bob_profile["bio"], "Designer");
+}
+
+// ============================================================================
+// Skip Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct SkipService;
+
+#[graphql]
+impl SkipService {
+    /// Public query: should appear in schema
+    pub fn get_public(&self) -> String {
+        "public".to_string()
+    }
+
+    /// Internal mutation: should appear in schema
+    pub fn create_public(&self, value: String) -> String {
+        value
+    }
+
+    /// This method is skipped via #[server(skip)] and must NOT appear in the schema
+    #[server(skip)]
+    pub fn get_internal(&self) -> String {
+        "internal".to_string()
+    }
+
+    /// Skipped mutation — must NOT appear in schema
+    #[server(skip)]
+    pub fn create_internal(&self, value: String) -> String {
+        value
+    }
+}
+
+#[test]
+fn test_graphql_server_skip_excluded_from_sdl() {
+    let service = SkipService;
+    let sdl = service.graphql_sdl();
+
+    // Non-skipped methods must be present
+    assert!(
+        sdl.contains("getPublic"),
+        "getPublic should appear in schema. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        sdl.contains("createPublic"),
+        "createPublic should appear in schema. SDL:\n{}",
+        sdl
+    );
+
+    // Skipped methods must NOT appear
+    assert!(
+        !sdl.contains("getInternal"),
+        "getInternal is #[server(skip)] and must not appear in schema. SDL:\n{}",
+        sdl
+    );
+    assert!(
+        !sdl.contains("createInternal"),
+        "createInternal is #[server(skip)] and must not appear in schema. SDL:\n{}",
+        sdl
+    );
 }
 
 // ============================================================================

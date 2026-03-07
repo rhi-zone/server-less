@@ -4,7 +4,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use server_less::{http, response, route};
+use server_less::{http, response, route, server};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Item {
@@ -590,6 +590,55 @@ fn test_response_normal_method_unchanged() {
         responses.contains_key("200"),
         "Expected default 200 response for normal method"
     );
+}
+
+// ============================================================================
+// server(skip) Tests
+// ============================================================================
+
+#[derive(Clone)]
+struct ServerSkipService;
+
+#[http(prefix = "/api")]
+impl ServerSkipService {
+    /// Public endpoint — must appear in routes and OpenAPI
+    pub fn get_public(&self) -> String {
+        "public".to_string()
+    }
+
+    /// Internal helper — must NOT appear in routes or OpenAPI
+    #[server(skip)]
+    pub fn get_internal(&self) -> String {
+        "internal".to_string()
+    }
+}
+
+#[test]
+fn test_server_skip_not_in_openapi() {
+    let spec = ServerSkipService::openapi_spec();
+    let paths = spec.get("paths").unwrap().as_object().unwrap();
+
+    // Public method should appear
+    assert!(
+        paths.contains_key("/api/publics"),
+        "get_public should generate /api/publics, got: {:?}",
+        paths.keys().collect::<Vec<_>>()
+    );
+
+    // Skipped method must not appear in any path
+    for path_key in paths.keys() {
+        assert!(
+            !path_key.contains("internal"),
+            "#[server(skip)] method must not appear in OpenAPI paths: {}",
+            path_key
+        );
+    }
+}
+
+#[test]
+fn test_server_skip_router_still_created() {
+    let service = ServerSkipService;
+    let _router = service.http_router();
 }
 
 // ============================================================================

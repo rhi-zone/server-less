@@ -239,7 +239,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let prefix = args.prefix.unwrap_or_default();
     let generate_openapi = args.openapi.unwrap_or(true);
 
-    let partitioned = partition_methods(&methods, |_| false);
+    let partitioned = partition_methods(&methods, has_server_skip);
 
     // Generate mount routes (static mounts only)
     let mut mount_routes = Vec::new();
@@ -269,7 +269,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
         let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
-        if overrides.skip || has_server_skip(method) {
+        if overrides.skip {
             continue;
         }
 
