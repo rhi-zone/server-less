@@ -152,7 +152,9 @@
 //!
 //! ```no_run
 //! use server_less::prelude::*;
+//! use server_less::{app, __app_meta};
 //!
+//! #[derive(Clone)]
 //! struct MyApi;
 //!
 //! #[app(name = "myapi", description = "My API", version = "1.0.0")]
@@ -167,6 +169,7 @@
 //! ```no_run
 //! use server_less::prelude::*;
 //!
+//! #[derive(Clone)]
 //! struct MyApi;
 //!
 //! #[server(name = "myapi", description = "My API")]
@@ -201,6 +204,7 @@
 //! ```no_run
 //! use server_less::prelude::*;
 //!
+//! #[derive(Clone)]
 //! struct MyService;
 //!
 //! // #[server(config = AppConfig)]
