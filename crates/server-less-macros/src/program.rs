@@ -16,8 +16,12 @@ pub(crate) struct ProgramArgs {
     pub name: Option<String>,
     /// CLI version (forwarded to CliArgs)
     pub version: Option<String>,
-    /// CLI about (forwarded to CliArgs)
+    /// Human-readable description (forwarded to CliArgs). Preferred over `about`.
+    pub description: Option<String>,
+    /// Deprecated alias for `description` (forwarded to CliArgs).
     pub about: Option<String>,
+    /// Homepage URL (forwarded to CliArgs)
+    pub homepage: Option<String>,
     /// Markdown toggle (default: true)
     pub markdown: Option<bool>,
 }
@@ -39,19 +43,33 @@ impl Parse for ProgramArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.version = Some(lit.value());
                 }
+                "description" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.description = Some(lit.value());
+                }
                 "about" => {
                     let lit: syn::LitStr = input.parse()?;
                     args.about = Some(lit.value());
+                }
+                "homepage" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.homepage = Some(lit.value());
                 }
                 "markdown" => {
                     let lit: syn::LitBool = input.parse()?;
                     args.markdown = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] =
+                        &["name", "version", "description", "homepage", "about", "markdown"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`. Valid arguments: name, version, about, markdown"
+                            "unknown argument `{other}`{suggestion}\n\
+                             Valid arguments: name, version, description, homepage, markdown"
                         ),
                     ));
                 }
@@ -70,7 +88,9 @@ pub(crate) fn expand_program(args: ProgramArgs, impl_block: ItemImpl) -> syn::Re
     let cli_args = CliArgs {
         name: args.name,
         version: args.version,
+        description: args.description,
         about: args.about,
+        homepage: args.homepage,
         global: Vec::new(),
         defaults: None,
         no_sync: false,

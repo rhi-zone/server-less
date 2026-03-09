@@ -184,6 +184,14 @@ pub(crate) struct HttpArgs {
     pub prefix: Option<String>,
     /// Whether to generate OpenAPI spec (default: true)
     pub openapi: Option<bool>,
+    /// Application name (used as OpenAPI info.title, overrides struct name)
+    pub name: Option<String>,
+    /// Human-readable description (used as OpenAPI info.description)
+    pub description: Option<String>,
+    /// Application version (used as OpenAPI info.version, defaults to CARGO_PKG_VERSION)
+    pub version: Option<String>,
+    /// Homepage URL (used as OpenAPI info.contact.url)
+    pub homepage: Option<String>,
     /// Whether to emit debug logging in generated handlers (default: false).
     /// When true, each handler emits `eprintln!` lines before and after the
     /// method call. Set on the impl block to enable for all methods, or on a
@@ -221,8 +229,25 @@ impl Parse for HttpArgs {
                     let lit: syn::LitBool = input.parse()?;
                     args.trace = lit.value();
                 }
+                "name" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.name = Some(lit.value());
+                }
+                "description" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.description = Some(lit.value());
+                }
+                "version" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.version = Some(lit.value());
+                }
+                "homepage" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.homepage = Some(lit.value());
+                }
                 other => {
-                    const VALID: &[&str] = &["prefix", "openapi", "debug", "trace"];
+                    const VALID: &[&str] =
+                        &["prefix", "openapi", "name", "description", "version", "homepage", "debug", "trace"];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -230,12 +255,12 @@ impl Parse for HttpArgs {
                         ident.span(),
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
-                             Valid arguments: prefix, openapi, debug, trace\n\
+                             Valid arguments: prefix, openapi, name, description, version, homepage, debug, trace\n\
                              Examples:\n\
                              - #[http(prefix = \"/api/v1\")]\n\
                              - #[http(openapi = false)]\n\
+                             - #[http(name = \"My API\", description = \"Does the thing\")]\n\
                              - #[http(debug = true)]\n\
-                             - #[http(trace = true)]\n\
                              \n\
                              Related: #[serve] (multi-protocol), #[openapi] (standalone API docs), #[server] (blessed preset)"
                         ),
@@ -290,6 +315,19 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let generate_openapi = args.openapi.unwrap_or(true);
     let impl_debug = args.debug;
     let impl_trace = args.trace;
+    let openapi_title = args.name.unwrap_or_else(|| struct_name.to_string());
+    let openapi_version = match args.version {
+        Some(ref v) => quote! { #v },
+        None => quote! { ::std::env!("CARGO_PKG_VERSION") },
+    };
+    let openapi_description_entry = match args.description {
+        Some(ref d) => quote! { , "description": #d },
+        None => quote! {},
+    };
+    let openapi_contact_entry = match args.homepage {
+        Some(ref hp) => quote! { , "contact": { "url": #hp } },
+        None => quote! {},
+    };
 
     let partitioned = partition_methods(&methods, has_server_skip);
 
@@ -457,12 +495,9 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
 
     // Conditionally generate OpenAPI spec method.
     // Builds from http_openapi_paths() so mounted child paths are automatically included.
-    let struct_name_str = struct_name.to_string();
     let openapi_method = if generate_openapi {
-        let openapi_doc = format!(
-            "Get OpenAPI 3.0 specification for this service.\n\n\
-             Includes all paths (own + mounted children). Use `http_openapi_paths()` for composable path fragments.",
-        );
+        let openapi_doc = "Get OpenAPI 3.0 specification for this service.\n\n\
+             Includes all paths (own + mounted children). Use `http_openapi_paths()` for composable path fragments.";
         quote! {
             #[doc = #openapi_doc]
             pub fn openapi_spec() -> ::server_less::serde_json::Value {
@@ -479,8 +514,10 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                 ::server_less::serde_json::json!({
                     "openapi": "3.0.0",
                     "info": {
-                        "title": #struct_name_str,
-                        "version": "0.1.0"
+                        "title": #openapi_title,
+                        "version": #openapi_version
+                        #openapi_description_entry
+                        #openapi_contact_entry
                     },
                     "paths": paths
                 })
@@ -694,6 +731,7 @@ fn has_http_trace(method: &MethodInfo) -> bool {
     false
 }
 
+#[allow(clippy::type_complexity)]
 fn generate_param_handling(
     method: &MethodInfo,
     has_qualified: bool,
@@ -1238,6 +1276,14 @@ pub(crate) struct ServeArgs {
     /// OpenAPI spec generation (default: true when protocols are present)
     /// Set to false with `openapi = false`
     pub openapi: Option<bool>,
+    /// Application name (used as OpenAPI info.title, overrides struct name)
+    pub name: Option<String>,
+    /// Human-readable description (used as OpenAPI info.description)
+    pub description: Option<String>,
+    /// Application version (used as OpenAPI info.version, defaults to CARGO_PKG_VERSION)
+    pub version: Option<String>,
+    /// Homepage URL (used as OpenAPI info.contact.url)
+    pub homepage: Option<String>,
 }
 
 impl ServeArgs {
@@ -1275,9 +1321,31 @@ impl Parse for ServeArgs {
                         args.openapi = Some(true);
                     }
                 }
+                "name" => {
+                    input.parse::<Token![=]>()?;
+                    let lit: syn::LitStr = input.parse()?;
+                    args.name = Some(lit.value());
+                }
+                "description" => {
+                    input.parse::<Token![=]>()?;
+                    let lit: syn::LitStr = input.parse()?;
+                    args.description = Some(lit.value());
+                }
+                "version" => {
+                    input.parse::<Token![=]>()?;
+                    let lit: syn::LitStr = input.parse()?;
+                    args.version = Some(lit.value());
+                }
+                "homepage" => {
+                    input.parse::<Token![=]>()?;
+                    let lit: syn::LitStr = input.parse()?;
+                    args.homepage = Some(lit.value());
+                }
                 other => {
-                    const VALID: &[&str] =
-                        &["http", "ws", "jsonrpc", "graphql", "health", "openapi"];
+                    const VALID: &[&str] = &[
+                        "http", "ws", "jsonrpc", "graphql", "health", "openapi",
+                        "name", "description", "version", "homepage",
+                    ];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -1287,11 +1355,12 @@ impl Parse for ServeArgs {
                             "unknown argument `{other}`{suggestion}\n\
                              \n\
                              Valid protocols: http, ws, jsonrpc, graphql\n\
-                             Valid options: health, openapi\n\
+                             Valid options: health, openapi, name, description, version, homepage\n\
                              \n\
                              Examples:\n\
                              - #[serve(http, ws, health = \"/status\")]\n\
-                             - #[serve(http, openapi = false)]"
+                             - #[serve(http, openapi = false)]\n\
+                             - #[serve(http, name = \"My API\", description = \"Does the thing\")]"
                         ),
                     ));
                 }
@@ -1314,6 +1383,11 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
 
     let openapi_enabled = args.openapi_enabled();
     let health_path = args.health_path.unwrap_or_else(|| "/health".to_string());
+    let serve_title = args.name.unwrap_or_else(|| struct_name.to_string());
+    let serve_version = match args.version {
+        Some(ref v) => quote! { #v },
+        None => quote! { ::std::env!("CARGO_PKG_VERSION") },
+    };
 
     // Build router combination based on protocols
     let router_setup = generate_router_setup(&args.protocols);
@@ -1321,7 +1395,6 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
     // Generate OpenAPI spec method and route if enabled
     let (openapi_spec_method, openapi_route) = if openapi_enabled {
         let openapi_paths_merges = generate_openapi_merges(&args.protocols);
-        let struct_name_str = struct_name.to_string();
 
         let method = quote! {
             /// Get the combined OpenAPI spec for all configured protocols.
@@ -1332,8 +1405,8 @@ pub(crate) fn expand_serve(args: ServeArgs, impl_block: ItemImpl) -> syn::Result
             /// Disable with `#[serve(http, openapi = false)]`.
             pub fn combined_openapi_spec() -> ::server_less::serde_json::Value {
                 ::server_less::OpenApiBuilder::new()
-                    .title(#struct_name_str)
-                    .version("0.1.0")
+                    .title(#serve_title)
+                    .version(#serve_version)
                     #openapi_paths_merges
                     .build()
             }

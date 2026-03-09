@@ -82,6 +82,10 @@ pub(crate) fn expand_rpc(args: RpcArgs, impl_block: ItemImpl) -> syn::Result<Tok
             protocols: vec!["jsonrpc".into()],
             health_path: args.health,
             openapi: Some(false),
+            name: None,
+            description: None,
+            version: None,
+            homepage: None,
         };
         strip_first_impl(crate::http::expand_serve(serve_args, impl_block)?)
     };

@@ -98,7 +98,11 @@ use crate::server_attrs::{has_server_hidden, has_server_skip};
 pub(crate) struct CliArgs {
     pub name: Option<String>,
     pub version: Option<String>,
+    /// Human-readable description (preferred). `about` is a deprecated alias.
+    pub description: Option<String>,
+    /// Deprecated alias for `description`. Ignored if `description` is also set.
     pub about: Option<String>,
+    pub homepage: Option<String>,
     pub global: Vec<(String, Option<String>)>,
     pub defaults: Option<String>,
     /// Suppress the sync convenience entrypoints `cli_run()` and `cli_run_with()`.
@@ -154,9 +158,17 @@ impl Parse for CliArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.version = Some(lit.value());
                 }
+                "description" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.description = Some(lit.value());
+                }
                 "about" => {
                     let lit: syn::LitStr = input.parse()?;
                     args.about = Some(lit.value());
+                }
+                "homepage" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    args.homepage = Some(lit.value());
                 }
                 "global" => {
                     let content;
@@ -181,8 +193,10 @@ impl Parse for CliArgs {
                     args.defaults = Some(lit.value());
                 }
                 other => {
-                    const VALID: &[&str] =
-                        &["name", "version", "about", "global", "defaults", "no_sync", "no_async"];
+                    const VALID: &[&str] = &[
+                        "name", "version", "description", "homepage", "about", "global",
+                        "defaults", "no_sync", "no_async",
+                    ];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -191,9 +205,9 @@ impl Parse for CliArgs {
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
                              \n\
-                             Valid arguments: name, version, about, global, defaults, no_sync, no_async\n\
+                             Valid arguments: name, version, description, homepage, global, defaults, no_sync, no_async\n\
                              \n\
-                             Example: #[cli(name = \"my-app\", version = \"1.0.0\", about = \"My CLI tool\")]\n\
+                             Example: #[cli(name = \"my-app\", description = \"My CLI tool\")]\n\
                              Bare flags: #[cli(no_sync)] or #[cli(no_async)]\n\
                              \n\
                              Related: #[program] preset (CLI + markdown docs), #[markdown] (standalone docs)"
@@ -382,8 +396,11 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let app_name = args
         .name
         .unwrap_or_else(|| struct_name.to_string().to_kebab_case());
-    let version = args.version.unwrap_or_else(|| "0.1.0".to_string());
-    let about = args.about.unwrap_or_default();
+    let version_tokens = match args.version {
+        Some(ref v) => quote! { #v },
+        None => quote! { ::std::env!("CARGO_PKG_VERSION") },
+    };
+    let about = args.description.or(args.about).unwrap_or_default();
     let global_flags_with_help = args.global;
     let global_flags: Vec<String> = global_flags_with_help
         .iter()
@@ -835,7 +852,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         impl #impl_generics ::server_less::CliSubcommand for #self_ty #where_clause {
             fn cli_command() -> ::server_less::clap::Command {
                 ::server_less::clap::Command::new(#app_name)
-                    .version(#version)
+                    .version(#version_tokens)
                     .about(#about)
                     #(#global_flag_args)*
                     #format_flags
@@ -1040,10 +1057,10 @@ fn type_to_json_schema_ty(ty: &syn::Type) -> TokenStream2 {
                 }
                 "Option" => {
                     // Recurse into Option<T> — schema mirrors the inner type
-                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                        if let Some(GenericArgument::Type(inner)) = args.args.first() {
-                            return type_to_json_schema_ty(inner);
-                        }
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(GenericArgument::Type(inner)) = args.args.first()
+                    {
+                        return type_to_json_schema_ty(inner);
                     }
                     quote! { ::server_less::serde_json::json!({"type": "object"}) }
                 }

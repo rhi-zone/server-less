@@ -236,7 +236,9 @@ fn test_openapi_detects_single_protocol() {
 // Enhanced Attributes Tests (tags, deprecated, description)
 // ============================================================================
 
+#[allow(unused_imports)]
 use server_less::response;
+#[allow(unused_imports)]
 use server_less::route;
 
 #[derive(Clone)]
@@ -371,6 +373,7 @@ fn test_openapi_hidden_excludes_from_spec() {
 #[derive(Clone)]
 struct ParamHelpStandaloneService;
 
+#[allow(unused_variables)]
 #[openapi(prefix = "/api")]
 impl ParamHelpStandaloneService {
     /// Find users by name
