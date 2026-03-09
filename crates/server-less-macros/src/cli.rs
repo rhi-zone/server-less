@@ -191,8 +191,16 @@ impl Parse for CliArgs {
                     args.defaults = Some(lit.value());
                 }
                 other => {
+                    if other == "about" {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "unknown argument `about` — renamed to `description` in 0.4.0\n\
+                             \n\
+                             Example: #[cli(description = \"My CLI tool\")]",
+                        ));
+                    }
                     const VALID: &[&str] = &[
-                        "name", "version", "description", "homepage", "about", "global",
+                        "name", "version", "description", "homepage", "global",
                         "defaults", "no_sync", "no_async",
                     ];
                     let suggestion = crate::did_you_mean(other, VALID)

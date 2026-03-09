@@ -77,6 +77,14 @@ impl Parse for ProgramArgs {
                     }
                 }
                 other => {
+                    if other == "about" {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "unknown argument `about` — renamed to `description` in 0.4.0\n\
+                             \n\
+                             Example: #[program(description = \"My CLI tool\")]",
+                        ));
+                    }
                     const VALID: &[&str] =
                         &["name", "version", "description", "homepage", "markdown", "config", "config_cmd"];
                     let suggestion = crate::did_you_mean(other, VALID)

@@ -1,0 +1,7 @@
+error: unknown argument `about` — renamed to `description` in 0.4.0
+
+       Example: #[cli(description = "My CLI tool")]
+ --> tests/fixtures/cli_about_rename.rs:7:7
+  |
+7 | #[cli(about = "my tool")]
+  |       ^^^^^
