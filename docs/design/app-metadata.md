@@ -11,7 +11,7 @@ Every protocol that exposes an application identity needs the same basic informa
 - **Config** needs a name for the default config file path (`{name}.toml`)
 - **OpenRPC**, **MCP**, etc. need similar metadata in their respective specs
 
-Before `#[app]`, this was inconsistent: `#[program(name, about, version)]` covered CLI, HTTP hardcoded the struct name as the OpenAPI title, and nothing else had a way to express metadata at all.
+Before `#[app]`, this was inconsistent: `#[program(name, description, version)]` covered CLI, HTTP hardcoded the struct name as the OpenAPI title, and nothing else had a way to express metadata at all.
 
 ## The `#[app]` Attribute
 
@@ -99,7 +99,7 @@ When both are present, per-preset values take precedence over `#[app]` for that 
 | Old | New |
 |-----|-----|
 | `#[program(name = "...")]` | `#[app(name = "...")]` |
-| `#[program(about = "...")]` | `#[app(description = "...")]` |
+| `#[program(description = "...")]` | `#[app(description = "...")]` |
 | `#[program(version = "...")]` | `#[app(version = "...")]` |
 | `#[cli(version = "...")]` | `#[app(version = "...")]` |
 

@@ -56,7 +56,7 @@ Generates:
 The CLI macro is working:
 
 ```rust
-#[cli(name = "my-cli", version = "1.0.0", about = "My CLI app")]
+#[cli(name = "my-cli", version = "1.0.0", description = "My CLI app")]
 impl UserService {
     /// List all users
     pub fn list_users(&self) -> Vec<User> { ... }
