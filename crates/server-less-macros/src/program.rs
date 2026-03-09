@@ -16,10 +16,8 @@ pub(crate) struct ProgramArgs {
     pub name: Option<String>,
     /// CLI version (forwarded to CliArgs)
     pub version: Option<String>,
-    /// Human-readable description (forwarded to CliArgs). Preferred over `about`.
+    /// Human-readable description (forwarded to CliArgs).
     pub description: Option<String>,
-    /// Deprecated alias for `description` (forwarded to CliArgs).
-    pub about: Option<String>,
     /// Homepage URL (forwarded to CliArgs)
     pub homepage: Option<String>,
     /// Markdown toggle (default: true)
@@ -47,10 +45,6 @@ impl Parse for ProgramArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.description = Some(lit.value());
                 }
-                "about" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    args.about = Some(lit.value());
-                }
                 "homepage" => {
                     let lit: syn::LitStr = input.parse()?;
                     args.homepage = Some(lit.value());
@@ -61,7 +55,7 @@ impl Parse for ProgramArgs {
                 }
                 other => {
                     const VALID: &[&str] =
-                        &["name", "version", "description", "homepage", "about", "markdown"];
+                        &["name", "version", "description", "homepage", "markdown"];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -89,7 +83,6 @@ pub(crate) fn expand_program(args: ProgramArgs, impl_block: ItemImpl) -> syn::Re
         name: args.name,
         version: args.version,
         description: args.description,
-        about: args.about,
         homepage: args.homepage,
         global: Vec::new(),
         defaults: None,

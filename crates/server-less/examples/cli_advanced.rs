@@ -92,7 +92,7 @@ impl AdvancedApp {
 #[cli(
     name = "advanced-cli",
     version = "0.1.0",
-    about = "Demo of advanced CLI features",
+    description = "Demo of advanced CLI features",
     global = [verbose, debug],
     defaults = "get_defaults"
 )]

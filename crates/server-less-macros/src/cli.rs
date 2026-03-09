@@ -98,10 +98,7 @@ use crate::server_attrs::{has_server_hidden, has_server_skip};
 pub(crate) struct CliArgs {
     pub name: Option<String>,
     pub version: Option<String>,
-    /// Human-readable description (preferred). `about` is a deprecated alias.
     pub description: Option<String>,
-    /// Deprecated alias for `description`. Ignored if `description` is also set.
-    pub about: Option<String>,
     pub homepage: Option<String>,
     pub global: Vec<(String, Option<String>)>,
     pub defaults: Option<String>,
@@ -161,10 +158,6 @@ impl Parse for CliArgs {
                 "description" => {
                     let lit: syn::LitStr = input.parse()?;
                     args.description = Some(lit.value());
-                }
-                "about" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    args.about = Some(lit.value());
                 }
                 "homepage" => {
                     let lit: syn::LitStr = input.parse()?;
@@ -400,7 +393,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         Some(ref v) => quote! { #v },
         None => quote! { ::std::env!("CARGO_PKG_VERSION") },
     };
-    let about = args.description.or(args.about).unwrap_or_default();
+    let about = args.description.unwrap_or_default();
     let global_flags_with_help = args.global;
     let global_flags: Vec<String> = global_flags_with_help
         .iter()

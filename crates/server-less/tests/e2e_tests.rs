@@ -139,7 +139,7 @@ impl HttpCalculator {
 #[derive(Clone)]
 pub struct CliCalculator(Calculator);
 
-#[cli(name = "calc", version = "1.0.0", about = "Calculator CLI")]
+#[cli(name = "calc", version = "1.0.0", description = "Calculator CLI")]
 impl CliCalculator {
     /// Add two numbers
     pub fn add(&self, a: i64, b: i64) -> i64 {

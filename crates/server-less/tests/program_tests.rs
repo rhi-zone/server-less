@@ -45,7 +45,7 @@ fn test_program_basic_markdown_docs() {
 // Program with name and version
 struct NamedApp;
 
-#[program(name = "myctl", version = "2.0.0", about = "My cool CLI")]
+#[program(name = "myctl", version = "2.0.0", description = "My cool CLI")]
 impl NamedApp {
     /// Do something
     pub fn do_thing(&self, input: String) {
@@ -86,7 +86,7 @@ struct FullApp;
 #[program(
     name = "fullctl",
     version = "1.0.0",
-    about = "Full app",
+    description = "Full app",
     markdown = true
 )]
 impl FullApp {

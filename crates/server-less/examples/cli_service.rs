@@ -70,7 +70,7 @@ impl UserService {
     }
 }
 
-#[cli(name = "user-cli", version = "0.1.0", about = "Manage users")]
+#[cli(name = "user-cli", version = "0.1.0", description = "Manage users")]
 impl UserService {
     /// List all users
     pub fn list_users(&self) -> Vec<User> {
@@ -118,7 +118,7 @@ pub struct AdminApp {
     users: UserService,
 }
 
-#[cli(name = "admin", version = "0.1.0", about = "Admin panel")]
+#[cli(name = "admin", version = "0.1.0", description = "Admin panel")]
 impl AdminApp {
     /// Check system health
     pub fn health(&self) -> String {

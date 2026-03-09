@@ -11,7 +11,7 @@ use server_less::program;
 
 pub struct MyApp;
 
-#[program(name = "myctl", version = "1.0.0", about = "Example CLI application")]
+#[program(name = "myctl", version = "1.0.0", description = "Example CLI application")]
 impl MyApp {
     /// Create a new user
     pub fn create_user(&self, name: String) {

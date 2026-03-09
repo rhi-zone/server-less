@@ -12,7 +12,7 @@ use server_less::{CliSubcommand, cli, markdown, openapi, server};
 #[derive(Clone)]
 struct AnalyzeService;
 
-#[cli(name = "analyze", about = "Code analysis tools")]
+#[cli(name = "analyze", description = "Code analysis tools")]
 #[server(groups(
     code = "Code quality",
     modules = "Module structure",

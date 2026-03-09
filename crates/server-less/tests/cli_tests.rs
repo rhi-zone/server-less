@@ -34,7 +34,7 @@ impl ItemService {
     }
 }
 
-#[cli(name = "item-cli", version = "1.0.0", about = "Manage items")]
+#[cli(name = "item-cli", version = "1.0.0", description = "Manage items")]
 impl ItemService {
     /// List all items
     pub fn list_items(&self) -> Vec<Item> {
