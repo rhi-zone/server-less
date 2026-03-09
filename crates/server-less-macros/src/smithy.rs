@@ -145,7 +145,7 @@ service {service_name} {{
         version = version,
         operation_list = methods
             .iter()
-            .map(|m| format!("        {}", m.name.to_string().to_pascal_case()))
+            .map(|m| format!("        {}", m.name_str().to_pascal_case()))
             .collect::<Vec<_>>()
             .join("\n"),
         operations = operations.join("\n\n"),
@@ -231,7 +231,7 @@ service {service_name} {{
 
 /// Generate a Smithy operation definition
 fn generate_operation(method: &MethodInfo) -> String {
-    let op_name = method.name.to_string().to_pascal_case();
+    let op_name = method.name_str().to_pascal_case();
     let input_name = format!("{}Input", op_name);
     let output_name = format!("{}Output", op_name);
 
@@ -255,7 +255,7 @@ fn generate_operation(method: &MethodInfo) -> String {
 
 /// Generate Smithy structure definitions for a method
 fn generate_structures(method: &MethodInfo) -> Vec<String> {
-    let op_name = method.name.to_string().to_pascal_case();
+    let op_name = method.name_str().to_pascal_case();
     let input_name = format!("{}Input", op_name);
     let output_name = format!("{}Output", op_name);
 
@@ -289,7 +289,7 @@ fn generate_structures(method: &MethodInfo) -> Vec<String> {
 
 /// Generate a Smithy field definition
 fn generate_field(param: &ParamInfo) -> String {
-    let name = param.name.to_string().to_snake_case();
+    let name = param.name_str().to_snake_case();
     let smithy_type = rust_type_to_smithy(&Some(param.ty.clone()));
     let required = if param.is_optional {
         ""

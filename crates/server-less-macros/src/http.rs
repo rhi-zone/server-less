@@ -297,7 +297,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
     let mut mount_routes = Vec::new();
     let mut mount_openapi_calls = Vec::new();
     for mount in &partitioned.static_mounts {
-        let mount_name = mount.name.to_string();
+        let mount_name = mount.name_str();
         let mount_path = format!("/{}", mount_name);
         let method_name = &mount.name;
         let inner_ty = mount.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -346,16 +346,16 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
                 "PUT" => HttpMethod::Put,
                 "PATCH" => HttpMethod::Patch,
                 "DELETE" => HttpMethod::Delete,
-                _ => infer_http_method(&method.name.to_string()),
+                _ => infer_http_method(&method.name_str()),
             }
         } else {
-            infer_http_method(&method.name.to_string())
+            infer_http_method(&method.name_str())
         };
 
         let path = if let Some(ref p) = overrides.path {
             p.clone()
         } else {
-            infer_path(&method.name.to_string(), &http_method_enum, &method.params)
+            infer_path(&method.name_str(), &http_method_enum, &method.params)
         };
         let full_path = format!("{}{}", prefix, path);
 
@@ -403,7 +403,7 @@ pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<T
         }
         route_signatures.insert(
             route_sig.clone(),
-            (method.name.to_string(), full_path.clone()),
+            (method.name_str(), full_path.clone()),
         );
         route_docs.push(format!("- `{}`", route_sig));
 
@@ -705,7 +705,7 @@ fn generate_param_handling(
     // Parallel to `calls`: None for injected params (Context), Some(name) for user-visible params.
     let mut param_names: Vec<Option<String>> = Vec::new();
 
-    let http_method = infer_http_method(&method.name.to_string());
+    let http_method = infer_http_method(&method.name_str());
     let default_has_body = matches!(
         http_method,
         HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
@@ -755,7 +755,7 @@ fn generate_param_handling(
                 path_extractor: ::server_less::axum::extract::Path<#ty>
             });
             calls.push(quote! { path_extractor.0 });
-            param_names.push(Some(param.name.to_string()));
+            param_names.push(Some(param.name_str()));
         }
     }
 
@@ -770,7 +770,7 @@ fn generate_param_handling(
             let name_str = param
                 .wire_name
                 .clone()
-                .unwrap_or_else(|| param.name.to_string());
+                .unwrap_or_else(|| param.name_str());
             let ty = &param.ty;
             if param.is_optional {
                 let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
@@ -782,7 +782,7 @@ fn generate_param_handling(
                         ::server_less::serde_json::from_value::<#ty>(body_extractor.0.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
                     });
             }
-            param_names.push(Some(param.name.to_string()));
+            param_names.push(Some(param.name_str()));
         }
     }
 
@@ -797,7 +797,7 @@ fn generate_param_handling(
             let name_str = param
                 .wire_name
                 .clone()
-                .unwrap_or_else(|| param.name.to_string());
+                .unwrap_or_else(|| param.name_str());
             let ty = &param.ty;
 
             // Handle default values
@@ -830,7 +830,7 @@ fn generate_param_handling(
                     query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok()).unwrap_or_default()
                 });
             }
-            param_names.push(Some(param.name.to_string()));
+            param_names.push(Some(param.name_str()));
         }
     }
 
@@ -845,7 +845,7 @@ fn generate_param_handling(
             let name_str = param
                 .wire_name
                 .clone()
-                .unwrap_or_else(|| param.name.to_string());
+                .unwrap_or_else(|| param.name_str());
             let ty = &param.ty;
 
             if param.is_optional {
@@ -863,7 +863,7 @@ fn generate_param_handling(
                         .unwrap_or_default()
                 });
             }
-            param_names.push(Some(param.name.to_string()));
+            param_names.push(Some(param.name_str()));
         }
     }
 

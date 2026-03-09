@@ -180,7 +180,7 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     let (query_methods, mutation_methods): (Vec<_>, Vec<_>) = leaf_methods
         .iter()
         .copied()
-        .partition(|m| is_query_method(&m.name.to_string()));
+        .partition(|m| is_query_method(&m.name_str()));
 
     let query_fields = generate_field_registrations(&query_methods, has_qualified);
     let mutation_fields = generate_field_registrations(&mutation_methods, has_qualified);
@@ -607,7 +607,7 @@ fn generate_field_registrations(methods: &[&MethodInfo], has_qualified: bool) ->
 }
 
 fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> TokenStream2 {
-    let method_name = method.name.to_string();
+    let method_name = method.name_str();
     let method_ident = &method.name;
     let field_name = method_name.to_lower_camel_case();
     let description = method.docs.clone().unwrap_or_default();
@@ -622,7 +622,7 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
     let arg_registrations: Vec<_> = user_params
         .iter()
         .map(|p| {
-            let arg_name = p.name.to_string();
+            let arg_name = p.name_str();
             let gql_type = rust_type_to_graphql(&p.ty);
             let is_required = !p.is_optional;
             if is_required {
@@ -638,7 +638,7 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
         .collect();
 
     let arg_extractions: Vec<_> = user_params.iter().map(|p| {
-        let arg_name = p.name.to_string();
+        let arg_name = p.name_str();
         let param_name = &p.name;
         let ty = &p.ty;
         if p.is_optional {
@@ -853,7 +853,7 @@ fn generate_resolver_dispatch(
 }
 
 fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> TokenStream2 {
-    let method_name_str = method.name.to_string();
+    let method_name_str = method.name_str();
 
     quote! {
         #method_name_str => {

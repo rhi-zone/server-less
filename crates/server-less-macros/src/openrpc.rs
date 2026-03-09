@@ -150,7 +150,7 @@ pub(crate) fn expand_openrpc(args: OpenRpcArgs, impl_block: ItemImpl) -> syn::Re
 
 /// Generate OpenRPC method specification
 fn generate_method_spec(method: &MethodInfo) -> String {
-    let name = method.name.to_string().to_lower_camel_case();
+    let name = method.name_str().to_lower_camel_case();
     let description = method.docs.clone().unwrap_or_default();
 
     let params: Vec<String> = method.params.iter().map(generate_param_spec).collect();
@@ -176,7 +176,7 @@ fn generate_method_spec(method: &MethodInfo) -> String {
 
 /// Generate parameter specification
 fn generate_param_spec(param: &ParamInfo) -> String {
-    let name = param.name.to_string().to_lower_camel_case();
+    let name = param.name_str().to_lower_camel_case();
     let schema = get_json_schema(&Some(param.ty.clone()));
     let required = !param.is_optional;
 

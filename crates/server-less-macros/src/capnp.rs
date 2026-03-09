@@ -198,9 +198,9 @@ interface {interface_name} {{
 
 /// Generate a Cap'n Proto interface method
 fn generate_capnp_method(method: &MethodInfo, index: usize) -> String {
-    let method_name = method.name.to_string().to_lower_camel_case();
-    let request_name = format!("{}Params", method.name.to_string().to_upper_camel_case());
-    let response_name = format!("{}Result", method.name.to_string().to_upper_camel_case());
+    let method_name = method.name_str().to_lower_camel_case();
+    let request_name = format!("{}Params", method.name_str().to_upper_camel_case());
+    let response_name = format!("{}Result", method.name_str().to_upper_camel_case());
 
     let doc = method
         .docs
@@ -216,7 +216,7 @@ fn generate_capnp_method(method: &MethodInfo, index: usize) -> String {
 
 /// Generate Cap'n Proto struct definitions for a method
 fn generate_capnp_structs(method: &MethodInfo) -> Vec<String> {
-    let method_upper = method.name.to_string().to_upper_camel_case();
+    let method_upper = method.name_str().to_upper_camel_case();
     let params_name = format!("{}Params", method_upper);
     let result_name = format!("{}Result", method_upper);
 
@@ -244,7 +244,7 @@ fn generate_capnp_structs(method: &MethodInfo) -> Vec<String> {
 
 /// Generate a Cap'n Proto field definition
 fn generate_capnp_field(param: &ParamInfo, index: usize) -> String {
-    let name = param.name.to_string().to_lower_camel_case();
+    let name = param.name_str().to_lower_camel_case();
     let capnp_type = rust_type_to_capnp(&Some(param.ty.clone()));
     format!("  {} @{} :{};", name, index, capnp_type)
 }

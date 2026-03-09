@@ -434,7 +434,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 continue;
             }
             if resolve_method_group(m, &group_registry)?.is_none() {
-                let name = m.name.to_string().to_kebab_case();
+                let name = m.name_str().to_kebab_case();
                 let about = m.docs.clone().unwrap_or_default();
                 ungrouped.push((name, about));
             }
@@ -442,7 +442,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         // Static mounts
         for m in &partitioned.static_mounts {
             if !has_cli_hidden(m) {
-                let name = m.name.to_string().to_kebab_case();
+                let name = m.name_str().to_kebab_case();
                 let about = m.docs.clone().unwrap_or_default();
                 ungrouped.push((name, about));
             }
@@ -450,7 +450,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         // Slug mounts
         for m in &partitioned.slug_mounts {
             if !has_cli_hidden(m) {
-                let name = m.name.to_string().to_kebab_case();
+                let name = m.name_str().to_kebab_case();
                 let about = m.docs.clone().unwrap_or_default();
                 ungrouped.push((name, about));
             }
@@ -467,7 +467,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                     continue;
                 }
                 if resolve_method_group(m, &group_registry)?.as_deref() == Some(group.as_str()) {
-                    let name = m.name.to_string().to_kebab_case();
+                    let name = m.name_str().to_kebab_case();
                     let about = m.docs.clone().unwrap_or_default();
                     entries.push((name, about));
                 }
@@ -547,7 +547,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         let filtered: Vec<_> = regular_params
             .iter()
             .filter(|p| {
-                let kebab = p.name.to_string().to_kebab_case();
+                let kebab = p.name_str().to_kebab_case();
                 !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
             })
             .collect();
@@ -641,7 +641,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .iter()
         .filter(|m| !has_cli_hidden(m))
         .map(|m| {
-            let name = m.name.to_string().to_kebab_case();
+            let name = m.name_str().to_kebab_case();
             match &m.docs {
                 Some(doc) => format!("- `{name}` — {doc}"),
                 None => format!("- `{name}`"),
@@ -653,7 +653,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 .iter()
                 .filter(|m| !has_cli_hidden(m))
                 .map(|m| {
-                    let name = m.name.to_string().to_kebab_case();
+                    let name = m.name_str().to_kebab_case();
                     format!("- `{name}` (subcommand group)")
                 }),
         )
@@ -663,7 +663,7 @@ pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 .iter()
                 .filter(|m| !has_cli_hidden(m))
                 .map(|m| {
-                    let name = m.name.to_string().to_kebab_case();
+                    let name = m.name_str().to_kebab_case();
                     format!("- `{name} <arg>` (subcommand group)")
                 }),
         )
@@ -897,7 +897,7 @@ fn generate_leaf_subcommand(
     has_defaults: bool,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
-    let name = method.name.to_string().to_kebab_case();
+    let name = method.name_str().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
     let hide = hidden.then(|| quote! { .hide(true) });
 
@@ -908,7 +908,7 @@ fn generate_leaf_subcommand(
     let filtered: Vec<_> = regular_params
         .iter()
         .filter(|p| {
-            let kebab = p.name.to_string().to_kebab_case();
+            let kebab = p.name_str().to_kebab_case();
             !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
         })
         .collect();
@@ -938,7 +938,7 @@ fn generate_static_mount_subcommand(
     method: &MethodInfo,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
-    let name = method.name.to_string().to_kebab_case();
+    let name = method.name_str().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -966,7 +966,7 @@ fn generate_slug_mount_subcommand(
     has_qualified: bool,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
-    let name = method.name.to_string().to_kebab_case();
+    let name = method.name_str().to_kebab_case();
     let about = method.docs.clone().unwrap_or_default();
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -983,7 +983,7 @@ fn generate_slug_mount_subcommand(
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            let param_name = p.name.to_string().to_kebab_case();
+            let param_name = p.name_str().to_kebab_case();
             let idx = i + 1; // clap indices are 1-based
             quote! {
                 ::server_less::clap::Arg::new(#param_name)
@@ -1072,7 +1072,7 @@ fn generate_arg(
     _has_defaults: bool,
     positional_index: Option<usize>,
 ) -> TokenStream2 {
-    let name = param.name.to_string().to_kebab_case();
+    let name = param.name_str().to_kebab_case();
 
     let short = param.short_flag.map(|c| quote! { .short(#c) });
 
@@ -1176,7 +1176,7 @@ fn generate_leaf_match_arm(
     // When true: generates async dispatch (`.await` instead of `block_on`).
     for_async: bool,
 ) -> syn::Result<TokenStream2> {
-    let subcommand_name = method.name.to_string().to_kebab_case();
+    let subcommand_name = method.name_str().to_kebab_case();
     let method_name = &method.name;
 
     // Partition Context vs regular parameters
@@ -1187,7 +1187,7 @@ fn generate_leaf_match_arm(
         let mut props = Vec::new();
         let mut required = Vec::new();
         for p in &regular_params {
-            let name_str = p.name.to_string();
+            let name_str = p.name_str();
             let schema = type_to_json_schema(&Some(p.ty.clone()));
             props.push(quote! {
                 __props.insert(#name_str.to_string(), #schema);
@@ -1261,7 +1261,7 @@ fn generate_leaf_match_arm(
     // Generate regular parameter extractions
     for p in &regular_params {
         let name = &p.name;
-        let name_str = p.name.to_string().to_kebab_case();
+        let name_str = p.name_str().to_kebab_case();
 
         // Check if this param is a global flag (extract from root matches)
         let is_global = global_flags.iter().any(|g| g.replace('_', "-") == name_str);
@@ -1375,7 +1375,7 @@ fn generate_leaf_match_arm(
 
     for p in &regular_params {
         let name = &p.name;
-        let name_str = p.name.to_string();
+        let name_str = p.name_str();
         let ty = &p.ty;
 
         if p.is_bool {
@@ -1617,7 +1617,7 @@ fn generate_leaf_match_arm(
 }
 
 fn generate_static_mount_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let subcommand_name = method.name.to_string().to_kebab_case();
+    let subcommand_name = method.name_str().to_kebab_case();
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1635,7 +1635,7 @@ fn generate_static_mount_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
 }
 
 fn generate_static_mount_arm_async(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let subcommand_name = method.name.to_string().to_kebab_case();
+    let subcommand_name = method.name_str().to_kebab_case();
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1653,7 +1653,7 @@ fn generate_static_mount_arm_async(method: &MethodInfo) -> syn::Result<TokenStre
 }
 
 fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
-    let subcommand_name = method.name.to_string().to_kebab_case();
+    let subcommand_name = method.name_str().to_kebab_case();
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1669,7 +1669,7 @@ fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
 
     for p in regular_params {
         let name = &p.name;
-        let name_str = p.name.to_string().to_kebab_case();
+        let name_str = p.name_str().to_kebab_case();
         let ty = &p.ty;
 
         slug_extractions.push(quote! {
@@ -1695,7 +1695,7 @@ fn generate_slug_mount_arm_async(
     method: &MethodInfo,
     has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
-    let subcommand_name = method.name.to_string().to_kebab_case();
+    let subcommand_name = method.name_str().to_kebab_case();
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1711,7 +1711,7 @@ fn generate_slug_mount_arm_async(
 
     for p in regular_params {
         let name = &p.name;
-        let name_str = p.name.to_string().to_kebab_case();
+        let name_str = p.name_str().to_kebab_case();
         let ty = &p.ty;
 
         slug_extractions.push(quote! {

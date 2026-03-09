@@ -198,8 +198,8 @@ service {service_name} {{
 
 /// Generate a Thrift service method
 fn generate_thrift_method(method: &MethodInfo, index: usize) -> String {
-    let method_name = method.name.to_string().to_snake_case();
-    let args_name = format!("{}Args", method.name.to_string().to_upper_camel_case());
+    let method_name = method.name_str().to_snake_case();
+    let args_name = format!("{}Args", method.name_str().to_upper_camel_case());
     let result_type = get_thrift_return_type(&method.return_info);
 
     let doc = method
@@ -225,7 +225,7 @@ fn get_thrift_return_type(ret: &ReturnInfo) -> &'static str {
 
 /// Generate Thrift struct definitions for a method
 fn generate_thrift_structs(method: &MethodInfo) -> Vec<String> {
-    let method_upper = method.name.to_string().to_upper_camel_case();
+    let method_upper = method.name_str().to_upper_camel_case();
     let args_name = format!("{}Args", method_upper);
 
     // Generate args struct
@@ -243,7 +243,7 @@ fn generate_thrift_structs(method: &MethodInfo) -> Vec<String> {
 
 /// Generate a Thrift field definition
 fn generate_thrift_field(param: &ParamInfo, index: usize) -> String {
-    let name = param.name.to_string().to_snake_case();
+    let name = param.name_str().to_snake_case();
     let thrift_type = rust_type_to_thrift(&Some(param.ty.clone()));
     let optional = if param.is_optional { "optional " } else { "" };
     format!("  {}: {}{} {};", index, optional, thrift_type, name)

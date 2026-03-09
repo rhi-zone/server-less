@@ -142,14 +142,14 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
     // method_names for jsonrpc_methods() and OpenRPC listing: visible only
     let method_names: Vec<_> = visible_leaf
         .iter()
-        .map(|m| m.name.to_string())
+        .map(|m| m.name_str())
         .collect();
 
     // Build method documentation (visible methods only)
     let jsonrpc_method_doc_entries: Vec<String> = visible_leaf
         .iter()
         .map(|m| {
-            let name = m.name.to_string();
+            let name = m.name_str();
             match &m.docs {
                 Some(doc) => format!("- `{name}` — {doc}"),
                 None => format!("- `{name}`"),
@@ -667,7 +667,7 @@ fn generate_jsonrpc_json_response(method: &MethodInfo) -> TokenStream2 {
 /// suitable for use in `jsonrpc_dispatch` which returns `Result<Value, (i32, String)>`.
 fn generate_jsonrpc_param_extraction(param: &server_less_parse::ParamInfo) -> TokenStream2 {
     let name = &param.name;
-    let name_str = param.name.to_string();
+    let name_str = param.name_str();
     let ty = &param.ty;
 
     if param.is_optional {
@@ -695,7 +695,7 @@ fn generate_sync_dispatch_arm(
     method: &MethodInfo,
     has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
-    let method_name_str = method.name.to_string();
+    let method_name_str = method.name_str();
 
     // Partition Context vs regular parameters
     let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
@@ -740,7 +740,7 @@ fn generate_sync_dispatch_arm(
 /// Returns `Result<Value, (i32, String)>` arms so that JSON-RPC error codes
 /// are propagated from `IntoErrorCode` implementations.
 fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
-    let method_name_str = method.name.to_string();
+    let method_name_str = method.name_str();
 
     // Partition Context vs regular parameters
     let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
@@ -795,7 +795,7 @@ fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Resul
 
 /// Generate mount method names contribution for jsonrpc_methods().
 fn generate_mount_method_names(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -820,7 +820,7 @@ fn generate_mount_method_names(method: &MethodInfo) -> syn::Result<TokenStream2>
 /// Maps the `Result<Value, String>` from `jsonrpc_mount_dispatch_async` into
 /// `Result<Value, (i32, String)>` to match the private `jsonrpc_dispatch` return type.
 fn generate_static_mount_dispatch(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -842,7 +842,7 @@ fn generate_static_mount_dispatch(method: &MethodInfo) -> syn::Result<TokenStrea
 
 /// Generate dispatch for a static mount (`fn foo(&self) -> &T`) — sync version.
 fn generate_static_mount_dispatch_sync(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -866,7 +866,7 @@ fn generate_static_mount_dispatch_sync(method: &MethodInfo) -> syn::Result<Token
 /// Maps the `Result<Value, String>` from `jsonrpc_mount_dispatch_async` into
 /// `Result<Value, (i32, String)>` to match the private `jsonrpc_dispatch` return type.
 fn generate_slug_mount_dispatch(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -897,7 +897,7 @@ fn generate_slug_mount_dispatch(method: &MethodInfo) -> syn::Result<TokenStream2
 
 /// Generate dispatch for a slug mount (`fn foo(&self, id: Id) -> &T`) — sync version.
 fn generate_slug_mount_dispatch_sync(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {

@@ -122,7 +122,7 @@ service {service_name} {{
     let connect_paths: Vec<String> = methods
         .iter()
         .map(|m| {
-            let method_name = m.name.to_string().to_upper_camel_case();
+            let method_name = m.name_str().to_upper_camel_case();
             format!("/{}.{}/{}", package, service_name, method_name)
         })
         .collect();
@@ -151,7 +151,7 @@ service {service_name} {{
 
 /// Generate a proto rpc method definition
 fn generate_proto_method(method: &MethodInfo) -> String {
-    let method_name = method.name.to_string().to_upper_camel_case();
+    let method_name = method.name_str().to_upper_camel_case();
     let request_name = format!("{}Request", method_name);
     let response_name = format!("{}Response", method_name);
 
@@ -169,7 +169,7 @@ fn generate_proto_method(method: &MethodInfo) -> String {
 
 /// Generate proto message definitions for a method
 fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
-    let method_name = method.name.to_string().to_upper_camel_case();
+    let method_name = method.name_str().to_upper_camel_case();
     let request_name = format!("{}Request", method_name);
     let response_name = format!("{}Response", method_name);
 
@@ -204,7 +204,7 @@ fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
 
 /// Generate a proto field definition
 fn generate_proto_field(param: &ParamInfo, field_num: usize) -> String {
-    let name = param.name.to_string().to_snake_case();
+    let name = param.name_str().to_snake_case();
     let proto_type = rust_type_to_proto(&Some(param.ty.clone()));
     let optional = if param.is_optional { "optional " } else { "" };
     format!("  {}{} {} = {};", optional, proto_type, name, field_num)

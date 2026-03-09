@@ -147,7 +147,7 @@ pub(crate) fn expand_jsonschema(
 
 /// Generate JSON Schema definitions for a method's request/response
 fn generate_schema_definitions(method: &MethodInfo) -> Vec<String> {
-    let method_name = method.name.to_string();
+    let method_name = method.name_str();
     let request_name = format!("{}Request", capitalize(&method_name));
     let response_name = format!("{}Response", capitalize(&method_name));
 
@@ -158,7 +158,7 @@ fn generate_schema_definitions(method: &MethodInfo) -> Vec<String> {
         .params
         .iter()
         .filter(|p| !p.is_optional)
-        .map(|p| format!("\"{}\"", p.name.to_string().to_lower_camel_case()))
+        .map(|p| format!("\"{}\"", p.name_str().to_lower_camel_case()))
         .collect();
 
     let request_schema = if request_props.is_empty() {
@@ -221,7 +221,7 @@ fn generate_schema_definitions(method: &MethodInfo) -> Vec<String> {
 
 /// Generate a JSON Schema property
 fn generate_property(param: &ParamInfo) -> String {
-    let name = param.name.to_string().to_lower_camel_case();
+    let name = param.name_str().to_lower_camel_case();
     let schema = get_type_schema(&Some(param.ty.clone()));
     format!(r#""{}": {}"#, name, schema)
 }

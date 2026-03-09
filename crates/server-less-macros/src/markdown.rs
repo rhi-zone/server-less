@@ -225,7 +225,7 @@ fn generate_overview(
 }
 
 fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
-    let name = method.name.to_string();
+    let name = method.name_str();
     let title = name.replace('_', " ").to_title_case();
 
     let mut doc = format!("### {}\n\n", title);
@@ -294,7 +294,7 @@ fn generate_method_doc(method: &MethodInfo, show_types: bool) -> String {
 }
 
 fn format_param(param: &ParamInfo, show_types: bool) -> String {
-    let name = param.name.to_string();
+    let name = param.name_str();
     if show_types {
         let ty = &param.ty;
         let ty_str = quote::quote!(#ty).to_string();

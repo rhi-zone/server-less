@@ -343,7 +343,7 @@ fn generate_tool_definition(
     let description = method
         .docs
         .clone()
-        .unwrap_or_else(|| method.name.to_string());
+        .unwrap_or_else(|| method.name_str());
 
     // Partition out Context parameters — they are injected, not user-visible inputs.
     let (_ctx_param, user_params) =
@@ -433,7 +433,7 @@ fn generate_dispatch_arm_with_context(
 
 /// Generate code to append mounted tools to the tools list.
 fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let full_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -449,7 +449,7 @@ fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> syn::Res
         let slug_properties: Vec<_> = slug_params
             .iter()
             .map(|p| {
-                let name = p.name.to_string();
+                let name = p.name_str();
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 quote! { (#name, #json_type) }
             })
@@ -457,7 +457,7 @@ fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> syn::Res
         let slug_required: Vec<_> = slug_params
             .iter()
             .filter(|p| !p.is_optional)
-            .map(|p| p.name.to_string())
+            .map(|p| p.name_str())
             .collect();
 
         Ok(quote! {
@@ -518,7 +518,7 @@ fn generate_mount_tool_names(
     namespace_prefix: &str,
     method: &MethodInfo,
 ) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let full_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -544,7 +544,7 @@ fn generate_static_mount_dispatch(
     method: &MethodInfo,
     async_handling: AsyncHandling,
 ) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -578,7 +578,7 @@ fn generate_slug_mount_dispatch(
     method: &MethodInfo,
     async_handling: AsyncHandling,
 ) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {

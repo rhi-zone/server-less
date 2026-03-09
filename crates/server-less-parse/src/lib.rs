@@ -76,6 +76,37 @@ pub struct ParamInfo {
     pub is_positional: bool,
 }
 
+impl MethodInfo {
+    /// Method name as a protocol string, stripping the `r#` prefix from raw identifiers.
+    ///
+    /// Use this instead of `.name.to_string()` whenever generating protocol-level names
+    /// (CLI subcommands, HTTP routes, JSON-RPC methods, OpenAPI operation IDs, etc.).
+    /// Raw identifiers like `r#type` must appear as `"type"` in protocols, not `"r#type"`.
+    pub fn name_str(&self) -> String {
+        ident_str(&self.name)
+    }
+}
+
+impl ParamInfo {
+    /// Parameter name as a protocol string, stripping the `r#` prefix from raw identifiers.
+    ///
+    /// Use this instead of `.name.to_string()` whenever generating protocol-level names
+    /// (CLI flags, HTTP query params, JSON schema properties, etc.).
+    pub fn name_str(&self) -> String {
+        ident_str(&self.name)
+    }
+}
+
+/// Convert an identifier to a string, stripping the `r#` prefix for raw identifiers.
+///
+/// `proc_macro2::Ident::to_string()` preserves the `r#` prefix (e.g. `r#type` → `"r#type"`),
+/// which produces incorrect protocol names. Use this function whenever an `Ident` is converted
+/// to a string for protocol-level output (CLI flags, HTTP routes, JSON-RPC method names, etc.).
+pub fn ident_str(ident: &Ident) -> String {
+    let s = ident.to_string();
+    s.strip_prefix("r#").map(str::to_string).unwrap_or(s)
+}
+
 /// Parameter location for HTTP requests
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParamLocation {
@@ -797,7 +828,7 @@ pub fn is_unit_type(ty: &Type) -> bool {
 
 /// Check if a parameter name looks like an ID
 pub fn is_id_param(name: &Ident) -> bool {
-    let name_str = name.to_string();
+    let name_str = ident_str(name);
     name_str == "id" || name_str.ends_with("_id")
 }
 
@@ -1270,5 +1301,30 @@ mod tests {
         };
         let name = get_impl_name(&impl_block).unwrap();
         assert_eq!(name.to_string(), "MyService");
+    }
+
+    // ── ident_str ────────────────────────────────────────────────────
+
+    #[test]
+    fn ident_str_strips_raw_prefix() {
+        let ident: Ident = syn::parse_quote!(r#type);
+        assert_eq!(ident_str(&ident), "type");
+    }
+
+    #[test]
+    fn ident_str_leaves_normal_ident_unchanged() {
+        let ident: Ident = syn::parse_quote!(name);
+        assert_eq!(ident_str(&ident), "name");
+    }
+
+    #[test]
+    fn name_str_strips_raw_prefix_on_param() {
+        let method: ImplItemFn = syn::parse_quote! {
+            fn get(&self, r#type: String) -> String { r#type }
+        };
+        let info = MethodInfo::parse(&method).unwrap().unwrap();
+        assert_eq!(info.params[0].name_str(), "type");
+        // The Ident itself still has the raw prefix for code generation
+        assert_eq!(info.params[0].name.to_string(), "r#type");
     }
 }

@@ -184,7 +184,7 @@ pub(crate) fn expand_asyncapi(
 
 /// Generate channel specification for a method
 fn generate_channel_spec(method: &MethodInfo) -> String {
-    let name = method.name.to_string().to_lower_camel_case();
+    let name = method.name_str().to_lower_camel_case();
     let cap_name = capitalize(&name);
     let description = method
         .docs
@@ -217,7 +217,7 @@ fn generate_channel_spec(method: &MethodInfo) -> String {
 
 /// Generate message specification for a method
 fn generate_message_spec(method: &MethodInfo) -> String {
-    let name = method.name.to_string().to_lower_camel_case();
+    let name = method.name_str().to_lower_camel_case();
     let cap_name = capitalize(&name);
 
     let param_props: Vec<String> = method.params.iter().map(generate_param_property).collect();
@@ -250,7 +250,7 @@ fn generate_message_spec(method: &MethodInfo) -> String {
 
 /// Generate parameter property
 fn generate_param_property(param: &ParamInfo) -> String {
-    let name = param.name.to_string().to_lower_camel_case();
+    let name = param.name_str().to_lower_camel_case();
     let schema = get_json_schema(&Some(param.ty.clone()));
     format!(r#""{}": {}"#, name, schema)
 }

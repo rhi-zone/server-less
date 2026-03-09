@@ -175,7 +175,7 @@ service {service_name} {{
 }
 
 fn generate_proto_method(method: &MethodInfo) -> String {
-    let method_name = method.name.to_string().to_upper_camel_case();
+    let method_name = method.name_str().to_upper_camel_case();
     let request_name = format!("{}Request", method_name);
     let response_name = format!("{}Response", method_name);
     let doc = method
@@ -202,7 +202,7 @@ fn generate_proto_method(method: &MethodInfo) -> String {
 }
 
 fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
-    let method_name = method.name.to_string().to_upper_camel_case();
+    let method_name = method.name_str().to_upper_camel_case();
     let request_name = format!("{}Request", method_name);
     let response_name = format!("{}Response", method_name);
     let request_fields: Vec<String> = method
@@ -237,7 +237,7 @@ fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
 }
 
 fn generate_proto_field(param: &ParamInfo, field_num: usize) -> String {
-    let name = param.name.to_string().to_snake_case();
+    let name = param.name_str().to_snake_case();
     let proto_type = rust_type_to_proto(&Some(param.ty.clone()));
     let optional = if param.is_optional { "optional " } else { "" };
     format!("  {}{} {} = {};", optional, proto_type, name, field_num)

@@ -361,14 +361,14 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
     // Method names for visible leaf methods only
     let method_names: Vec<_> = visible_leaf
         .iter()
-        .map(|m| m.name.to_string())
+        .map(|m| m.name_str())
         .collect();
 
     // Build method documentation (visible methods only)
     let ws_method_doc_entries: Vec<String> = visible_leaf
         .iter()
         .map(|m| {
-            let name = m.name.to_string();
+            let name = m.name_str();
             match &m.docs {
                 Some(doc) => format!("- `{name}` — {doc}"),
                 None => format!("- `{name}`"),
@@ -913,7 +913,7 @@ fn generate_dispatch_arm_with_injected_params(
     has_qualified_sender: bool,
     async_handling: AsyncHandling,
 ) -> syn::Result<TokenStream2> {
-    let method_name_str = method.name.to_string();
+    let method_name_str = method.name_str();
 
     // Partition Context, WsSender, and regular parameters
     let (context_param, sender_param, regular_params) =
@@ -973,7 +973,7 @@ fn generate_dispatch_arm_with_injected_params(
 
 /// Generate mount method names contribution for ws_methods().
 fn generate_ws_mount_method_names(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -995,7 +995,7 @@ fn generate_ws_mount_method_names(method: &MethodInfo) -> syn::Result<TokenStrea
 
 /// Generate dispatch for a static WS mount.
 fn generate_ws_static_mount_dispatch(method: &MethodInfo, is_async: bool) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -1026,7 +1026,7 @@ fn generate_ws_static_mount_dispatch(method: &MethodInfo, is_async: bool) -> syn
 
 /// Generate dispatch for a slug WS mount.
 fn generate_ws_slug_mount_dispatch(method: &MethodInfo, is_async: bool) -> syn::Result<TokenStream2> {
-    let mount_name = method.name.to_string();
+    let mount_name = method.name_str();
     let mount_prefix = format!("{}.", mount_name);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {

@@ -308,7 +308,7 @@ pub fn generate_openapi_paths(
     let mut path_constructors = Vec::new();
 
     for (method, overrides, response_overrides) in methods_with_overrides {
-        let method_name = method.name.to_string();
+        let method_name = method.name_str();
 
         let http_method = if let Some(ref m) = overrides.method {
             HttpMethod::from_str(m).unwrap_or_else(|| infer_http_method(&method_name))
@@ -360,7 +360,7 @@ pub fn generate_openapi_paths(
             let name = param
                 .wire_name
                 .clone()
-                .unwrap_or_else(|| param.name.to_string());
+                .unwrap_or_else(|| param.name_str());
             let json_type = server_less_rpc::infer_json_type(&param.ty);
             let required =
                 location == "path" || (!param.is_optional && param.default_value.is_none());
@@ -399,7 +399,7 @@ pub fn generate_openapi_paths(
                 let name = param
                     .wire_name
                     .clone()
-                    .unwrap_or_else(|| param.name.to_string());
+                    .unwrap_or_else(|| param.name_str());
                 let json_type = server_less_rpc::infer_json_type(&param.ty);
                 body_props.push((name, json_type));
             }
@@ -506,7 +506,7 @@ pub fn generate_openapi_spec(
     let mut operation_data = Vec::new();
 
     for (method, overrides, response_overrides) in methods_with_overrides {
-        let method_name = method.name.to_string();
+        let method_name = method.name_str();
 
         let http_method = if let Some(ref m) = overrides.method {
             HttpMethod::from_str(m).unwrap_or_else(|| infer_http_method(&method_name))
@@ -564,7 +564,7 @@ pub fn generate_openapi_spec(
         let path_param_specs: Vec<_> = path_params
             .iter()
             .map(|p| {
-                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name_str());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 let description_tokens = match &p.help_text {
                     Some(text) => quote! { Some(#text) },
@@ -577,7 +577,7 @@ pub fn generate_openapi_spec(
         let query_param_specs: Vec<TokenStream2> = query_params
             .iter()
             .map(|p| {
-                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name_str());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 let required = !p.is_optional && p.default_value.is_none();
                 let description_tokens = match &p.help_text {
@@ -591,7 +591,7 @@ pub fn generate_openapi_spec(
         let header_param_specs: Vec<TokenStream2> = header_params
             .iter()
             .map(|p| {
-                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name_str());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 let required = !p.is_optional && p.default_value.is_none();
                 let description_tokens = match &p.help_text {
@@ -605,7 +605,7 @@ pub fn generate_openapi_spec(
         let body_props: Vec<TokenStream2> = body_params
             .iter()
             .map(|p| {
-                let name = p.wire_name.clone().unwrap_or_else(|| p.name.to_string());
+                let name = p.wire_name.clone().unwrap_or_else(|| p.name_str());
                 let json_type = server_less_rpc::infer_json_type(&p.ty);
                 let required = !p.is_optional && p.default_value.is_none();
                 quote! { (#name, #json_type, #required) }
