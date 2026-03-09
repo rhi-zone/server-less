@@ -206,3 +206,209 @@ fn test_derive_config_field_meta() {
     let db_meta = meta.iter().find(|f| f.name == "database_url").expect("database_url field");
     assert!(!db_meta.required, "Option<T> should not be required");
 }
+
+// --- Nested Config tests ---
+
+#[derive(Config)]
+struct DaemonConfig {
+    #[param(default = "true", help = "Enable daemon mode")]
+    enabled: bool,
+    #[param(default = "30", help = "Heartbeat interval in seconds")]
+    heartbeat_secs: u64,
+}
+
+#[derive(Config)]
+struct SearchConfig {
+    #[param(default = "100")]
+    max_results: u32,
+    index_path: Option<String>,
+}
+
+#[derive(Config)]
+struct FullNestedConfig {
+    #[param(default = "myapp", help = "Application name")]
+    app_name: String,
+    #[param(nested)]
+    daemon: DaemonConfig,
+    /// Section name overridden with file_key
+    #[param(nested, file_key = "text-search")]
+    search: SearchConfig,
+}
+
+#[test]
+fn test_nested_config_load_defaults() {
+    use server_less::{ConfigSource, ConfigTrait};
+    let cfg = FullNestedConfig::load(&[ConfigSource::Defaults]).unwrap();
+    assert_eq!(cfg.app_name, "myapp");
+    assert!(cfg.daemon.enabled);
+    assert_eq!(cfg.daemon.heartbeat_secs, 30);
+    assert_eq!(cfg.search.max_results, 100);
+    assert_eq!(cfg.search.index_path, None);
+}
+
+#[test]
+fn test_nested_config_from_toml_file() {
+    use server_less::{ConfigSource, ConfigTrait};
+    use std::io::Write;
+
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        f,
+        r#"
+app_name = "testapp"
+
+[daemon]
+enabled = false
+heartbeat_secs = 60
+
+[text-search]
+max_results = 50
+index_path = "/var/search"
+"#
+    )
+    .unwrap();
+
+    let cfg = FullNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::File(f.path().to_path_buf()),
+    ])
+    .unwrap();
+
+    assert_eq!(cfg.app_name, "testapp");
+    assert!(!cfg.daemon.enabled);
+    assert_eq!(cfg.daemon.heartbeat_secs, 60);
+    assert_eq!(cfg.search.max_results, 50);
+    assert_eq!(cfg.search.index_path, Some("/var/search".to_string()));
+}
+
+#[test]
+fn test_nested_config_env_prefix_inheritance() {
+    use server_less::{ConfigSource, ConfigTrait};
+
+    // APP_DAEMON_ENABLED and APP_DAEMON_HEARTBEAT_SECS should be read
+    // SAFETY: single-threaded test, no other threads reading these vars.
+    unsafe {
+        std::env::set_var("APP_DAEMON_ENABLED", "false");
+        std::env::set_var("APP_DAEMON_HEARTBEAT_SECS", "120");
+    }
+
+    let cfg = FullNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::Env { prefix: Some("APP".into()) },
+    ])
+    .unwrap();
+
+    unsafe {
+        std::env::remove_var("APP_DAEMON_ENABLED");
+        std::env::remove_var("APP_DAEMON_HEARTBEAT_SECS");
+    }
+
+    assert!(!cfg.daemon.enabled);
+    assert_eq!(cfg.daemon.heartbeat_secs, 120);
+    // search defaults unchanged
+    assert_eq!(cfg.search.max_results, 100);
+}
+
+#[test]
+fn test_nested_config_env_prefix_override() {
+    use server_less::{ConfigSource, ConfigTrait};
+
+    #[derive(Config)]
+    struct OverriddenPrefixConfig {
+        #[param(default = "main")]
+        app_name: String,
+        #[param(nested, env_prefix = "SEARCH")]
+        search: SearchConfig,
+    }
+
+    // With env_prefix = "SEARCH", the child reads SEARCH_MAX_RESULTS not APP_SEARCH_MAX_RESULTS
+    // SAFETY: single-threaded test, no other threads reading these vars.
+    unsafe {
+        std::env::set_var("SEARCH_MAX_RESULTS", "42");
+    }
+
+    let cfg = OverriddenPrefixConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::Env { prefix: Some("APP".into()) },
+    ])
+    .unwrap();
+
+    unsafe {
+        std::env::remove_var("SEARCH_MAX_RESULTS");
+    }
+
+    assert_eq!(cfg.search.max_results, 42);
+}
+
+#[test]
+fn test_nested_config_field_meta_populated() {
+    use server_less::ConfigTrait;
+    let meta = FullNestedConfig::field_meta();
+
+    let app_name_meta = meta.iter().find(|f| f.name == "app_name").expect("app_name field");
+    assert!(app_name_meta.nested.is_none(), "app_name should not be nested");
+    assert!(app_name_meta.env_prefix.is_none());
+
+    let daemon_meta = meta.iter().find(|f| f.name == "daemon").expect("daemon field");
+    assert!(daemon_meta.nested.is_some(), "daemon should have nested meta");
+    let child_meta = daemon_meta.nested.unwrap();
+    assert_eq!(child_meta.len(), 2);
+    assert!(child_meta.iter().any(|f| f.name == "enabled"));
+    assert!(child_meta.iter().any(|f| f.name == "heartbeat_secs"));
+
+    let search_meta = meta.iter().find(|f| f.name == "search").expect("search field");
+    assert!(search_meta.nested.is_some(), "search should have nested meta");
+    assert_eq!(search_meta.file_key, Some("text-search"));
+}
+
+#[test]
+fn test_nested_config_merge_file() {
+    use server_less::{ConfigSource, ConfigTrait};
+    use std::io::Write;
+
+    // Global config: sets everything
+    let mut global = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        global,
+        r#"
+app_name = "global"
+
+[daemon]
+enabled = true
+heartbeat_secs = 10
+
+[text-search]
+max_results = 200
+"#
+    )
+    .unwrap();
+
+    // Local (merge) config: only overrides daemon.heartbeat_secs
+    let mut local = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        local,
+        r#"
+[daemon]
+heartbeat_secs = 99
+"#
+    )
+    .unwrap();
+
+    let cfg = FullNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::File(global.path().to_path_buf()),
+        ConfigSource::MergeFile(local.path().to_path_buf()),
+    ])
+    .unwrap();
+
+    // global sets app_name; local doesn't touch it — but File replaces, so "global" wins
+    assert_eq!(cfg.app_name, "global");
+    // daemon.enabled set by global, not overridden by local
+    assert!(cfg.daemon.enabled);
+    // daemon.heartbeat_secs: global set 10, local MergeFile supplements to 99
+    // MergeFile only fills in None fields for leaf vars, so since heartbeat_secs is already
+    // set to 10 by File, MergeFile's 99 does NOT overwrite it.
+    // This matches the "supplement, don't replace" semantics.
+    assert_eq!(cfg.daemon.heartbeat_secs, 10);
+    assert_eq!(cfg.search.max_results, 200);
+}
