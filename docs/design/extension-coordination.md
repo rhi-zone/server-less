@@ -1,6 +1,24 @@
 # Extension Coordination
 
-How server-less derives coordinate with each other.
+How server-less macros coordinate with each other.
+
+> **Note:** The sections below describe a planned derive-macro-based architecture (`#[derive(ServerCore, OpenApi, Serve)]`). The current implementation uses attribute macros on impl blocks. The coordination mechanism described here (naming convention, `Serve` wiring) reflects the planned design; the actual multi-protocol wiring today is done by blessed preset macros like `#[server]`. See [Blessed Presets](./blessed-presets.md).
+
+## Multi-Protocol Attribute Stacking (Current)
+
+Multiple protocol macros can be stacked on the same impl block. Each macro generates its own trait impls; the first macro in declaration order owns the impl block itself (subsequent macros strip the impl block from their output to avoid duplication):
+
+```rust
+#[http]
+#[cli]
+impl MyService {
+    fn get_user(&self, user_id: u64) -> Option<User> { ... }
+}
+```
+
+This generates both HTTP handlers and CLI subcommands from the same methods. The priority is determined by declaration order — `#[http]` owns the impl block, `#[cli]` appends only the CLI trait impls.
+
+Blessed presets (`#[server]`, `#[program]`, `#[rpc]`, `#[tool]`) compose multiple macros internally using the same mechanism, so you rarely need to stack raw protocol macros manually.
 
 ## The Problem
 

@@ -168,6 +168,7 @@ nix develop        # Enter dev shell
 cargo build        # Build all crates
 cargo test         # Run tests
 cargo expand       # Inspect macro expansion
+SERVER_LESS_DEBUG=1 cargo build  # Print generated macro output to stderr
 ```
 
 ## Part of RHI

@@ -115,6 +115,18 @@ pub fn derive_my_extension(input: TokenStream) -> TokenStream {
 
 This would catch the mistake at the extension crate's build time rather than at the user's.
 
+## Raw Identifiers
+
+Rust allows method names that are keywords via raw identifier syntax (`r#`). Server-less strips the `r#` prefix before applying naming conventions:
+
+```rust
+fn r#type(&self, ...) -> ...
+// → subcommand name: "type"  (not "r#type")
+// → HTTP path: /types        (not /r#types)
+```
+
+The generated protocol name is always clean — users of the CLI or HTTP API never see the `r#` prefix.
+
 ## Summary
 
 The naming convention is simple and works across crate boundaries without shared dependencies. It's deliberately fragile in one direction (typos cause compile errors) and deliberately robust in the other (no hidden runtime state, no dependency coupling, no composition limits). The alternative - a trait-based system - inverts the tradeoff: less fragile to naming mistakes, but significantly more complex to compose multiple extensions on a single type.

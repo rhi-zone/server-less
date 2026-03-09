@@ -148,6 +148,47 @@ Override the subcommand name:
 fn create_user(&self, ...)  // subcommand is "add", not "create-user"
 ```
 
+## HTTP: Debug and Trace Logging
+
+Two opt-in attributes emit diagnostic output from generated handlers. Neither affects behavior — they only add logging.
+
+### `#[http(debug = true)]` — request/response logging
+
+Emits `eprintln!` lines before and after each method call: the method name, incoming parameters, and return value. Apply to the impl block to enable for all methods, or to a specific method to enable for just that one.
+
+```rust
+#[http(debug = true)]
+impl MyService {
+    fn get_user(&self, user_id: u64) -> Option<User> { ... }
+    // → prints: "[http] get_user called with user_id=42"
+    // → prints: "[http] get_user returned Some(User { ... })"
+}
+```
+
+Per-method override:
+```rust
+#[http]
+impl MyService {
+    #[http(debug = true)]
+    fn flaky_endpoint(&self, ...) -> ... { ... }  // only this one is logged
+}
+```
+
+### `#[http(trace = true)]` — parameter extraction tracing
+
+Emits an `eprintln!` line after each parameter is extracted from the request, showing the parameter name and its `{:?}` value. Useful for debugging extraction issues (wrong location, type mismatch, missing fields).
+
+```rust
+#[http(trace = true)]
+impl MyService {
+    fn create_user(&self, name: String, role: Role) -> User { ... }
+    // → prints: "[http] extracted name = \"Alice\""
+    // → prints: "[http] extracted role = Admin"
+}
+```
+
+Both flags can be combined. `debug` logs around the method call; `trace` logs inside the extraction phase.
+
 ## When Not to Infer
 
 Conventions should be **unsurprising**. If applying a convention would produce output that doesn't match what a developer familiar with the domain would expect, don't apply it — require explicit configuration.
@@ -196,6 +237,27 @@ fn _helper(&self, ...)  // never exposed — not HTTP, not CLI, not MCP
 ```
 
 This is a Rust naming convention (leading underscore = private/internal) applied consistently. It's more ergonomic than a `#[server(skip)]` on every internal helper, and it composes with the explicit attribute: `_` for truly private implementation details, `#[server(skip)]` when the method name shouldn't start with an underscore but still shouldn't be exposed.
+
+## Inspecting Generated Code
+
+Two tools let you see exactly what code the macros produce:
+
+- `cargo expand` — expands all macros in a file and prints the result. The output is readable Rust.
+- `SERVER_LESS_DEBUG=1 cargo build` — prints generated code to stderr for every macro invocation as the build runs. Useful when `cargo expand` doesn't isolate the right macro.
+
+```bash
+SERVER_LESS_DEBUG=1 cargo build 2>&1 | grep -A 50 "=== cli ==="
+```
+
+## Error Messages: "Did You Mean?"
+
+When an unknown attribute argument is used, server-less computes the Levenshtein distance between the typo and all valid arguments and suggests the closest match:
+
+```
+error: unknown argument `nane` — did you mean `name`?
+```
+
+This applies to all macros (`#[cli]`, `#[http]`, `#[server]`, `#[program]`, etc.). The suggestion is suppressed if no valid argument is close enough to avoid misleading suggestions.
 
 ## Prior Art
 
