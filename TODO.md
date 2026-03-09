@@ -14,9 +14,9 @@ Prioritized backlog of pending features and improvements.
 - [x] **`#[derive(Config)]`** ✅ Generates `Config::load(sources)` impl for structs; supports Defaults, Env, File (TOML) sources; `#[param(env, file_key, default, help)]` field attrs.
 - [x] **`server-less-core::config` module** ✅ `Config` trait, `ConfigSource`, `ConfigError`, `ConfigFieldMeta`, `load_toml_file` helper behind `config` feature.
 - [x] **`#[param(env, file_key)]` parsing** ✅ `ParsedParamAttrs` extended with `env_var` and `file_key` fields.
-- [ ] **`#[server(config = MyConfig)]`** link a Config struct to a server; generate config subcommand (show/schema/validate/set --dry-run). Phase 4 from design doc.
-- [ ] **Config subcommand** — 4 subcommands: show, schema, validate, set --dry-run. See `docs/design/config.md`.
-- [ ] **Integration test for `#[derive(Config)]`** — basic struct, env var loading, TOML file loading.
+- [x] **`#[server(config = MyConfig)]`** ✅ Generates `config_subcommand()` + `config_run_subcommand()` on the server struct; supports `config_cmd = "name"` / `config_cmd = false`. 3 tests in `server_tests.rs`.
+- [x] **Config subcommand** ✅ 4 subcommands: show, schema, validate, set. Available on both `#[program]` and `#[server]`.
+- [x] **Integration test for `#[derive(Config)]`** ✅ Tests in `program_tests.rs` cover defaults loading, field meta, env var mapping, and custom config_cmd names.
 - [ ] **Integration test for `#[app]`** — verify name/description flow through to CLI --help and OpenAPI title.
 
 ### OpenAPI Composition

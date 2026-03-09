@@ -4,6 +4,7 @@
 #![allow(unused_variables)]
 
 use server_less::server;
+use server_less::Config;
 
 // Basic server preset (zero-config)
 #[derive(Clone)]
@@ -129,4 +130,62 @@ fn test_server_full_options() {
     let _router = service.router();
     let spec = FullServer::openapi_spec();
     assert_eq!(spec["openapi"], "3.0.0");
+}
+
+// --- Config subcommand tests ---
+
+#[derive(Config)]
+struct ServerConfig {
+    #[param(default = "0.0.0.0", help = "Bind address")]
+    host: String,
+    #[param(default = 3000, help = "Port to listen on", env = "PORT")]
+    port: u16,
+    db_url: Option<String>,
+}
+
+#[derive(Clone)]
+struct ConfiguredServer;
+
+#[server(config = ServerConfig, name = "myserver")]
+impl ConfiguredServer {
+    pub fn health(&self) -> String {
+        "ok".to_string()
+    }
+}
+
+#[test]
+fn test_server_config_subcommand_exists() {
+    let cmd = ConfiguredServer::config_subcommand();
+    assert_eq!(cmd.get_name(), "config");
+    let children: Vec<_> = cmd
+        .get_subcommands()
+        .map(|s| s.get_name().to_string())
+        .collect();
+    assert!(children.contains(&"show".to_string()), "Missing 'show'");
+    assert!(children.contains(&"schema".to_string()), "Missing 'schema'");
+    assert!(children.contains(&"validate".to_string()), "Missing 'validate'");
+    assert!(children.contains(&"set".to_string()), "Missing 'set'");
+}
+
+#[test]
+fn test_server_config_custom_cmd_name() {
+    #[derive(Clone)]
+    struct AltServer;
+
+    #[server(config = ServerConfig, config_cmd = "settings", name = "altserver")]
+    impl AltServer {
+        pub fn ping(&self) -> String { "pong".into() }
+    }
+
+    let cmd = AltServer::config_subcommand();
+    assert_eq!(cmd.get_name(), "settings");
+}
+
+#[test]
+fn test_server_config_load_defaults() {
+    use server_less::{ConfigSource, ConfigTrait};
+    let cfg = ServerConfig::load(&[ConfigSource::Defaults]).unwrap();
+    assert_eq!(cfg.host, "0.0.0.0");
+    assert_eq!(cfg.port, 3000);
+    assert_eq!(cfg.db_url, None);
 }

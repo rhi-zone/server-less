@@ -4,7 +4,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{ItemImpl, Token, parse::Parse};
+use syn::{ItemImpl, Path, Token, parse::Parse};
 
 use crate::app::extract_app_meta;
 use crate::http::{self, HttpArgs, ServeArgs};
@@ -27,6 +27,12 @@ pub(crate) struct ServerArgs {
     pub version: Option<String>,
     /// Homepage URL (forwarded to HttpArgs/ServeArgs)
     pub homepage: Option<String>,
+    /// Config struct path for linked config management (`config = MyConfig`).
+    pub config_ty: Option<Path>,
+    /// Config subcommand name override (`config_cmd = "settings"`) or `false` to disable.
+    pub config_cmd_name: Option<String>,
+    /// Whether the config subcommand is enabled (default: true when config_ty is set).
+    pub config_cmd: bool,
 }
 
 impl Parse for ServerArgs {
@@ -66,9 +72,26 @@ impl Parse for ServerArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.homepage = Some(lit.value());
                 }
+                "config" => {
+                    let path: Path = input.parse()?;
+                    args.config_ty = Some(path);
+                    args.config_cmd = true;
+                }
+                "config_cmd" => {
+                    if input.peek(syn::LitBool) {
+                        let lit: syn::LitBool = input.parse()?;
+                        args.config_cmd = lit.value();
+                    } else {
+                        let lit: syn::LitStr = input.parse()?;
+                        args.config_cmd_name = Some(lit.value());
+                        args.config_cmd = true;
+                    }
+                }
                 other => {
-                    const VALID: &[&str] =
-                        &["prefix", "openapi", "health", "name", "description", "version", "homepage"];
+                    const VALID: &[&str] = &[
+                        "prefix", "openapi", "health", "name", "description", "version",
+                        "homepage", "config", "config_cmd",
+                    ];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -76,7 +99,7 @@ impl Parse for ServerArgs {
                         ident.span(),
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
-                             Valid arguments: prefix, openapi, health, name, description, version, homepage"
+                             Valid arguments: prefix, openapi, health, name, description, version, homepage, config, config_cmd"
                         ),
                     ));
                 }
@@ -115,12 +138,30 @@ pub(crate) fn expand_server(args: ServerArgs, mut impl_block: ItemImpl) -> syn::
         protocols: vec!["http".into()],
         health_path: args.health,
         openapi: args.openapi,
-        name,
+        name: name.clone(),
         description,
         version,
         homepage,
     };
-    let serve_tokens = strip_first_impl(http::expand_serve(serve_args, impl_block)?);
+    let serve_tokens = strip_first_impl(http::expand_serve(serve_args, impl_block.clone())?);
 
-    Ok(quote! { #http_tokens #serve_tokens })
+    #[cfg(feature = "config")]
+    let config_methods = if args.config_cmd {
+        if let Some(ref config_ty) = args.config_ty {
+            let self_ty = &impl_block.self_ty;
+            let cmd_name = args.config_cmd_name.as_deref().unwrap_or("config");
+            let app_name = name.as_deref().unwrap_or("app");
+            let (methods, _subcommand_addition, _dispatch_arm) =
+                crate::config_cmd::generate_all(self_ty, config_ty, cmd_name, app_name);
+            methods
+        } else {
+            quote! {}
+        }
+    } else {
+        quote! {}
+    };
+    #[cfg(not(feature = "config"))]
+    let config_methods = quote! {};
+
+    Ok(quote! { #http_tokens #serve_tokens #config_methods })
 }

@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 _No changes yet._
 
+## [0.4.0] - 2026-03-09
+
+### Added
+
+#### Config Management
+
+- **`#[derive(Config)]`**: Generates `Config::load(sources)` and `Config::field_meta()` for structs.
+  Supports `ConfigSource::Defaults`, `Env { prefix }`, and `File(PathBuf)` (TOML).
+  Field attributes: `#[param(env = "VAR", file_key = "a.b", default = ..., help = "...")]`.
+- **`#[program(config = MyConfig)]`**: Links a config struct to a CLI program. Adds a `config`
+  subcommand with `show`, `schema`, `validate`, and `set` sub-subcommands.
+  Supports `config_cmd = "custom-name"` and `config_cmd = false` to opt out.
+- **`#[server(config = MyConfig)]`**: Links a config struct to an HTTP server. Generates
+  `config_subcommand()` and `config_run_subcommand()` methods on the server struct.
+  Same `config_cmd` customization options as `#[program]`.
+- **`#[app]` attribute**: Protocol-neutral metadata (`name`, `description`, `version`, `homepage`)
+  injected via `#[__app_meta]` passthrough; consumed by `#[server]`, `#[cli]`, `#[http]`, `#[program]`
+  as fallbacks for unset fields.
+- **`server-less-core::config` module** (behind `config` feature): `Config` trait, `ConfigSource`,
+  `ConfigError`, `ConfigFieldMeta`, and `load_toml_file` helper.
+- **Re-exports**: `server_less::Config` (derive macro), `server_less::ConfigTrait`,
+  `server_less::ConfigSource`, `server_less::ConfigError`, `server_less::ConfigFieldMeta`.
+
 ## [0.1.0] - 2025-01-25
 
 ### Added
