@@ -149,6 +149,7 @@ use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
 
+use crate::app::extract_app_meta;
 use crate::server_attrs::{has_server_hidden, has_server_skip};
 
 // Import Context helpers
@@ -301,7 +302,16 @@ fn strip_http_attrs(impl_block: &ItemImpl) -> ItemImpl {
     block
 }
 
-pub(crate) fn expand_http(args: HttpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
+    let args = HttpArgs {
+        name: args.name.or(app_meta.name),
+        description: args.description.or(app_meta.description),
+        version: args.version.or_else(|| app_meta.version.and_then(|v| v)),
+        homepage: args.homepage.or(app_meta.homepage),
+        ..args
+    };
+
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;

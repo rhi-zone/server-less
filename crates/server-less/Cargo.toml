@@ -69,12 +69,15 @@ jsonschema = ["server-less-macros/jsonschema", "server-less-core/jsonschema"]
 # Documentation generators (no runtime deps)
 markdown = ["server-less-macros/markdown"]
 
+# Config management (toml file loading, env vars, #[derive(Config)])
+config = ["server-less-macros/config", "server-less-core/config"]
+
 # All features
 full = [
     "mcp", "http", "openapi", "cli", "ws", "graphql", "jsonrpc",
     "grpc", "capnp", "thrift", "connect", "smithy",
     "openrpc", "asyncapi", "jsonschema",
-    "markdown"
+    "markdown", "config"
 ]
 
 [dev-dependencies]

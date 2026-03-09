@@ -1,6 +1,6 @@
 error: unknown attribute `hlep` — did you mean `help`?
 
-       Valid attributes: name, default, query, path, body, header, short, help, positional
+       Valid attributes: name, default, query, path, body, header, short, help, positional, env, file_key
 
        Examples:
        - #[param(name = "q")]
@@ -10,6 +10,8 @@ error: unknown attribute `hlep` — did you mean `help`?
        - #[param(short = 'v')]
        - #[param(help = "Enable verbose output")]
        - #[param(positional)]
+       - #[param(env = "MY_VAR")]
+       - #[param(file_key = "database.host")]
  --> tests/fixtures/typo_suggestion_param.rs:9:33
   |
 9 |     pub fn hello(&self, #[param(hlep = "A greeting")] name: String) -> String {

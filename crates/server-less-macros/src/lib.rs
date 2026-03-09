@@ -170,6 +170,9 @@ mod thrift;
 #[cfg(feature = "ws")]
 mod ws;
 
+mod app;
+#[cfg(feature = "config")]
+mod config_derive;
 mod server_attrs;
 
 // Blessed preset modules
@@ -1768,6 +1771,115 @@ pub fn serverless_error(input: TokenStream) -> TokenStream {
     match error::expand_serverless_error(input) {
         Ok(tokens) => {
             debug_emit("ServerlessError", &name, &tokens);
+            tokens.into()
+        }
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Attach protocol-neutral application metadata to an impl block.
+///
+/// `#[app]` is consumed by all protocol macros on the same impl block
+/// (`#[server]`, `#[cli]`, `#[http]`, `#[program]`, etc.).  It does not
+/// generate code itself — it passes metadata downstream via an internal
+/// `#[__app_meta]` helper attribute that the consuming macro removes.
+///
+/// # Fields
+///
+/// | Field | Default | Effect |
+/// |-------|---------|--------|
+/// | `name` | inferred from struct name (kebab-case) | App name used in config file path, CLI header, spec titles |
+/// | `description` | none | Human-readable description for CLI `--help`, OpenAPI info, etc. |
+/// | `version` | `env!("CARGO_PKG_VERSION")` | Version string; powers `--version`; `false` disables version entirely |
+/// | `homepage` | none | URL used in OpenAPI `info.contact.url`, OpenRPC info, etc. |
+///
+/// # Example
+///
+/// ```ignore
+/// #[app(
+///     name = "myapp",
+///     description = "Does the thing",
+///     version = "2.1.0",
+///     homepage = "https://myapp.example.com",
+/// )]
+/// #[server]
+/// impl MyApi {
+///     fn list_items(&self) -> Vec<Item> { ... }
+/// }
+/// ```
+///
+/// All preset macros also accept these fields inline as a shorthand:
+///
+/// ```ignore
+/// #[server(name = "myapp", description = "Does the thing")]
+/// impl MyApi { ... }
+/// ```
+#[proc_macro_attribute]
+pub fn app(args: TokenStream, item: TokenStream) -> TokenStream {
+    let args = proc_macro2::TokenStream::from(args);
+    let input = parse_macro_input!(item as ItemImpl);
+    match app::expand_app(args, input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Internal helper attribute — do not use directly.
+///
+/// `#[__app_meta]` is injected by `#[app]` and consumed by downstream
+/// protocol macros.  If it reaches the final compile step unconsumed
+/// (e.g. you wrote `#[app(...)]` without any protocol macro), it is a
+/// no-op that strips itself from the item.
+#[proc_macro_attribute]
+pub fn __app_meta(args: TokenStream, item: TokenStream) -> TokenStream {
+    let args = proc_macro2::TokenStream::from(args);
+    let input = parse_macro_input!(item as ItemImpl);
+    app::expand_app_meta_passthrough(args, input).into()
+}
+
+/// Derive config loading from multiple sources for a struct.
+///
+/// `#[derive(Config)]` generates a [`server_less_core::config::Config`]
+/// implementation that loads values from defaults, TOML files, and environment
+/// variables, with a configurable precedence order.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use server_less::Config;
+///
+/// #[derive(Config)]
+/// struct AppConfig {
+///     #[param(default = "localhost")]
+///     host: String,
+///     #[param(default = 8080)]
+///     port: u16,
+///     #[param(env = "DATABASE_URL")]
+///     database_url: String,
+///     timeout_secs: Option<u64>,
+/// }
+///
+/// let cfg = AppConfig::load(&[
+///     ConfigSource::Defaults,
+///     ConfigSource::File("app.toml".into()),
+///     ConfigSource::Env { prefix: Some("APP".into()) },
+/// ])?;
+/// ```
+///
+/// # Field attributes
+///
+/// - `#[param(default = value)]` — compile-time default; field becomes optional in sources
+/// - `#[param(env = "VAR")]` — exact env var name (overrides `{PREFIX}_{FIELD}` generation)
+/// - `#[param(file_key = "a.b.c")]` — dotted TOML key override (default: field name)
+/// - `#[param(help = "...")]` — description used by `config show --schema` and doc generators
+#[cfg(feature = "config")]
+#[proc_macro_derive(Config, attributes(param))]
+pub fn derive_config(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident.to_string();
+    match config_derive::expand_config(input) {
+        Ok(tokens) => {
+            debug_emit("Config", &name, &tokens);
             tokens.into()
         }
         Err(err) => err.to_compile_error().into(),

@@ -91,6 +91,7 @@ use syn::{ItemImpl, Token, parse::Parse};
 use crate::context::{
     generate_cli_context_extraction, has_qualified_context, partition_context_params,
 };
+use crate::app::extract_app_meta;
 use crate::server_attrs::{has_server_hidden, has_server_skip};
 
 /// Arguments for the #[cli] attribute
@@ -377,7 +378,16 @@ fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
 
 // partition_methods is now shared from server_less_parse
 
-pub(crate) fn expand_cli(args: CliArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
+    let args = CliArgs {
+        name: args.name.or(app_meta.name),
+        description: args.description.or(app_meta.description),
+        version: args.version.or_else(|| app_meta.version.and_then(|v| v)),
+        homepage: args.homepage.or(app_meta.homepage),
+        ..args
+    };
+
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;

@@ -6,6 +6,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{ItemImpl, Token, parse::Parse};
 
+use crate::app::extract_app_meta;
 use crate::cli::{self, CliArgs};
 use crate::strip_first_impl;
 
@@ -78,12 +79,18 @@ impl Parse for ProgramArgs {
     }
 }
 
-pub(crate) fn expand_program(args: ProgramArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_program(args: ProgramArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
+    let name = args.name.or(app_meta.name);
+    let version = args.version.or_else(|| app_meta.version.and_then(|v| v));
+    let description = args.description.or(app_meta.description);
+    let homepage = args.homepage.or(app_meta.homepage);
+
     let cli_args = CliArgs {
-        name: args.name,
-        version: args.version,
-        description: args.description,
-        homepage: args.homepage,
+        name,
+        version,
+        description,
+        homepage,
         global: Vec::new(),
         defaults: None,
         no_sync: false,

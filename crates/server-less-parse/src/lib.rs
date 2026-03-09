@@ -333,6 +333,10 @@ pub struct ParsedParamAttrs {
     pub short_flag: Option<char>,
     pub help_text: Option<String>,
     pub positional: bool,
+    /// Environment variable name (from `#[param(env = "VAR")]`). Used by `#[derive(Config)]`.
+    pub env_var: Option<String>,
+    /// Config file key override (from `#[param(file_key = "a.b.c")]`). Used by `#[derive(Config)]`.
+    pub file_key: Option<String>,
 }
 
 /// Compute Levenshtein edit distance between two strings.
@@ -381,6 +385,8 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
     let mut short_flag = None;
     let mut help_text = None;
     let mut positional = false;
+    let mut env_var = None;
+    let mut file_key = None;
 
     for attr in attrs {
         if !attr.path().is_ident("param") {
@@ -443,10 +449,22 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
             else if meta.path.is_ident("positional") {
                 positional = true;
                 Ok(())
+            }
+            // #[param(env = "VAR_NAME")]
+            else if meta.path.is_ident("env") {
+                let value: syn::LitStr = meta.value()?.parse()?;
+                env_var = Some(value.value());
+                Ok(())
+            }
+            // #[param(file_key = "a.b.c")]
+            else if meta.path.is_ident("file_key") {
+                let value: syn::LitStr = meta.value()?.parse()?;
+                file_key = Some(value.value());
+                Ok(())
             } else {
                 const VALID: &[&str] = &[
                     "name", "default", "query", "path", "body", "header", "short", "help",
-                    "positional",
+                    "positional", "env", "file_key",
                 ];
                 let unknown = meta
                     .path
@@ -459,7 +477,7 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                 Err(meta.error(format!(
                     "unknown attribute `{unknown}`{suggestion}\n\
                      \n\
-                     Valid attributes: name, default, query, path, body, header, short, help, positional\n\
+                     Valid attributes: name, default, query, path, body, header, short, help, positional, env, file_key\n\
                      \n\
                      Examples:\n\
                      - #[param(name = \"q\")]\n\
@@ -468,7 +486,9 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                      - #[param(header, name = \"X-API-Key\")]\n\
                      - #[param(short = 'v')]\n\
                      - #[param(help = \"Enable verbose output\")]\n\
-                     - #[param(positional)]"
+                     - #[param(positional)]\n\
+                     - #[param(env = \"MY_VAR\")]\n\
+                     - #[param(file_key = \"database.host\")]"
                 )))
             }
         })?;
@@ -481,6 +501,8 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
         short_flag,
         help_text,
         positional,
+        env_var,
+        file_key,
     })
 }
 

@@ -4,6 +4,8 @@
 
 pub mod error;
 pub mod extract;
+#[cfg(feature = "config")]
+pub mod config;
 
 pub use error::{
     ErrorCode, ErrorResponse, HttpStatusFallback, HttpStatusHelper, IntoErrorCode,

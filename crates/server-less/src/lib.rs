@@ -233,6 +233,17 @@ pub use server_less_macros::program;
 // Error derive macro (always available - no deps, commonly needed)
 pub use server_less_macros::ServerlessError;
 
+// Application metadata attribute (always available)
+pub use server_less_macros::app;
+#[doc(hidden)]
+pub use server_less_macros::__app_meta;
+
+// Config derive macro
+#[cfg(feature = "config")]
+pub use server_less_macros::Config;
+#[cfg(feature = "config")]
+pub use server_less_core::config::{Config as ConfigTrait, ConfigError, ConfigFieldMeta, ConfigSource};
+
 // Re-export deps for generated code — users shouldn't need to add these directly
 #[cfg(feature = "clap")]
 #[doc(hidden)]
