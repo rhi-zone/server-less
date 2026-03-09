@@ -39,17 +39,60 @@ use std::path::PathBuf;
 
 /// Specifies where configuration values should be loaded from.
 ///
-/// Sources are applied in order; later sources overwrite earlier values.
+/// Sources are applied in order.  By default, later sources overwrite earlier
+/// values ([`File`](ConfigSource::File), [`Env`](ConfigSource::Env)).
+/// [`MergeFile`](ConfigSource::MergeFile) is an exception: it only fills in
+/// fields that haven't been set by a prior source.
+///
+/// ## Conventional ordering
+///
+/// ```rust,ignore
+/// &[
+///     ConfigSource::Defaults,              // lowest priority
+///     ConfigSource::File(global_config),   // e.g. ~/.config/app/config.toml
+///     ConfigSource::MergeFile(local_config), // e.g. .app/config.toml
+///     ConfigSource::Env { prefix: Some("APP".into()) }, // highest priority
+/// ]
+/// ```
+///
+/// With this ordering, the local config file *supplements* the global one
+/// (missing local fields fall back to global values) while env vars always win.
 #[derive(Debug, Clone)]
 pub enum ConfigSource {
     /// Apply compile-time defaults declared with `#[param(default = ...)]`.
+    ///
+    /// Should almost always be the first source so that explicit values from
+    /// files or environment variables can override them.
     Defaults,
 
     /// Read a TOML file at the given path.
     ///
+    /// Later sources — including other `File` entries — overwrite values set
+    /// here.  Use [`MergeFile`](ConfigSource::MergeFile) when you want a file
+    /// to supplement rather than replace earlier values.
+    ///
     /// Missing files are silently skipped (not an error) so that optional
     /// config files work without extra boilerplate.
     File(PathBuf),
+
+    /// Like [`File`](ConfigSource::File), but only fills in fields that are
+    /// still unset after all previous sources.
+    ///
+    /// Use this for layered config (global → project → env): a project-local
+    /// file should add or override specific keys, not erase values inherited
+    /// from the global config.
+    ///
+    /// ```rust,ignore
+    /// &[
+    ///     ConfigSource::Defaults,
+    ///     ConfigSource::File(global),    // global config: sets host, port, …
+    ///     ConfigSource::MergeFile(local), // local config: only overrides what it explicitly sets
+    ///     ConfigSource::Env { prefix: Some("APP".into()) },
+    /// ]
+    /// ```
+    ///
+    /// Missing files are silently skipped, same as [`File`](ConfigSource::File).
+    MergeFile(PathBuf),
 
     /// Read environment variables.
     ///

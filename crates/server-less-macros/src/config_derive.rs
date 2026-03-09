@@ -183,6 +183,7 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         .collect();
 
     // File branch: look up each field's key in the flat TOML map.
+    // Later sources win — unconditionally overwrite whatever was set before.
     let file_branches: Vec<TokenStream2> = fields
         .iter()
         .map(|f| {
@@ -194,6 +195,26 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
             quote! {
                 if let ::std::option::Option::Some(val) = toml_map.get(#key) {
                     #name = ::std::option::Option::Some(val.clone());
+                }
+            }
+        })
+        .collect();
+
+    // MergeFile branch: like File, but only fills in fields that are still None.
+    // This implements the "supplement, don't replace" semantics for layered config.
+    let merge_file_branches: Vec<TokenStream2> = fields
+        .iter()
+        .map(|f| {
+            let name = &f.name;
+            let key = f
+                .file_key
+                .clone()
+                .unwrap_or_else(|| f.name.to_string());
+            quote! {
+                if #name.is_none() {
+                    if let ::std::option::Option::Some(val) = toml_map.get(#key) {
+                        #name = ::std::option::Option::Some(val.clone());
+                    }
                 }
             }
         })
@@ -254,6 +275,14 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                     match ::server_less_core::config::load_toml_file(path)? {
                         ::std::option::Option::Some(toml_map) => {
                             #(#file_branches)*
+                        }
+                        ::std::option::Option::None => {} // file not found, skip silently
+                    }
+                }
+                ::server_less_core::config::ConfigSource::MergeFile(path) => {
+                    match ::server_less_core::config::load_toml_file(path)? {
+                        ::std::option::Option::Some(toml_map) => {
+                            #(#merge_file_branches)*
                         }
                         ::std::option::Option::None => {} // file not found, skip silently
                     }
