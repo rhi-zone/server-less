@@ -17,8 +17,8 @@ Behavioral rules for Claude Code in the server-less repository.
 The primary goal is making the simple case trivially simple. "I just want a server" should be:
 
 ```rust
-#[derive(Server)]
-struct MyServer;
+#[server]
+impl MyServer {}
 ```
 
 Yes, this restricts possibilities compared to hand-written code. That's the trade-off. The question is: how do we minimize that impact while maximizing accessibility?
@@ -29,18 +29,16 @@ Complexity should only appear when you need it. The zero-config case doesn't eve
 
 ```rust
 // Level 1: Just works
-#[derive(Server)]
-struct MyServer;
+#[server]
+impl MyServer {}
 
 // Level 2: Toggle features
-#[derive(Server)]
 #[server(openapi = false)]
-struct MyServer;
+impl MyServer {}
 
 // Level 3: Fine-tune
-#[derive(Server)]
 #[server(openapi(path = "/docs", hidden = [internal_method]))]
-struct MyServer;
+impl MyServer {}
 
 // Level 4: Escape hatch - drop to manual code
 ```
@@ -51,41 +49,40 @@ You discover options when you need them, not before.
 
 Like gradual typing: start with the simple version, incrementally add control as requirements evolve. You shouldn't have to rewrite everything when you need one custom behavior.
 
-Don't like how server-less does auth? Don't use `#[derive(Auth)]`, write your own Tower layer - it still composes with `#[derive(Server)]`. The escape hatch is granular, not all-or-nothing.
+Don't like how server-less does auth? Don't use `#[auth]`, write your own Tower layer - it still composes with `#[server]`. The escape hatch is granular, not all-or-nothing.
 
 ### Two-Tier Design: Blessed Presets vs À La Carte
 
 **Blessed preset** - just works, batteries included:
 ```rust
-#[derive(Server)]  // includes: ServerCore + OpenApi + Metrics + HealthCheck + Serve
-struct MyServer;
+#[server]  // includes: http + openapi + metrics + health + serve
+impl MyServer {}
 ```
 
 **À la carte** - full control over composition:
 ```rust
-#[derive(ServerCore, OpenApi, Metrics, Serve)]  // explicit, no HealthCheck
-struct MyServer;
+#[http] #[openapi] #[metrics] #[serve(http)]  // explicit, no health check
+impl MyServer {}
 ```
 
 **Toggle within blessed**:
 ```rust
-#[derive(Server)]
-#[server(openapi = false)]  // blessed preset minus OpenApi
-struct MyServer;
+#[server(openapi = false)]  // blessed preset minus openapi
+impl MyServer {}
 ```
 
 This gives progressive disclosure:
-1. `#[derive(Server)]` - blessed, zero config
-2. `#[derive(Server)] #[server(x = false)]` - blessed minus some
-3. `#[derive(ServerCore, X, Y, Serve)]` - explicit composition
+1. `#[server]` - blessed, zero config
+2. `#[server(x = false)]` - blessed minus some
+3. `#[http] #[openapi] #[serve]` - explicit composition
 4. Manual Tower code - full escape hatch
 
 ### Third-Party Extensions
 
-Extensions are separate derives that compose with core:
+Extensions are separate macros that compose with core:
 ```rust
-#[derive(ServerCore, OpenApi, Anubis, Serve)]  // Anubis from server-less-anubis crate
-struct MyServer;
+#[http] #[openapi] #[anubis] #[serve(http)]  // #[anubis] from server-less-anubis crate
+impl MyServer {}
 ```
 
 The ecosystem has great solutions (rate limiting, auth, observability, bot protection). Server-less should make them accessible via derives, not reinvent them. Popular extensions can graduate to "blessed" status over time.
@@ -154,6 +151,8 @@ Detailed design docs live in `docs/design/`:
 - [Mount Points](docs/design/mount-points.md) - Nested subcommand composition via `&T` return types
 - [OpenAPI Composition](docs/design/openapi-composition.md) - Multi-protocol OpenAPI spec composition
 - [Method Groups](docs/design/method-groups.md) - Cross-protocol method grouping (`#[server(group)]`)
+- [Config Management](docs/design/config.md) - `#[derive(Config)]`, config sources, and the generated `config` subcommand
+- [Application Metadata](docs/design/app-metadata.md) - `#[app]` for name, description, version, homepage across all protocols
 
 **Process:**
 - [Open Questions](docs/design/open-questions.md) - Unresolved design questions

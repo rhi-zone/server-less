@@ -22,6 +22,8 @@ Architecture decisions and design philosophy for server-less.
 - [Route & Response Attributes](./route-response-attrs.md) — `#[route]` and `#[response]` HTTP overrides
 - [Mount Points](./mount-points.md) — Nested subcommand composition via `&T` return types
 - [OpenAPI Composition](./openapi-composition.md) — Multi-protocol OpenAPI spec composition
+- [Config Management](./config.md) — `#[derive(Config)]`, config sources, and the generated `config` subcommand
+- [Application Metadata](./app-metadata.md) — `#[app]` for name, description, version, homepage across all protocols
 
 ## Process
 
