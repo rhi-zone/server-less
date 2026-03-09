@@ -337,6 +337,17 @@ pub struct ParsedParamAttrs {
     pub env_var: Option<String>,
     /// Config file key override (from `#[param(file_key = "a.b.c")]`). Used by `#[derive(Config)]`.
     pub file_key: Option<String>,
+    /// Marks a field as a nested `Config` sub-struct (from `#[param(nested)]`).
+    ///
+    /// The field's type must also `#[derive(Config)]`.  TOML loading delegates to
+    /// the child's `Config::load`, using the field name (or `file_key`) as the
+    /// sub-table name.  Env var loading narrows the prefix with the field name.
+    pub nested: bool,
+    /// Env-var prefix override for a nested field (from `#[param(env_prefix = "SEARCH")]`).
+    ///
+    /// When set, env vars for the child struct use `{env_prefix}_{CHILD_FIELD}` instead
+    /// of `{parent_prefix}_{field_name}_{CHILD_FIELD}`.  Only meaningful with `nested`.
+    pub env_prefix: Option<String>,
 }
 
 /// Compute Levenshtein edit distance between two strings.
@@ -387,6 +398,8 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
     let mut positional = false;
     let mut env_var = None;
     let mut file_key = None;
+    let mut nested = false;
+    let mut env_prefix = None;
 
     for attr in attrs {
         if !attr.path().is_ident("param") {
@@ -461,10 +474,21 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                 let value: syn::LitStr = meta.value()?.parse()?;
                 file_key = Some(value.value());
                 Ok(())
+            }
+            // #[param(nested)]
+            else if meta.path.is_ident("nested") {
+                nested = true;
+                Ok(())
+            }
+            // #[param(env_prefix = "SEARCH")]
+            else if meta.path.is_ident("env_prefix") {
+                let value: syn::LitStr = meta.value()?.parse()?;
+                env_prefix = Some(value.value());
+                Ok(())
             } else {
                 const VALID: &[&str] = &[
                     "name", "default", "query", "path", "body", "header", "short", "help",
-                    "positional", "env", "file_key",
+                    "positional", "env", "file_key", "nested", "env_prefix",
                 ];
                 let unknown = meta
                     .path
@@ -477,7 +501,7 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                 Err(meta.error(format!(
                     "unknown attribute `{unknown}`{suggestion}\n\
                      \n\
-                     Valid attributes: name, default, query, path, body, header, short, help, positional, env, file_key\n\
+                     Valid attributes: name, default, query, path, body, header, short, help, positional, env, file_key, nested, env_prefix\n\
                      \n\
                      Examples:\n\
                      - #[param(name = \"q\")]\n\
@@ -488,7 +512,9 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                      - #[param(help = \"Enable verbose output\")]\n\
                      - #[param(positional)]\n\
                      - #[param(env = \"MY_VAR\")]\n\
-                     - #[param(file_key = \"database.host\")]"
+                     - #[param(file_key = \"database.host\")]\n\
+                     - #[param(nested)]\n\
+                     - #[param(nested, env_prefix = \"SEARCH\")]"
                 )))
             }
         })?;
@@ -503,6 +529,8 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
         positional,
         env_var,
         file_key,
+        nested,
+        env_prefix,
     })
 }
 

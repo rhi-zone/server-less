@@ -27,6 +27,10 @@ struct FieldMeta {
     help_text: Option<String>,
     /// Whether the field type is `Option<T>`.
     is_option: bool,
+    /// Whether the field is a `#[param(nested)]` sub-struct.
+    nested: bool,
+    /// Env-var prefix override for a nested field (`#[param(env_prefix = "SEARCH")]`).
+    env_prefix: Option<String>,
 }
 
 fn is_option_type(ty: &syn::Type) -> bool {
@@ -94,6 +98,8 @@ pub fn expand_config(input: DeriveInput) -> syn::Result<TokenStream2> {
             default_display,
             help_text: param_attrs.help_text,
             is_option,
+            nested: param_attrs.nested,
+            env_prefix: param_attrs.env_prefix,
         });
     }
 
@@ -114,8 +120,14 @@ pub fn expand_config(input: DeriveInput) -> syn::Result<TokenStream2> {
 }
 
 fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<TokenStream2> {
-    // Variable declarations: one Option<String> per field holding the raw string value.
-    let var_decls: Vec<TokenStream2> = fields
+    // Separate fields into leaf (scalar/Option) and nested sub-structs.
+    let leaf_fields: Vec<&FieldMeta> = fields.iter().filter(|f| !f.nested).collect();
+    let nested_fields: Vec<&FieldMeta> = fields.iter().filter(|f| f.nested).collect();
+
+    // --- Leaf field handling (same as before) ---
+
+    // Variable declarations: one Option<String> per leaf field.
+    let var_decls: Vec<TokenStream2> = leaf_fields
         .iter()
         .map(|f| {
             let name = &f.name;
@@ -123,10 +135,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         })
         .collect();
 
-    // Defaults branch: apply compile-time defaults.
-    // `default_value` is a Rust expression string (e.g. `"localhost"` or `8080`),
-    // so parse it as a TokenStream2 rather than interpolating as a string literal.
-    let defaults_branches = fields
+    // Defaults branch for leaf fields.
+    let defaults_branches = leaf_fields
         .iter()
         .map(|f| -> syn::Result<TokenStream2> {
             let name = &f.name;
@@ -148,8 +158,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         })
         .collect::<syn::Result<Vec<TokenStream2>>>()?;
 
-    // Env branch: read each field from environment.
-    let env_branches: Vec<TokenStream2> = fields
+    // Env branch for leaf fields.
+    let env_branches: Vec<TokenStream2> = leaf_fields
         .iter()
         .map(|f| {
             let name = &f.name;
@@ -182,9 +192,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         })
         .collect();
 
-    // File branch: look up each field's key in the flat TOML map.
-    // Later sources win — unconditionally overwrite whatever was set before.
-    let file_branches: Vec<TokenStream2> = fields
+    // File (last-wins) branch for leaf fields.
+    let file_branches: Vec<TokenStream2> = leaf_fields
         .iter()
         .map(|f| {
             let name = &f.name;
@@ -200,9 +209,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         })
         .collect();
 
-    // MergeFile branch: like File, but only fills in fields that are still None.
-    // This implements the "supplement, don't replace" semantics for layered config.
-    let merge_file_branches: Vec<TokenStream2> = fields
+    // MergeFile (supplement, don't replace) branch for leaf fields.
+    let merge_file_branches: Vec<TokenStream2> = leaf_fields
         .iter()
         .map(|f| {
             let name = &f.name;
@@ -220,8 +228,108 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         })
         .collect();
 
-    // Final struct construction: parse each raw string to the target type.
-    let field_constructions: Vec<TokenStream2> = fields
+    // --- Nested field handling ---
+    //
+    // For each #[param(nested)] field, generate a block that:
+    //   1. Builds a scoped Vec<ConfigSource> by transforming each source.
+    //   2. Calls ChildType::load(&scoped_sources) to get the child value.
+    //
+    // The scoping rules:
+    //   - Defaults       → pass through unchanged
+    //   - File(path)     → load raw TOML, extract sub-table by key, pass as TomlTable
+    //   - MergeFile(path)→ same but pass as MergeTomlTable
+    //   - Env {prefix}   → narrow prefix to "{prefix}_{FIELD_UPPER}" (or override via env_prefix)
+    //   - TomlTable(v)   → extract sub-table from already-loaded value, pass as TomlTable
+    //   - MergeTomlTable(v) → same with merge semantics
+    let nested_var_decls: Vec<TokenStream2> = nested_fields
+        .iter()
+        .map(|f| -> syn::Result<TokenStream2> {
+            let name = &f.name;
+            let ty = &f.ty;
+            let name_str = name.to_string();
+            let field_upper = to_shouty(&name_str);
+            // TOML section key: file_key override or field name.
+            let toml_key = f.file_key.clone().unwrap_or_else(|| f.name.to_string());
+
+            // The child env prefix token stream.  When env_prefix is set, use it
+            // literally (uppercased); otherwise build from the parent prefix + field name.
+            let child_prefix_expr: TokenStream2 = if let Some(ref ep) = f.env_prefix {
+                let ep_upper = ep.to_uppercase();
+                quote! { ::std::option::Option::Some(#ep_upper.to_string()) }
+            } else {
+                quote! {
+                    match prefix {
+                        ::std::option::Option::Some(p) if !p.is_empty() => {
+                            ::std::option::Option::Some(format!("{}_{}", p.to_uppercase(), #field_upper))
+                        }
+                        _ => ::std::option::Option::Some(#field_upper.to_string()),
+                    }
+                }
+            };
+
+            Ok(quote! {
+                let #name: #ty = {
+                    let mut __nested_sources: ::std::vec::Vec<::server_less_core::config::ConfigSource> = ::std::vec::Vec::new();
+                    for source in sources {
+                        match source {
+                            ::server_less_core::config::ConfigSource::Defaults => {
+                                __nested_sources.push(::server_less_core::config::ConfigSource::Defaults);
+                            }
+                            ::server_less_core::config::ConfigSource::File(path) => {
+                                if let ::std::option::Option::Some(root_val) =
+                                    ::server_less_core::config::load_toml_file_raw(path)?
+                                {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                        __nested_sources.push(::server_less_core::config::ConfigSource::TomlTable(sub));
+                                    }
+                                }
+                            }
+                            ::server_less_core::config::ConfigSource::MergeFile(path) => {
+                                if let ::std::option::Option::Some(root_val) =
+                                    ::server_less_core::config::load_toml_file_raw(path)?
+                                {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                        __nested_sources.push(::server_less_core::config::ConfigSource::MergeTomlTable(sub));
+                                    }
+                                }
+                            }
+                            ::server_less_core::config::ConfigSource::Env { prefix } => {
+                                let child_prefix = #child_prefix_expr;
+                                __nested_sources.push(::server_less_core::config::ConfigSource::Env { prefix: child_prefix });
+                            }
+                            ::server_less_core::config::ConfigSource::TomlTable(root_val) => {
+                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                    __nested_sources.push(::server_less_core::config::ConfigSource::TomlTable(sub));
+                                }
+                            }
+                            ::server_less_core::config::ConfigSource::MergeTomlTable(root_val) => {
+                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                    __nested_sources.push(::server_less_core::config::ConfigSource::MergeTomlTable(sub));
+                                }
+                            }
+                        }
+                    }
+                    <#ty as ::server_less_core::config::Config>::load(&__nested_sources)
+                        .map_err(|e| {
+                            // Prefix the field name to the error for better diagnostics.
+                            match e {
+                                ::server_less_core::config::ConfigError::MissingField { field } => {
+                                    ::server_less_core::config::ConfigError::MissingField {
+                                        field: ::std::boxed::Box::leak(
+                                            format!("{}.{}", #name_str, field).into_boxed_str()
+                                        )
+                                    }
+                                }
+                                other => other,
+                            }
+                        })?
+                };
+            })
+        })
+        .collect::<syn::Result<Vec<TokenStream2>>>()?;
+
+    // --- Leaf field struct construction ---
+    let leaf_constructions: Vec<TokenStream2> = leaf_fields
         .iter()
         .map(|f| {
             let name = &f.name;
@@ -229,7 +337,6 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
             let name_str = name.to_string();
 
             if let Some(inner_ty) = inner_option_type(ty) {
-                // Option<T>: None if no value, Some(parse(v)) if a value exists.
                 quote! {
                     #name: match #name {
                         ::std::option::Option::None => ::std::option::Option::None,
@@ -260,9 +367,23 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         })
         .collect();
 
+    // Nested fields are already bound to local variables of the correct type.
+    let nested_constructions: Vec<TokenStream2> = nested_fields
+        .iter()
+        .map(|f| {
+            let name = &f.name;
+            quote! { #name, }
+        })
+        .collect();
+
     Ok(quote! {
+        // Leaf field accumulators.
         #(#var_decls)*
 
+        // Nested field values — computed in a single pass over sources.
+        #(#nested_var_decls)*
+
+        // Apply sources to leaf fields.
         for source in sources {
             match source {
                 ::server_less_core::config::ConfigSource::Defaults => {
@@ -287,16 +408,31 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                         ::std::option::Option::None => {} // file not found, skip silently
                     }
                 }
+                // TomlTable / MergeTomlTable: flatten the pre-extracted table for
+                // leaf fields (used when this struct is itself a nested child).
+                ::server_less_core::config::ConfigSource::TomlTable(table_val) => {
+                    let mut toml_map = ::std::collections::HashMap::<String, String>::new();
+                    ::server_less_core::config::flatten_toml_value("", table_val, &mut toml_map);
+                    #(#file_branches)*
+                }
+                ::server_less_core::config::ConfigSource::MergeTomlTable(table_val) => {
+                    let mut toml_map = ::std::collections::HashMap::<String, String>::new();
+                    ::server_less_core::config::flatten_toml_value("", table_val, &mut toml_map);
+                    #(#merge_file_branches)*
+                }
             }
         }
 
         ::std::result::Result::Ok(#struct_name {
-            #(#field_constructions)*
+            #(#leaf_constructions)*
+            #(#nested_constructions)*
         })
     })
 }
 
 fn generate_field_meta(fields: &[FieldMeta], _struct_name: &syn::Ident) -> TokenStream2 {
+    let has_nested = fields.iter().any(|f| f.nested);
+
     let entries: Vec<TokenStream2> = fields
         .iter()
         .map(|f| {
@@ -318,8 +454,17 @@ fn generate_field_meta(fields: &[FieldMeta], _struct_name: &syn::Ident) -> Token
                 Some(h) => quote! { ::std::option::Option::Some(#h) },
                 None => quote! { ::std::option::Option::None },
             };
-            let required = !f.is_option && f.default_value.is_none();
+            let required = !f.is_option && f.default_value.is_none() && !f.nested;
             let type_name_str = quote!(#ty).to_string();
+            let nested_meta = if f.nested {
+                quote! { ::std::option::Option::Some(<#ty as ::server_less_core::config::Config>::field_meta()) }
+            } else {
+                quote! { ::std::option::Option::None }
+            };
+            let env_prefix = match &f.env_prefix {
+                Some(ep) => quote! { ::std::option::Option::Some(#ep) },
+                None => quote! { ::std::option::Option::None },
+            };
             quote! {
                 ::server_less_core::config::ConfigFieldMeta {
                     name: #name_str,
@@ -329,17 +474,33 @@ fn generate_field_meta(fields: &[FieldMeta], _struct_name: &syn::Ident) -> Token
                     default: #default,
                     help: #help,
                     required: #required,
+                    nested: #nested_meta,
+                    env_prefix: #env_prefix,
                 }
             }
         })
         .collect();
 
     let count = entries.len();
-    quote! {
-        static META: [::server_less_core::config::ConfigFieldMeta; #count] = [
-            #(#entries,)*
-        ];
-        &META
+
+    if has_nested {
+        // Use OnceLock because the nested entries call Config::field_meta() which
+        // is not a const fn, so a `static [T; N]` initializer won't compile.
+        quote! {
+            static META: ::std::sync::OnceLock<
+                ::std::vec::Vec<::server_less_core::config::ConfigFieldMeta>
+            > = ::std::sync::OnceLock::new();
+            META.get_or_init(|| {
+                ::std::vec![#(#entries,)*]
+            })
+        }
+    } else {
+        quote! {
+            static META: [::server_less_core::config::ConfigFieldMeta; #count] = [
+                #(#entries,)*
+            ];
+            &META
+        }
     }
 }
 
