@@ -413,10 +413,11 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                     ::std::option::Option::None
                 }
             } else {
+                // When no source provides this section, fall back to T::default().
+                // All serde-nested config types implement Default, and missing a
+                // section is not an error — it means "use defaults".
                 quote! {
-                    return ::std::result::Result::Err(
-                        ::server_less_core::config::ConfigError::MissingField { field: #name_str }
-                    );
+                    ::std::default::Default::default()
                 }
             };
 
