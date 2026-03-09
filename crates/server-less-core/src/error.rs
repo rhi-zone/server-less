@@ -256,16 +256,23 @@ impl IntoErrorCode for Box<dyn std::error::Error + Send + Sync> {
     }
 }
 
-/// A generic error response that can be serialized
+/// A generic error response that can be serialized and sent over the wire.
+///
+/// Produced by protocol macros when a handler returns an `Err(_)` value.
+/// Serializes to `{"code": "NOT_FOUND", "message": "..."}` (details omitted when absent).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ErrorResponse {
+    /// Machine-readable error code (e.g. `"NOT_FOUND"`, `"INVALID_PARAMS"`).
     pub code: String,
+    /// Human-readable error message.
     pub message: String,
+    /// Optional structured details about the error (omitted from serialization when absent).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
 }
 
 impl ErrorResponse {
+    /// Create a new `ErrorResponse` from an `ErrorCode` and a message.
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
             code: format!("{:?}", code).to_uppercase(),
@@ -274,6 +281,7 @@ impl ErrorResponse {
         }
     }
 
+    /// Attach structured details to this error response.
     pub fn with_details(mut self, details: serde_json::Value) -> Self {
         self.details = Some(details);
         self

@@ -37,12 +37,37 @@
 //!
 //! # Available Macros
 //!
+//! **Blessed presets** (batteries-included, use these to get started):
+//!
+//! | Macro | Combines | Feature |
+//! |-------|----------|---------|
+//! | `#[server]` | `#[http]` + `#[serve(http)]` | `http` |
+//! | `#[program]` | `#[cli]` + `#[markdown]` | `cli` |
+//! | `#[tool]` | `#[mcp]` + `#[jsonschema]` | `mcp` |
+//! | `#[rpc]` | `#[jsonrpc]` + `#[openrpc]` + `#[serve(jsonrpc)]` | `jsonrpc` |
+//!
+//! **À la carte macros** (explicit composition):
+//!
 //! | Macro | Protocol | Generated Methods |
 //! |-------|----------|-------------------|
 //! | `#[http]` | HTTP/REST | `http_router()`, `openapi_spec()` |
-//! | `#[cli]` | Command Line | `cli_command()`, `cli_run()` |
+//! | `#[cli]` | Command Line | `cli_command()`, `cli_run()`, `cli_run_async()` |
 //! | `#[mcp]` | MCP | `mcp_tools()`, `mcp_call()`, `mcp_call_async()` |
 //! | `#[ws]` | WebSocket | `ws_router()`, `ws_handle_message()`, `ws_handle_message_async()` |
+//! | `#[jsonrpc]` | JSON-RPC 2.0 | `jsonrpc_router()`, `jsonrpc_methods()` |
+//! | `#[graphql]` | GraphQL | async-graphql integration |
+//! | `#[grpc]` | gRPC | `.proto` schema generation |
+//!
+//! **Cross-cutting attributes:**
+//!
+//! | Macro | Purpose |
+//! |-------|---------|
+//! | `#[app(...)]` | Attach protocol-neutral metadata (name, description, version, homepage) |
+//! | `#[derive(Config)]` | Generate config loading from env vars, TOML files, and defaults |
+//! | `#[derive(ServerlessError)]` | Derive `IntoErrorCode` + `Display` + `Error` for error enums |
+//! | `#[route(...)]` | Per-method HTTP overrides (method, path, skip, hidden) |
+//! | `#[response(...)]` | Per-method response customization |
+//! | `#[param(...)]` | Per-parameter metadata (name, default, location, env, help) |
 //!
 //! # Naming Conventions
 //!
@@ -121,13 +146,77 @@
 //! }
 //! ```
 //!
+//! # Application Metadata
+//!
+//! `#[app]` attaches protocol-neutral metadata consumed by all protocol macros on the same impl:
+//!
+//! ```no_run
+//! use server_less::prelude::*;
+//!
+//! struct MyApi;
+//!
+//! #[app(name = "myapi", description = "My API", version = "1.0.0")]
+//! #[server]
+//! impl MyApi {
+//!     pub fn hello(&self) -> String { String::from("hi") }
+//! }
+//! ```
+//!
+//! Preset macros also accept metadata inline:
+//!
+//! ```no_run
+//! use server_less::prelude::*;
+//!
+//! struct MyApi;
+//!
+//! #[server(name = "myapi", description = "My API")]
+//! impl MyApi {
+//!     pub fn hello(&self) -> String { String::from("hi") }
+//! }
+//! ```
+//!
+//! # Config Management
+//!
+//! `#[derive(Config)]` generates config loading from env vars, TOML files, and defaults:
+//!
+//! ```no_run
+//! use server_less::prelude::*;
+//! # #[cfg(feature = "config")]
+//! use server_less::{Config as ConfigTrait, ConfigSource};
+//!
+//! # #[cfg(feature = "config")]
+//! #[derive(server_less::Config)]
+//! struct AppConfig {
+//!     #[param(default = "localhost")]
+//!     host: String,
+//!     #[param(default = 8080)]
+//!     port: u16,
+//!     #[param(env = "DATABASE_URL")]
+//!     database_url: String,
+//! }
+//! ```
+//!
+//! Pass the config type to `#[server]` to add a `config` subcommand and wire it into serve:
+//!
+//! ```no_run
+//! use server_less::prelude::*;
+//!
+//! struct MyService;
+//!
+//! // #[server(config = AppConfig)]
+//! #[server]
+//! impl MyService {
+//!     pub fn hello(&self) -> String { String::from("hi") }
+//! }
+//! ```
+//!
 //! # Feature Flags
 //!
 //! Enable only what you need:
 //!
 //! ```toml
 //! [dependencies]
-//! server-less = { version = "0.2", default-features = false, features = ["http", "cli"] }
+//! server-less = { version = "0.4", default-features = false, features = ["http", "cli"] }
 //! ```
 //!
 //! Available features:
@@ -135,6 +224,10 @@
 //! - `http` - HTTP macro (requires axum)
 //! - `cli` - CLI macro (requires clap)
 //! - `ws` - WebSocket macro (requires axum, futures)
+//! - `jsonrpc` - JSON-RPC 2.0 macro
+//! - `graphql` - GraphQL macro (requires async-graphql)
+//! - `grpc` - gRPC schema generation
+//! - `config` - `#[derive(Config)]` for config loading (requires toml)
 //! - `full` - All features (default)
 
 // Re-export macros (feature-gated)

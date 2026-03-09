@@ -1586,6 +1586,12 @@ pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `prefix` - URL prefix (e.g., `#[server(prefix = "/api")]`)
 /// - `openapi` - Toggle OpenAPI generation (default: true)
 /// - `health` - Custom health check path (default: `/health`)
+/// - `config` - Config struct type for config subcommand wiring (e.g., `#[server(config = MyConfig)]`)
+/// - `config_cmd` - Config subcommand name override or `false` to disable (default: `"config"`)
+/// - `name` - App name (forwarded from `#[app]`; default: kebab-case struct name)
+/// - `description` - App description for CLI help and OpenAPI info
+/// - `version` - Version string; `false` disables `--version` (default: `CARGO_PKG_VERSION`)
+/// - `homepage` - URL used in OpenAPI and OpenRPC info fields
 #[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
