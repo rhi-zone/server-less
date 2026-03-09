@@ -4,7 +4,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{ItemImpl, Token, parse::Parse};
+use syn::{ItemImpl, Token, parse::Parse, Path};
 
 use crate::app::extract_app_meta;
 use crate::cli::{self, CliArgs};
@@ -23,6 +23,12 @@ pub(crate) struct ProgramArgs {
     pub homepage: Option<String>,
     /// Markdown toggle (default: true)
     pub markdown: Option<bool>,
+    /// Config struct path for linked config management (`config = MyConfig`).
+    pub config_ty: Option<Path>,
+    /// Config subcommand name override (`config_cmd = "settings"`) or `false` to disable.
+    pub config_cmd_name: Option<String>,
+    /// Whether the config subcommand is enabled (default: true when config_ty is set).
+    pub config_cmd: bool,
 }
 
 impl Parse for ProgramArgs {
@@ -54,9 +60,25 @@ impl Parse for ProgramArgs {
                     let lit: syn::LitBool = input.parse()?;
                     args.markdown = Some(lit.value());
                 }
+                "config" => {
+                    let path: Path = input.parse()?;
+                    args.config_ty = Some(path);
+                    args.config_cmd = true; // enabled by default when config is set
+                }
+                "config_cmd" => {
+                    // config_cmd = false | "custom-name"
+                    if input.peek(syn::LitBool) {
+                        let lit: syn::LitBool = input.parse()?;
+                        args.config_cmd = lit.value();
+                    } else {
+                        let lit: syn::LitStr = input.parse()?;
+                        args.config_cmd_name = Some(lit.value());
+                        args.config_cmd = true;
+                    }
+                }
                 other => {
                     const VALID: &[&str] =
-                        &["name", "version", "description", "homepage", "markdown"];
+                        &["name", "version", "description", "homepage", "markdown", "config", "config_cmd"];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -64,7 +86,7 @@ impl Parse for ProgramArgs {
                         ident.span(),
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
-                             Valid arguments: name, version, description, homepage, markdown"
+                             Valid arguments: name, version, description, homepage, markdown, config, config_cmd"
                         ),
                     ));
                 }
@@ -86,6 +108,8 @@ pub(crate) fn expand_program(args: ProgramArgs, mut impl_block: ItemImpl) -> syn
     let description = args.description.or(app_meta.description);
     let homepage = args.homepage.or(app_meta.homepage);
 
+    let config_ty = if args.config_cmd { args.config_ty } else { None };
+
     let cli_args = CliArgs {
         name,
         version,
@@ -95,6 +119,8 @@ pub(crate) fn expand_program(args: ProgramArgs, mut impl_block: ItemImpl) -> syn
         defaults: None,
         no_sync: false,
         no_async: false,
+        config_ty,
+        config_cmd_name: args.config_cmd_name,
     };
     let cli_tokens = cli::expand_cli(cli_args, impl_block.clone())?;
 

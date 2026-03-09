@@ -117,6 +117,10 @@ pub(crate) struct CliArgs {
     /// Use `no_async` when all methods are synchronous and you want to keep the generated
     /// impl free of async items.
     pub no_async: bool,
+    /// Config struct type path, e.g. `MyConfig`. When set, a `config` subcommand is generated.
+    pub config_ty: Option<syn::Path>,
+    /// Name of the generated config subcommand (default: `"config"`).
+    pub config_cmd_name: Option<String>,
 }
 
 impl Parse for CliArgs {
@@ -849,6 +853,19 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         quote! {}
     };
 
+    // Config subcommand — wired in when `config_ty` is provided (via #[program(config = ...)])
+    #[cfg(feature = "config")]
+    let (config_methods, config_subcommand_addition, config_dispatch_arm) =
+        if let Some(ref config_ty) = args.config_ty {
+            let cmd_name = args.config_cmd_name.as_deref().unwrap_or("config");
+            crate::config_cmd::generate_all(self_ty, config_ty, cmd_name, &app_name)
+        } else {
+            (quote! {}, quote! {}, quote! {})
+        };
+    #[cfg(not(feature = "config"))]
+    let (config_methods, config_subcommand_addition, config_dispatch_arm) =
+        (quote! {}, quote! {}, quote! {});
+
     Ok(quote! {
         #clean_impl_block
 
@@ -864,6 +881,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                     #(.subcommand(#leaf_subcommands))*
                     #(.subcommand(#static_mount_subcommands))*
                     #(.subcommand(#slug_mount_subcommands))*
+                    #config_subcommand_addition
             }
 
             fn cli_dispatch(&self, matches: &::server_less::clap::ArgMatches) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
@@ -871,6 +889,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                     #(#leaf_match_arms)*
                     #(#static_mount_arms)*
                     #(#slug_mount_arms)*
+                    #config_dispatch_arm
                     #default_none_arm
                     _ => {
                         Self::cli_command().print_help()?;
@@ -888,6 +907,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                         #(#async_leaf_match_arms)*
                         #(#async_static_mount_arms)*
                         #(#async_slug_mount_arms)*
+                        #config_dispatch_arm
                         #async_default_none_arm
                         _ => {
                             Self::cli_command().print_help()?;
@@ -907,6 +927,8 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             #sync_entrypoints
             #async_entrypoint
         }
+
+        #config_methods
     })
 }
 

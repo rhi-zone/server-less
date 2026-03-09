@@ -172,6 +172,8 @@ mod ws;
 
 mod app;
 #[cfg(feature = "config")]
+mod config_cmd;
+#[cfg(feature = "config")]
 mod config_derive;
 mod server_attrs;
 

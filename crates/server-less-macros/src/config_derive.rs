@@ -17,8 +17,12 @@ struct FieldMeta {
     env_var: Option<String>,
     /// Dotted file key from `#[param(file_key = "a.b.c")]`.
     file_key: Option<String>,
-    /// Default value string from `#[param(default = ...)]`.
+    /// Default value in code-ready form (strings include surrounding quotes).
+    /// Used in `defaults_branches` as a Rust literal: `#default_value.to_string()`.
     default_value: Option<String>,
+    /// Default value in display form (strings have quotes stripped).
+    /// Used in `ConfigFieldMeta.default` for human-readable output.
+    default_display: Option<String>,
     /// Help text from `#[param(help = "...")]`.
     help_text: Option<String>,
     /// Whether the field type is `Option<T>`.
@@ -73,12 +77,21 @@ pub fn expand_config(input: DeriveInput) -> syn::Result<TokenStream2> {
 
         let param_attrs = parse_param_attrs(&field.attrs)?;
 
+        let default_display = param_attrs.default_value.as_ref().map(|d| {
+            if d.starts_with('"') && d.ends_with('"') && d.len() >= 2 {
+                d[1..d.len() - 1].to_string()
+            } else {
+                d.clone()
+            }
+        });
+
         field_metas.push(FieldMeta {
             name: name.clone(),
             ty,
             env_var: param_attrs.env_var,
             file_key: param_attrs.file_key,
             default_value: param_attrs.default_value,
+            default_display,
             help_text: param_attrs.help_text,
             is_option,
         });
@@ -111,21 +124,29 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         .collect();
 
     // Defaults branch: apply compile-time defaults.
-    let defaults_branches: Vec<TokenStream2> = fields
+    // `default_value` is a Rust expression string (e.g. `"localhost"` or `8080`),
+    // so parse it as a TokenStream2 rather than interpolating as a string literal.
+    let defaults_branches = fields
         .iter()
-        .map(|f| {
+        .map(|f| -> syn::Result<TokenStream2> {
             let name = &f.name;
             if let Some(ref default) = f.default_value {
-                quote! {
+                let default_expr: TokenStream2 = default.parse().map_err(|_| {
+                    syn::Error::new(
+                        name.span(),
+                        format!("failed to parse default value `{default}` as a Rust expression"),
+                    )
+                })?;
+                Ok(quote! {
                     if #name.is_none() {
-                        #name = ::std::option::Option::Some(#default.to_string());
+                        #name = ::std::option::Option::Some(#default_expr.to_string());
                     }
-                }
+                })
             } else {
-                quote! {}
+                Ok(quote! {})
             }
         })
-        .collect();
+        .collect::<syn::Result<Vec<TokenStream2>>>()?;
 
     // Env branch: read each field from environment.
     let env_branches: Vec<TokenStream2> = fields
@@ -147,7 +168,7 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                 quote! {
                     {
                         let var_name = match prefix {
-                            ::std::option::Option::Some(ref p) if !p.is_empty() => {
+                            ::std::option::Option::Some(p) if !p.is_empty() => {
                                 format!("{}_{}", p.to_uppercase(), #field_upper)
                             }
                             _ => #field_upper.to_string(),
@@ -191,7 +212,7 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                 quote! {
                     #name: match #name {
                         ::std::option::Option::None => ::std::option::Option::None,
-                        ::std::option::Option::Some(ref s) => {
+                        ::std::option::Option::Some(s) => {
                             let parsed: #inner_ty = s.parse().map_err(|e: <#inner_ty as ::std::str::FromStr>::Err| {
                                 ::server_less_core::config::ConfigError::ParseError {
                                     field: #name_str,
@@ -230,20 +251,11 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                     #(#env_branches)*
                 }
                 ::server_less_core::config::ConfigSource::File(path) => {
-                    #[cfg(feature = "server-less-core/config")]
-                    {
-                        match ::server_less_core::config::load_toml_file(path)? {
-                            ::std::option::Option::Some(toml_map) => {
-                                #(#file_branches)*
-                            }
-                            ::std::option::Option::None => {} // file not found, skip
+                    match ::server_less_core::config::load_toml_file(path)? {
+                        ::std::option::Option::Some(toml_map) => {
+                            #(#file_branches)*
                         }
-                    }
-                    #[cfg(not(feature = "server-less-core/config"))]
-                    {
-                        // TOML file loading requires the `config` feature on server-less-core.
-                        // Without it, File sources are silently skipped.
-                        let _ = path;
+                        ::std::option::Option::None => {} // file not found, skip silently
                     }
                 }
             }
@@ -269,7 +281,7 @@ fn generate_field_meta(fields: &[FieldMeta], _struct_name: &syn::Ident) -> Token
                 Some(k) => quote! { ::std::option::Option::Some(#k) },
                 None => quote! { ::std::option::Option::None },
             };
-            let default = match &f.default_value {
+            let default = match &f.default_display {
                 Some(d) => quote! { ::std::option::Option::Some(#d) },
                 None => quote! { ::std::option::Option::None },
             };
