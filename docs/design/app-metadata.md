@@ -117,6 +117,20 @@ The old attributes are deprecated but kept for backwards compatibility until a m
 | MCP server info | `name`, `description`, `version` |
 | AsyncAPI `info` | `name`, `description`, `version` |
 
+## Disabling Fields Per-Protocol
+
+All `#[app]` fields are optional by omission, with `version` being the only field with a non-null default (requiring explicit `version = false` to suppress).
+
+Per-protocol suppression is also supported at the preset level:
+
+```rust
+#[app(name = "myapp", version = "1.0.0", homepage = "https://example.com")]
+#[server(homepage = false)]   // homepage omitted from OpenAPI info, but still used elsewhere
+impl MyApi { ... }
+```
+
+This follows the same pattern as other preset-level overrides — the per-preset value wins for that protocol only.
+
 ## Open Questions
 
 - **Acronym handling in title case**: `MyHTTPServer` → `My Http Server` or `My HTTP Server`? Simple word-splitting on case boundaries produces the former; recognizing common acronyms would produce the latter but requires a list. Start simple, revisit if users hit it.
