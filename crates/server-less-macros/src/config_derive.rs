@@ -29,6 +29,11 @@ struct FieldMeta {
     is_option: bool,
     /// Whether the field is a `#[param(nested)]` sub-struct.
     nested: bool,
+    /// Whether the nested field uses serde-passthrough (`#[param(nested, serde)]`).
+    ///
+    /// When `true`, the TOML sub-table is deserialized via `serde::Deserialize`
+    /// instead of `Config::load`. Env-var sources are silently skipped.
+    nested_serde: bool,
     /// Env-var prefix override for a nested field (`#[param(env_prefix = "SEARCH")]`).
     env_prefix: Option<String>,
 }
@@ -99,6 +104,7 @@ pub fn expand_config(input: DeriveInput) -> syn::Result<TokenStream2> {
             help_text: param_attrs.help_text,
             is_option,
             nested: param_attrs.nested,
+            nested_serde: param_attrs.nested_serde,
             env_prefix: param_attrs.env_prefix,
         });
     }
@@ -120,9 +126,15 @@ pub fn expand_config(input: DeriveInput) -> syn::Result<TokenStream2> {
 }
 
 fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<TokenStream2> {
-    // Separate fields into leaf (scalar/Option) and nested sub-structs.
+    // Separate fields into leaf (scalar/Option), nested Config sub-structs, and
+    // nested serde-passthrough sub-structs.
     let leaf_fields: Vec<&FieldMeta> = fields.iter().filter(|f| !f.nested).collect();
-    let nested_fields: Vec<&FieldMeta> = fields.iter().filter(|f| f.nested).collect();
+    let nested_fields: Vec<&FieldMeta> = fields
+        .iter()
+        .filter(|f| f.nested && !f.nested_serde)
+        .collect();
+    let nested_serde_fields: Vec<&FieldMeta> =
+        fields.iter().filter(|f| f.nested_serde).collect();
 
     // --- Leaf field handling (same as before) ---
 
@@ -376,12 +388,138 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         })
         .collect();
 
+    // --- Serde-nested field generation ---
+    //
+    // For each #[param(nested, serde)] field, generate a block that:
+    //   1. Holds an `Option<T>` accumulator (last File wins; MergeFile only fills if None).
+    //   2. Iterates sources, skipping Defaults and Env entirely.
+    //   3. For File/MergeFile: loads raw TOML, extracts sub-table by key,
+    //      deserializes via `toml::Value::try_into::<T>()`.
+    //   4. For TomlTable/MergeTomlTable: extracts sub-table by key, deserializes.
+    //   5. After the loop, returns `T` (required; use `Option<T>` in the struct for optional serde sections).
+    let nested_serde_var_decls: Vec<TokenStream2> = nested_serde_fields
+        .iter()
+        .map(|f| -> syn::Result<TokenStream2> {
+            let name = &f.name;
+            let ty = &f.ty;
+            let name_str = name.to_string();
+            let toml_key = f.file_key.clone().unwrap_or_else(|| f.name.to_string());
+
+            // Determine if the field is Option<T> to allow missing sections.
+            let is_opt = f.is_option;
+
+            let missing_handling = if is_opt {
+                quote! {
+                    ::std::option::Option::None
+                }
+            } else {
+                quote! {
+                    return ::std::result::Result::Err(
+                        ::server_less_core::config::ConfigError::MissingField { field: #name_str }
+                    );
+                }
+            };
+
+            Ok(quote! {
+                let #name: #ty = {
+                    // Internal accumulator — Option<T> regardless of field optionality.
+                    let mut __serde_val: ::std::option::Option<#ty> = ::std::option::Option::None;
+
+                    for source in sources {
+                        match source {
+                            // Defaults: skip — serde types handle defaults via #[serde(default)]
+                            ::server_less_core::config::ConfigSource::Defaults => {}
+                            // Env: skip — env var per-field overrides are unavailable for serde-nested subtrees
+                            ::server_less_core::config::ConfigSource::Env { .. } => {}
+                            ::server_less_core::config::ConfigSource::File(path) => {
+                                if let ::std::option::Option::Some(root_val) =
+                                    ::server_less_core::config::load_toml_file_raw(path)?
+                                {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                        let deserialized: #ty = sub.try_into().map_err(|e: ::server_less_core::__toml::de::Error| {
+                                            ::server_less_core::config::ConfigError::ParseError {
+                                                field: #name_str,
+                                                source: "TOML file".to_string(),
+                                                message: e.to_string(),
+                                            }
+                                        })?;
+                                        __serde_val = ::std::option::Option::Some(deserialized);
+                                    }
+                                }
+                            }
+                            ::server_less_core::config::ConfigSource::MergeFile(path) => {
+                                if __serde_val.is_none() {
+                                    if let ::std::option::Option::Some(root_val) =
+                                        ::server_less_core::config::load_toml_file_raw(path)?
+                                    {
+                                        if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                            let deserialized: #ty = sub.try_into().map_err(|e: ::server_less_core::__toml::de::Error| {
+                                                ::server_less_core::config::ConfigError::ParseError {
+                                                    field: #name_str,
+                                                    source: "TOML file".to_string(),
+                                                    message: e.to_string(),
+                                                }
+                                            })?;
+                                            __serde_val = ::std::option::Option::Some(deserialized);
+                                        }
+                                    }
+                                }
+                            }
+                            ::server_less_core::config::ConfigSource::TomlTable(root_val) => {
+                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                    let deserialized: #ty = sub.try_into().map_err(|e: ::server_less_core::__toml::de::Error| {
+                                        ::server_less_core::config::ConfigError::ParseError {
+                                            field: #name_str,
+                                            source: "TOML table".to_string(),
+                                            message: e.to_string(),
+                                        }
+                                    })?;
+                                    __serde_val = ::std::option::Option::Some(deserialized);
+                                }
+                            }
+                            ::server_less_core::config::ConfigSource::MergeTomlTable(root_val) => {
+                                if __serde_val.is_none() {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                        let deserialized: #ty = sub.try_into().map_err(|e: ::server_less_core::__toml::de::Error| {
+                                            ::server_less_core::config::ConfigError::ParseError {
+                                                field: #name_str,
+                                                source: "TOML table".to_string(),
+                                                message: e.to_string(),
+                                            }
+                                        })?;
+                                        __serde_val = ::std::option::Option::Some(deserialized);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    match __serde_val {
+                        ::std::option::Option::Some(v) => v,
+                        ::std::option::Option::None => { #missing_handling }
+                    }
+                };
+            })
+        })
+        .collect::<syn::Result<Vec<TokenStream2>>>()?;
+
+    let nested_serde_constructions: Vec<TokenStream2> = nested_serde_fields
+        .iter()
+        .map(|f| {
+            let name = &f.name;
+            quote! { #name, }
+        })
+        .collect();
+
     Ok(quote! {
         // Leaf field accumulators.
         #(#var_decls)*
 
-        // Nested field values — computed in a single pass over sources.
+        // Nested Config field values — computed in a single pass over sources.
         #(#nested_var_decls)*
+
+        // Serde-nested field values — computed in a single pass over sources.
+        #(#nested_serde_var_decls)*
 
         // Apply sources to leaf fields.
         for source in sources {
@@ -426,12 +564,16 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
         ::std::result::Result::Ok(#struct_name {
             #(#leaf_constructions)*
             #(#nested_constructions)*
+            #(#nested_serde_constructions)*
         })
     })
 }
 
 fn generate_field_meta(fields: &[FieldMeta], _struct_name: &syn::Ident) -> TokenStream2 {
-    let has_nested = fields.iter().any(|f| f.nested);
+    // has_nested: true when any field needs a non-const (OnceLock) initializer.
+    // nested_serde fields do NOT call Config::field_meta() so they don't require OnceLock,
+    // but regular nested fields do.
+    let has_nested = fields.iter().any(|f| f.nested && !f.nested_serde);
 
     let entries: Vec<TokenStream2> = fields
         .iter()
@@ -450,15 +592,22 @@ fn generate_field_meta(fields: &[FieldMeta], _struct_name: &syn::Ident) -> Token
                 Some(d) => quote! { ::std::option::Option::Some(#d) },
                 None => quote! { ::std::option::Option::None },
             };
-            let help = match &f.help_text {
-                Some(h) => quote! { ::std::option::Option::Some(#h) },
-                None => quote! { ::std::option::Option::None },
+            let help = if f.nested_serde && f.help_text.is_none() {
+                // Default help note for serde-deserialized sections.
+                quote! { ::std::option::Option::Some("serde-deserialized from TOML section") }
+            } else {
+                match &f.help_text {
+                    Some(h) => quote! { ::std::option::Option::Some(#h) },
+                    None => quote! { ::std::option::Option::None },
+                }
             };
             let required = !f.is_option && f.default_value.is_none() && !f.nested;
             let type_name_str = quote!(#ty).to_string();
-            let nested_meta = if f.nested {
+            let nested_meta = if f.nested && !f.nested_serde {
+                // Regular nested: expose child field_meta() for introspection.
                 quote! { ::std::option::Option::Some(<#ty as ::server_less_core::config::Config>::field_meta()) }
             } else {
+                // Leaf fields and serde-nested fields: opaque, no child introspection.
                 quote! { ::std::option::Option::None }
             };
             let env_prefix = match &f.env_prefix {

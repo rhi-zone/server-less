@@ -7,6 +7,14 @@ pub mod extract;
 #[cfg(feature = "config")]
 pub mod config;
 
+/// Re-export of `toml` for use by `#[derive(Config)]`-generated code.
+///
+/// Generated serde-nested deserialization code references `toml::de::Error`
+/// via this path so callers don't need to add `toml` to their own dependencies.
+#[cfg(feature = "config")]
+#[doc(hidden)]
+pub use toml as __toml;
+
 pub use error::{
     ErrorCode, ErrorResponse, HttpStatusFallback, HttpStatusHelper, IntoErrorCode,
     SchemaValidationError,

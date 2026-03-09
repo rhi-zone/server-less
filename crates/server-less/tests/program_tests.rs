@@ -412,3 +412,240 @@ heartbeat_secs = 99
     assert_eq!(cfg.daemon.heartbeat_secs, 10);
     assert_eq!(cfg.search.max_results, 200);
 }
+
+// --- Serde-nested Config tests ---
+
+/// A type that uses #[serde(flatten)] — incompatible with #[derive(Config)].
+#[derive(serde::Deserialize, Debug, PartialEq)]
+struct RulesConfig {
+    #[serde(default)]
+    strict: bool,
+    #[serde(default = "default_max_rules")]
+    max_rules: u32,
+}
+
+fn default_max_rules() -> u32 {
+    50
+}
+
+/// A HashMap-backed config section — no named fields, so Config is impossible.
+#[derive(serde::Deserialize, Debug, PartialEq)]
+struct AliasMap {
+    #[serde(flatten)]
+    entries: std::collections::HashMap<String, String>,
+}
+
+/// An optional serde-nested section.
+#[derive(serde::Deserialize, Debug, PartialEq)]
+struct ExtrasConfig {
+    #[serde(default)]
+    notes: String,
+}
+
+#[derive(Config)]
+struct SerdeNestedConfig {
+    #[param(default = "main", help = "App name")]
+    app_name: String,
+    /// Rules section: serde-deserialized, not Config::load
+    #[param(nested, serde)]
+    rules: RulesConfig,
+    /// Aliases section: serde-deserialized HashMap-backed type
+    #[param(nested, serde, file_key = "aliases")]
+    alias_map: AliasMap,
+    /// Optional extras section
+    #[param(nested, serde)]
+    extras: Option<ExtrasConfig>,
+}
+
+#[test]
+fn test_serde_nested_load_from_toml_file() {
+    use server_less::{ConfigSource, ConfigTrait};
+    use std::io::Write;
+
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        f,
+        r#"
+app_name = "serde-test"
+
+[rules]
+strict = true
+max_rules = 100
+
+[aliases]
+foo = "bar"
+baz = "qux"
+
+[extras]
+notes = "hello"
+"#
+    )
+    .unwrap();
+
+    let cfg = SerdeNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::File(f.path().to_path_buf()),
+    ])
+    .unwrap();
+
+    assert_eq!(cfg.app_name, "serde-test");
+    assert!(cfg.rules.strict);
+    assert_eq!(cfg.rules.max_rules, 100);
+    assert_eq!(cfg.alias_map.entries.get("foo").map(String::as_str), Some("bar"));
+    assert_eq!(cfg.alias_map.entries.get("baz").map(String::as_str), Some("qux"));
+    assert_eq!(cfg.extras, Some(ExtrasConfig { notes: "hello".to_string() }));
+}
+
+#[test]
+fn test_serde_nested_serde_defaults_via_serde_default() {
+    use server_less::{ConfigSource, ConfigTrait};
+    use std::io::Write;
+
+    // Only provide the required sections (rules and aliases), no extras
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        f,
+        r#"
+[rules]
+# strict defaults to false via #[serde(default)]
+max_rules = 10
+
+[aliases]
+"#
+    )
+    .unwrap();
+
+    let cfg = SerdeNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::File(f.path().to_path_buf()),
+    ])
+    .unwrap();
+
+    // strict defaults to false (serde default)
+    assert!(!cfg.rules.strict);
+    assert_eq!(cfg.rules.max_rules, 10);
+    // extras section absent → Option::None
+    assert_eq!(cfg.extras, None);
+}
+
+#[test]
+fn test_serde_nested_file_key_override() {
+    use server_less::{ConfigSource, ConfigTrait};
+    use std::io::Write;
+
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    // "aliases" is the file_key for alias_map
+    write!(
+        f,
+        r#"
+[rules]
+strict = false
+
+[aliases]
+mykey = "myval"
+"#
+    )
+    .unwrap();
+
+    let cfg = SerdeNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::File(f.path().to_path_buf()),
+    ])
+    .unwrap();
+
+    assert_eq!(cfg.alias_map.entries.get("mykey").map(String::as_str), Some("myval"));
+}
+
+#[test]
+fn test_serde_nested_env_vars_ignored() {
+    use server_less::{ConfigSource, ConfigTrait};
+    use std::io::Write;
+
+    // Set env vars that would normally be picked up for a Config-nested type.
+    // For serde-nested fields, these should be silently ignored.
+    // SAFETY: single-threaded test.
+    unsafe {
+        std::env::set_var("APP_RULES_STRICT", "true");
+        std::env::set_var("APP_ALIAS_MAP_FOO", "fromenv");
+    }
+
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        f,
+        r#"
+[rules]
+strict = false
+max_rules = 5
+
+[aliases]
+"#
+    )
+    .unwrap();
+
+    let cfg = SerdeNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::File(f.path().to_path_buf()),
+        ConfigSource::Env { prefix: Some("APP".into()) },
+    ])
+    .unwrap();
+
+    unsafe {
+        std::env::remove_var("APP_RULES_STRICT");
+        std::env::remove_var("APP_ALIAS_MAP_FOO");
+    }
+
+    // strict should remain false (from TOML), not overridden by env var
+    assert!(!cfg.rules.strict, "env var should not override serde-nested field");
+    // alias_map should not have a 'foo' key from env
+    assert!(!cfg.alias_map.entries.contains_key("foo"), "env var should not inject into serde-nested field");
+}
+
+#[test]
+fn test_serde_nested_merge_file_semantics() {
+    use server_less::{ConfigSource, ConfigTrait};
+    use std::io::Write;
+
+    // Primary file: sets rules and aliases
+    let mut primary = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        primary,
+        r#"
+[rules]
+strict = true
+max_rules = 20
+
+[aliases]
+a = "1"
+"#
+    )
+    .unwrap();
+
+    // Merge file: also has rules section — should NOT overwrite since primary already set it
+    let mut merge = tempfile::NamedTempFile::new().unwrap();
+    write!(
+        merge,
+        r#"
+[rules]
+strict = false
+max_rules = 99
+
+[aliases]
+b = "2"
+"#
+    )
+    .unwrap();
+
+    let cfg = SerdeNestedConfig::load(&[
+        ConfigSource::Defaults,
+        ConfigSource::File(primary.path().to_path_buf()),
+        ConfigSource::MergeFile(merge.path().to_path_buf()),
+    ])
+    .unwrap();
+
+    // File set rules first; MergeFile should NOT overwrite (supplement semantics)
+    assert!(cfg.rules.strict, "MergeFile should not overwrite rules set by File");
+    assert_eq!(cfg.rules.max_rules, 20, "MergeFile should not overwrite rules set by File");
+    // alias_map: primary set it, so merge should not overwrite
+    assert!(cfg.alias_map.entries.contains_key("a"));
+    assert!(!cfg.alias_map.entries.contains_key("b"), "MergeFile should not overwrite aliases");
+}
