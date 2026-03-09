@@ -8,7 +8,7 @@ description = "Core traits and types for server-less derive macros"
 
 [dependencies]
 # Intra-workspace
-server-less-openapi = { path = "../server-less-openapi", version = "0.4.1-alpha.1", optional = true }
+server-less-openapi = { path = "../server-less-openapi", version = "0.4.1-alpha.2", optional = true }
 
 # Async runtime agnostic
 futures-core = "0.3"
