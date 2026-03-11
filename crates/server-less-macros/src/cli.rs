@@ -348,32 +348,9 @@ fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
     None
 }
 
-/// Extract `#[cli(name = "...")]` from a method, falling back to kebab-case of the method name.
-fn get_cli_name(method: &MethodInfo) -> String {
-    for attr in &method.method.attrs {
-        if attr.path().is_ident("cli") {
-            let mut found = None;
-            let result = attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("name") {
-                    let value = meta.value()?;
-                    let lit: syn::LitStr = value.parse()?;
-                    found = Some(lit.value());
-                    Ok(())
-                } else {
-                    if meta.input.peek(Token![=]) {
-                        let _: proc_macro2::TokenStream = meta.value()?.parse()?;
-                    }
-                    Ok(())
-                }
-            });
-            if result.is_ok()
-                && let Some(name) = found
-            {
-                return name;
-            }
-        }
-    }
-    method.name_str().to_kebab_case()
+/// CLI-facing name for a method: `wire_name` if set, otherwise kebab-case of method name.
+fn cli_name(method: &MethodInfo) -> String {
+    method.wire_name_or(|n| n.to_kebab_case())
 }
 
 /// Build an ordered list of group display names.
@@ -511,7 +488,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 continue;
             }
             if resolve_method_group(m, &group_registry)?.is_none() {
-                let name = get_cli_name(m);
+                let name = cli_name(m);
                 let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
             }
@@ -519,7 +496,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         // Static mounts
         for m in &partitioned.static_mounts {
             if !has_cli_hidden(m) {
-                let name = get_cli_name(m);
+                let name = cli_name(m);
                 let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
             }
@@ -527,7 +504,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         // Slug mounts
         for m in &partitioned.slug_mounts {
             if !has_cli_hidden(m) {
-                let name = get_cli_name(m);
+                let name = cli_name(m);
                 let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
             }
@@ -544,7 +521,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                     continue;
                 }
                 if resolve_method_group(m, &group_registry)?.as_deref() == Some(group.as_str()) {
-                    let name = get_cli_name(m);
+                    let name = cli_name(m);
                     let (about, _) = split_docs(&m.docs);
                     entries.push((name, about));
                 }
@@ -718,7 +695,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .iter()
         .filter(|m| !has_cli_hidden(m))
         .map(|m| {
-            let name = get_cli_name(m);
+            let name = cli_name(m);
             match &m.docs {
                 Some(doc) => format!("- `{name}` — {doc}"),
                 None => format!("- `{name}`"),
@@ -730,7 +707,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 .iter()
                 .filter(|m| !has_cli_hidden(m))
                 .map(|m| {
-                    let name = get_cli_name(m);
+                    let name = cli_name(m);
                     format!("- `{name}` (subcommand group)")
                 }),
         )
@@ -740,7 +717,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 .iter()
                 .filter(|m| !has_cli_hidden(m))
                 .map(|m| {
-                    let name = get_cli_name(m);
+                    let name = cli_name(m);
                     format!("- `{name} <arg>` (subcommand group)")
                 }),
         )
@@ -1014,7 +991,7 @@ fn generate_leaf_subcommand(
     has_defaults: bool,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
-    let name = get_cli_name(method);
+    let name = cli_name(method);
     let (about, after_help) = split_docs(&method.docs);
     let after_help_token = after_help.map(|h| quote! { .after_help(#h) });
     let hide = hidden.then(|| quote! { .hide(true) });
@@ -1057,7 +1034,7 @@ fn generate_static_mount_subcommand(
     method: &MethodInfo,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
-    let name = get_cli_name(method);
+    let name = cli_name(method);
     let (about, after_help) = split_docs(&method.docs);
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1087,7 +1064,7 @@ fn generate_slug_mount_subcommand(
     has_qualified: bool,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
-    let name = get_cli_name(method);
+    let name = cli_name(method);
     let (about, after_help) = split_docs(&method.docs);
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1299,7 +1276,7 @@ fn generate_leaf_match_arm(
     // When true: generates async dispatch (`.await` instead of `block_on`).
     for_async: bool,
 ) -> syn::Result<TokenStream2> {
-    let subcommand_name = get_cli_name(method);
+    let subcommand_name = cli_name(method);
     let method_name = &method.name;
 
     // Partition Context vs regular parameters
@@ -1740,7 +1717,7 @@ fn generate_leaf_match_arm(
 }
 
 fn generate_static_mount_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let subcommand_name = get_cli_name(method);
+    let subcommand_name = cli_name(method);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1758,7 +1735,7 @@ fn generate_static_mount_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
 }
 
 fn generate_static_mount_arm_async(method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let subcommand_name = get_cli_name(method);
+    let subcommand_name = cli_name(method);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1776,7 +1753,7 @@ fn generate_static_mount_arm_async(method: &MethodInfo) -> syn::Result<TokenStre
 }
 
 fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
-    let subcommand_name = get_cli_name(method);
+    let subcommand_name = cli_name(method);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -1818,7 +1795,7 @@ fn generate_slug_mount_arm_async(
     method: &MethodInfo,
     has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
-    let subcommand_name = get_cli_name(method);
+    let subcommand_name = cli_name(method);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(

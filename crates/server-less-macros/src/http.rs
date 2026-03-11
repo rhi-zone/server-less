@@ -345,7 +345,7 @@ pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Resu
     let mut mount_routes = Vec::new();
     let mut mount_openapi_calls = Vec::new();
     for mount in &partitioned.static_mounts {
-        let mount_name = mount.name_str();
+        let mount_name = mount.wire_name_or(|n| n);
         let mount_path = format!("/{}", mount_name);
         let method_name = &mount.name;
         let inner_ty = mount.return_info.reference_inner.as_ref().ok_or_else(|| {

@@ -32,6 +32,9 @@ pub struct MethodInfo {
     pub is_async: bool,
     /// Group assignment from `#[server(group = "...")]`
     pub group: Option<String>,
+    /// Explicit wire name override from `#[server(name = "...")]` or protocol-specific
+    /// `#[cli(name = "...")]`, `#[mcp(name = "...")]`, etc.
+    pub wire_name: Option<String>,
 }
 
 /// Registry of declared method groups from `#[server(groups(...))]`.
@@ -77,13 +80,34 @@ pub struct ParamInfo {
 }
 
 impl MethodInfo {
-    /// Method name as a protocol string, stripping the `r#` prefix from raw identifiers.
+    /// Rust method name with `r#` prefix stripped.
     ///
-    /// Use this instead of `.name.to_string()` whenever generating protocol-level names
-    /// (CLI subcommands, HTTP routes, JSON-RPC methods, OpenAPI operation IDs, etc.).
-    /// Raw identifiers like `r#type` must appear as `"type"` in protocols, not `"r#type"`.
+    /// Returns the raw identifier name, ignoring any `wire_name` override.
+    /// Use this for code generation (`self.method_name()`) and as the base for
+    /// protocol-specific transforms (`.to_kebab_case()`, `.to_snake_case()`, etc.).
     pub fn name_str(&self) -> String {
         ident_str(&self.name)
+    }
+
+    /// Protocol-facing name, applying a transform to the raw name unless overridden.
+    ///
+    /// If `wire_name` is set (from `#[server(name = "...")]` or protocol-specific
+    /// attributes), returns it as-is. Otherwise applies `transform` to the raw name.
+    ///
+    /// ```ignore
+    /// // CLI: kebab-case
+    /// method.wire_name_or(|n| n.to_kebab_case())
+    /// // JSON-RPC: raw name
+    /// method.wire_name_or(|n| n)
+    /// // gRPC: snake_case
+    /// method.wire_name_or(|n| n.to_snake_case())
+    /// ```
+    pub fn wire_name_or(&self, transform: impl FnOnce(String) -> String) -> String {
+        if let Some(ref wn) = self.wire_name {
+            wn.clone()
+        } else {
+            transform(self.name_str())
+        }
     }
 }
 
@@ -177,6 +201,9 @@ impl MethodInfo {
         // Extract group from #[server(group = "...")]
         let group = extract_server_group(&method.attrs);
 
+        // Extract wire name from #[server(name = "...")] or protocol-specific attrs
+        let wire_name = extract_wire_name(&method.attrs);
+
         Ok(Some(Self {
             method: method.clone(),
             name,
@@ -185,6 +212,7 @@ impl MethodInfo {
             return_info,
             is_async,
             group,
+            wire_name,
         }))
     }
 }
@@ -211,6 +239,42 @@ pub fn extract_docs(attrs: &[syn::Attribute]) -> Option<String> {
     } else {
         Some(docs.join("\n"))
     }
+}
+
+/// Known protocol attribute identifiers used by server-less macros.
+const PROTOCOL_ATTRS: &[&str] = &[
+    "server", "cli", "http", "mcp", "jsonrpc", "grpc", "ws", "graphql", "tool",
+];
+
+/// Extract `name = "..."` from any protocol attribute on a method.
+///
+/// Checks `#[server(name = "...")]`, `#[cli(name = "...")]`, `#[mcp(name = "...")]`, etc.
+/// If multiple protocol attrs specify `name`, the first one found wins.
+fn extract_wire_name(attrs: &[syn::Attribute]) -> Option<String> {
+    for attr in attrs {
+        let is_protocol = attr
+            .path()
+            .get_ident()
+            .is_some_and(|id| PROTOCOL_ATTRS.iter().any(|p| id == p));
+        if !is_protocol {
+            continue;
+        }
+        let mut found = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("name") {
+                let value = meta.value()?;
+                let s: syn::LitStr = value.parse()?;
+                found = Some(s.value());
+            } else if meta.input.peek(syn::Token![=]) {
+                let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+            }
+            Ok(())
+        });
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
 }
 
 /// Extract the `group` value from `#[server(group = "...")]` on a method.

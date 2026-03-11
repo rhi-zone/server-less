@@ -339,11 +339,12 @@ fn generate_tool_definition(
     method: &MethodInfo,
     has_qualified: bool,
 ) -> TokenStream2 {
-    let name = format!("{}{}", namespace_prefix, method.name);
+    let base_name = method.wire_name_or(|n| n);
+    let name = format!("{}{}", namespace_prefix, base_name);
     let description = method
         .docs
         .clone()
-        .unwrap_or_else(|| method.name_str());
+        .unwrap_or(base_name.clone());
 
     // Partition out Context parameters — they are injected, not user-visible inputs.
     let (_ctx_param, user_params) =
@@ -433,7 +434,7 @@ fn generate_dispatch_arm_with_context(
 
 /// Generate code to append mounted tools to the tools list.
 fn generate_mount_tools(namespace_prefix: &str, method: &MethodInfo) -> syn::Result<TokenStream2> {
-    let mount_name = method.name_str();
+    let mount_name = method.wire_name_or(|n| n);
     let full_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -518,7 +519,7 @@ fn generate_mount_tool_names(
     namespace_prefix: &str,
     method: &MethodInfo,
 ) -> syn::Result<TokenStream2> {
-    let mount_name = method.name_str();
+    let mount_name = method.wire_name_or(|n| n);
     let full_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
@@ -544,7 +545,7 @@ fn generate_static_mount_dispatch(
     method: &MethodInfo,
     async_handling: AsyncHandling,
 ) -> syn::Result<TokenStream2> {
-    let mount_name = method.name_str();
+    let mount_name = method.wire_name_or(|n| n);
     let mount_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -578,7 +579,7 @@ fn generate_slug_mount_dispatch(
     method: &MethodInfo,
     async_handling: AsyncHandling,
 ) -> syn::Result<TokenStream2> {
-    let mount_name = method.name_str();
+    let mount_name = method.wire_name_or(|n| n);
     let mount_prefix = format!("{}{}_{}", namespace_prefix, mount_name, "");
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
