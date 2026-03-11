@@ -467,7 +467,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             }
             if resolve_method_group(m, &group_registry)?.is_none() {
                 let name = m.name_str().to_kebab_case();
-                let about = m.docs.clone().unwrap_or_default();
+                let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
             }
         }
@@ -475,7 +475,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         for m in &partitioned.static_mounts {
             if !has_cli_hidden(m) {
                 let name = m.name_str().to_kebab_case();
-                let about = m.docs.clone().unwrap_or_default();
+                let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
             }
         }
@@ -483,7 +483,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         for m in &partitioned.slug_mounts {
             if !has_cli_hidden(m) {
                 let name = m.name_str().to_kebab_case();
-                let about = m.docs.clone().unwrap_or_default();
+                let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
             }
         }
@@ -500,7 +500,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 }
                 if resolve_method_group(m, &group_registry)?.as_deref() == Some(group.as_str()) {
                     let name = m.name_str().to_kebab_case();
-                    let about = m.docs.clone().unwrap_or_default();
+                    let (about, _) = split_docs(&m.docs);
                     entries.push((name, about));
                 }
             }
@@ -940,6 +940,28 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     })
 }
 
+/// Split a doc string at the first blank line into (about, after_help).
+///
+/// If there's no blank line, returns the full string as about and None for after_help.
+fn split_docs(docs: &Option<String>) -> (String, Option<String>) {
+    let full = match docs {
+        Some(s) => s.clone(),
+        None => return (String::new(), None),
+    };
+    // Look for a blank line (empty line between paragraphs)
+    if let Some(pos) = full.find("\n\n") {
+        let about = full[..pos].to_string();
+        let after = full[pos + 2..].to_string();
+        if after.is_empty() {
+            (about, None)
+        } else {
+            (about, Some(after))
+        }
+    } else {
+        (full, None)
+    }
+}
+
 fn generate_leaf_subcommand(
     method: &MethodInfo,
     has_qualified: bool,
@@ -948,7 +970,8 @@ fn generate_leaf_subcommand(
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
     let name = method.name_str().to_kebab_case();
-    let about = method.docs.clone().unwrap_or_default();
+    let (about, after_help) = split_docs(&method.docs);
+    let after_help_token = after_help.map(|h| quote! { .after_help(#h) });
     let hide = hidden.then(|| quote! { .hide(true) });
 
     // Filter out Context parameters - they're injected, not CLI args
@@ -979,6 +1002,7 @@ fn generate_leaf_subcommand(
     Ok(quote! {
         ::server_less::clap::Command::new(#name)
             .about(#about)
+            #after_help_token
             #hide
             #(.arg(#args))*
     })
@@ -989,7 +1013,7 @@ fn generate_static_mount_subcommand(
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
     let name = method.name_str().to_kebab_case();
-    let about = method.docs.clone().unwrap_or_default();
+    let (about, after_help) = split_docs(&method.docs);
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
             &method.method.sig,
@@ -997,6 +1021,7 @@ fn generate_static_mount_subcommand(
         )
     })?;
     let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
+    let after_help_set = after_help.map(|h| quote! { __cmd = __cmd.after_help(#h); });
 
     Ok(quote! {
         {
@@ -1005,6 +1030,7 @@ fn generate_static_mount_subcommand(
             if !#about.is_empty() {
                 __cmd = __cmd.about(#about);
             }
+            #after_help_set
             #hide
             __cmd
         }
@@ -1017,7 +1043,7 @@ fn generate_slug_mount_subcommand(
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
     let name = method.name_str().to_kebab_case();
-    let about = method.docs.clone().unwrap_or_default();
+    let (about, after_help) = split_docs(&method.docs);
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(
             &method.method.sig,
@@ -1025,6 +1051,7 @@ fn generate_slug_mount_subcommand(
         )
     })?;
     let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
+    let after_help_set = after_help.map(|h| quote! { __cmd = __cmd.after_help(#h); });
 
     let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
 
@@ -1051,6 +1078,7 @@ fn generate_slug_mount_subcommand(
             if !#about.is_empty() {
                 __cmd = __cmd.about(#about);
             }
+            #after_help_set
             #hide
             #(__cmd = __cmd.arg(#slug_args);)*
             __cmd
