@@ -303,6 +303,78 @@ fn test_multiple_static_mounts() {
     );
 }
 
+// Leaf method with #[cli(name = "...")] override
+#[derive(Clone)]
+struct RenamedLeafApp;
+
+#[cli(name = "leaf-app")]
+impl RenamedLeafApp {
+    /// Check health
+    #[cli(name = "status")]
+    pub fn health_check(&self) -> String {
+        "ok".to_string()
+    }
+}
+
+#[test]
+fn test_leaf_name_override() {
+    let cmd = RenamedLeafApp::cli_command();
+    let names: Vec<_> = cmd
+        .get_subcommands()
+        .map(|c| c.get_name().to_string())
+        .collect();
+    assert!(names.contains(&"status".to_string()), "names: {:?}", names);
+    assert!(!names.contains(&"health-check".to_string()), "names: {:?}", names);
+}
+
+#[test]
+fn test_leaf_name_override_dispatch() {
+    let app = RenamedLeafApp;
+    assert!(app.cli_run_with(["leaf-app", "status"]).is_ok());
+}
+
+// Static mount with #[cli(name = "...")] override
+#[derive(Clone)]
+struct RenamedMountApp {
+    user_svc: UserService,
+}
+
+impl RenamedMountApp {
+    fn new() -> Self {
+        Self {
+            user_svc: UserService::new(),
+        }
+    }
+}
+
+#[cli(name = "renamed-app")]
+impl RenamedMountApp {
+    /// Manage team members (renamed from field)
+    #[cli(name = "members")]
+    pub fn user_svc(&self) -> &UserService {
+        &self.user_svc
+    }
+}
+
+#[test]
+fn test_static_mount_name_override() {
+    let cmd = RenamedMountApp::cli_command();
+    let names: Vec<_> = cmd
+        .get_subcommands()
+        .map(|c| c.get_name().to_string())
+        .collect();
+    // Should use the #[cli(name = "members")] override, not "user-svc"
+    assert!(names.contains(&"members".to_string()), "names: {:?}", names);
+    assert!(!names.contains(&"user-svc".to_string()), "names: {:?}", names);
+}
+
+#[test]
+fn test_static_mount_name_override_dispatch() {
+    let app = RenamedMountApp::new();
+    // Dispatch using the overridden name
+    assert!(app.cli_run_with(["renamed-app", "members", "list"]).is_ok());
+}
+
 // Slug mount: parent with parameterized child
 #[derive(Clone)]
 struct SlugApp {
@@ -447,6 +519,36 @@ fn test_cli_skip_excludes_mount() {
 
     assert!(names.contains(&"status".to_string()));
     assert!(!names.contains(&"internal".to_string()));
+}
+
+// #[cli(helper)] test — self-documenting alias for #[cli(skip)]
+#[derive(Clone)]
+struct HelperService;
+
+#[cli(name = "helper-app")]
+impl HelperService {
+    /// A visible command
+    pub fn list(&self) -> Vec<String> {
+        self.seed_data()
+    }
+
+    /// Internal helper — should not become a subcommand
+    #[cli(helper)]
+    pub fn seed_data(&self) -> Vec<String> {
+        vec!["a".to_string(), "b".to_string()]
+    }
+}
+
+#[test]
+fn test_cli_helper_excludes_method() {
+    let cmd = HelperService::cli_command();
+    let names: Vec<_> = cmd
+        .get_subcommands()
+        .map(|c| c.get_name().to_string())
+        .collect();
+
+    assert!(names.contains(&"list".to_string()));
+    assert!(!names.contains(&"seed-data".to_string()), "names: {:?}", names);
 }
 
 // CliSubcommand trait is implemented
