@@ -11,8 +11,8 @@ proc-macro = true
 
 [dependencies]
 # Shared parsing and RPC utilities
-server-less-parse = { path = "../server-less-parse", version = "0.4.6" }
-server-less-rpc = { path = "../server-less-rpc", version = "0.4.6" }
+server-less-parse = { workspace = true }
+server-less-rpc = { workspace = true }
 
 # Proc macro essentials
 syn = { version = "2", features = ["full", "extra-traits"] }
