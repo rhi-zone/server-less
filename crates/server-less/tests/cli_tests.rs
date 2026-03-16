@@ -1125,6 +1125,63 @@ fn test_cli_default_hidden_still_dispatches_without_subcommand() {
     assert!(app.cli_run_with(["default-hidden-app"]).is_ok());
 }
 
+// Regression: #[cli(name = "...", display_with = "...")] in a single attribute must work.
+// Previously get_display_with returned None when name= came before display_with= in the
+// same attribute, because the early-return logic exited after the first successful parse
+// of the #[cli] attribute even though display_with hadn't been found yet.
+struct NameWithDisplay;
+
+impl NameWithDisplay {
+    fn fmt_item(&self, s: &String) -> String {
+        format!("item: {s}")
+    }
+}
+
+#[cli(name = "name-display-app")]
+impl NameWithDisplay {
+    /// Command with both name and display_with
+    #[cli(name = "renamed", display_with = "fmt_item")]
+    fn original_name(&self) -> String {
+        "hello".to_string()
+    }
+}
+
+// Also test with a Vec return type (no Display on the item — display_with must handle it).
+struct NameWithDisplayVec;
+
+#[derive(serde::Serialize, schemars::JsonSchema)]
+struct NoDisplayItem {
+    value: String,
+}
+
+impl NameWithDisplayVec {
+    fn fmt_items(&self, items: &Vec<NoDisplayItem>) -> String {
+        items.iter().map(|i| i.value.clone()).collect::<Vec<_>>().join("\n")
+    }
+}
+
+#[cli(name = "name-display-vec-app")]
+impl NameWithDisplayVec {
+    /// Command with name + display_with returning Vec of non-Display items
+    #[cli(name = "renamed", display_with = "fmt_items")]
+    fn original_name(&self) -> Vec<NoDisplayItem> {
+        vec![NoDisplayItem { value: "hello".into() }]
+    }
+}
+
+#[test]
+fn test_cli_name_and_display_with_combined() {
+    let app = NameWithDisplay;
+    // The command should be accessible via the renamed CLI name
+    assert!(app.cli_run_with(["name-display-app", "renamed"]).is_ok());
+}
+
+#[test]
+fn test_cli_name_and_display_with_vec_no_display() {
+    let app = NameWithDisplayVec;
+    assert!(app.cli_run_with(["name-display-vec-app", "renamed"]).is_ok());
+}
+
 // Regression: #[cli(default, display_with = "...")] in a single attribute must work.
 // Previously get_display_with bailed on unknown keys like `default`, returning None
 // even when display_with was present in the same attribute.

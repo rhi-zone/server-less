@@ -333,9 +333,11 @@ fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
                     Ok(())
                 } else {
                     // Skip unrecognized keys; they're handled elsewhere.
-                    // Consume the value if present (key = ...) or skip bare flags.
+                    // Consume the value if present (key = value) or skip bare flags.
+                    // Use syn::Expr (not TokenStream) to avoid greedily consuming subsequent
+                    // comma-separated keys like `name = "foo", display_with = "bar"`.
                     if meta.input.peek(Token![=]) {
-                        let _: proc_macro2::TokenStream = meta.value()?.parse()?;
+                        let _: syn::Expr = meta.value()?.parse()?;
                     }
                     Ok(())
                 }
