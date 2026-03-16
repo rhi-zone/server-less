@@ -295,6 +295,7 @@ fn extract_enum_variants<T: schemars::JsonSchema>() -> Option<Vec<String>> {
 impl<T> ::clap::builder::TypedValueParser for SchemaValueParser<T>
 where
     T: schemars::JsonSchema + std::str::FromStr + Clone + Send + Sync + 'static,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
 {
     type Value = T;
 
@@ -308,7 +309,7 @@ where
             .to_str()
             .ok_or_else(|| ::clap::Error::new(::clap::error::ErrorKind::InvalidUtf8))?;
         s.parse::<T>()
-            .map_err(|_| ::clap::Error::new(::clap::error::ErrorKind::InvalidValue))
+            .map_err(|e| ::clap::Error::raw(::clap::error::ErrorKind::ValueValidation, e))
     }
 
     fn possible_values(
