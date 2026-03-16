@@ -312,17 +312,6 @@ where
             .map_err(|e| ::clap::Error::raw(::clap::error::ErrorKind::ValueValidation, e))
     }
 
-    fn possible_values(
-        &self,
-    ) -> Option<Box<dyn Iterator<Item = ::clap::builder::PossibleValue> + '_>> {
-        let variants = self.variants.as_ref()?;
-        Some(Box::new(
-            variants
-                .iter()
-                .copied()
-                .map(::clap::builder::PossibleValue::new),
-        ))
-    }
 }
 
 /// Runtime method metadata with string-based types.
