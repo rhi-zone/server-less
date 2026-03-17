@@ -214,12 +214,12 @@ server-less = { version = "0.1", default-features = false, features = ["http", "
 - Future/deferred scope → TODO.md **before** writing any code, not after
 - **Every observed problem → TODO.md. No exceptions.** Code comments and conversation mentions are not tracked items. If you write a TODO comment in source, the next action is to open TODO.md and write the entry.
 
-**Conversation is not memory.** Anything said in chat evaporates at session end. If it implies future behavior change, write it to CLAUDE.md or a memory file immediately — or it will not happen.
+**Conversation is not memory.** Anything said in chat evaporates at session end. If it implies future behavior change, write it to CLAUDE.md immediately — or it will not happen.
 
 **Warning — these phrases mean something needs to be written down right now:**
 - "I won't do X again" / "I'll remember to..." / "I've learned that..."
 - "Next time I'll..." / "From now on I'll..."
-- Any acknowledgement of a recurring error without a corresponding CLAUDE.md or memory edit
+- Any acknowledgement of a recurring error without a corresponding CLAUDE.md edit
 
 **Triggers:** User corrects you, 2+ failed attempts, "aha" moment, framework quirk discovered → document before proceeding.
 
@@ -288,7 +288,7 @@ Use plan mode as a handoff mechanism when:
 
 **For mid-session planning** on a different topic: investigating inside plan mode is fine — context isn't being thrown away.
 
-**TODO.md is the lossless record. Memory files are lossy.** Flush any new items to TODO.md before the handoff. Memory files only need updating if there is genuinely new user/workflow/feedback information that isn't in TODO.md.
+**TODO.md is the lossless record.** Flush any new items to TODO.md before the handoff. Anything worth preserving belongs in CLAUDE.md or TODO.md — not in memory files.
 
 ## Commit Convention
 
@@ -307,6 +307,7 @@ Scope is optional but recommended for multi-crate repos.
 ## Negative Constraints
 
 Do not:
+- Use Claude Code's auto-memory system (`~/.claude/projects/.*./memory/`) — it is unversioned, invisible to the user, and can't be diffed or backed up. Write behavioral changes directly to CLAUDE.md instead
 - Announce actions ("I will now...") - just do them
 - Leave work uncommitted
 - Use interactive git commands (`git add -p`, `git add -i`, `git rebase -i`) — these block on stdin and hang in non-interactive shells; stage files by name instead
