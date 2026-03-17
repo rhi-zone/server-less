@@ -284,11 +284,11 @@ Use plan mode as a handoff mechanism when:
 - The session has drifted from its original purpose
 - Context has accumulated enough that a fresh start would help
 
-**For handoffs:** enter plan mode, write a short plan pointing at TODO.md, and ExitPlanMode. **Do NOT investigate first** — the session is context-heavy and about to be discarded. The fresh session investigates after approval.
+**For handoffs:** enter plan mode, write a plan containing only: next tasks, blocked/pending items, and what was done this session (only if it directly affects what comes next). Nothing else — no commands, no build steps, no context summaries. Those belong in CLAUDE.md or TODO.md. The next session reads both fresh. **Do NOT investigate first** — the session is context-heavy and about to be discarded.
 
 **For mid-session planning** on a different topic: investigating inside plan mode is fine — context isn't being thrown away.
 
-Before the handoff plan, update TODO.md and memory files with anything worth preserving.
+**TODO.md is the lossless record. Memory files are lossy.** Flush any new items to TODO.md before the handoff. Memory files only need updating if there is genuinely new user/workflow/feedback information that isn't in TODO.md.
 
 ## Commit Convention
 
