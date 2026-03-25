@@ -29,6 +29,8 @@ pub(crate) struct ProgramArgs {
     pub config_cmd_name: Option<String>,
     /// Whether the config subcommand is enabled (default: true when config_ty is set).
     pub config_cmd: bool,
+    /// Whether to prepend the program name to the description (forwarded to CliArgs).
+    pub name_prefix: Option<bool>,
 }
 
 impl Parse for ProgramArgs {
@@ -65,6 +67,10 @@ impl Parse for ProgramArgs {
                     args.config_ty = Some(path);
                     args.config_cmd = true; // enabled by default when config is set
                 }
+                "name_prefix" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.name_prefix = Some(lit.value());
+                }
                 "config_cmd" => {
                     // config_cmd = false | "custom-name"
                     if input.peek(syn::LitBool) {
@@ -86,7 +92,7 @@ impl Parse for ProgramArgs {
                         ));
                     }
                     const VALID: &[&str] =
-                        &["name", "version", "description", "homepage", "markdown", "config", "config_cmd"];
+                        &["name", "version", "description", "homepage", "markdown", "config", "config_cmd", "name_prefix"];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -94,7 +100,7 @@ impl Parse for ProgramArgs {
                         ident.span(),
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
-                             Valid arguments: name, version, description, homepage, markdown, config, config_cmd"
+                             Valid arguments: name, version, description, homepage, markdown, config, config_cmd, name_prefix"
                         ),
                     ));
                 }
@@ -129,6 +135,7 @@ pub(crate) fn expand_program(args: ProgramArgs, mut impl_block: ItemImpl) -> syn
         no_async: false,
         config_ty,
         config_cmd_name: args.config_cmd_name,
+        name_prefix: args.name_prefix,
     };
     let cli_tokens = cli::expand_cli(cli_args, impl_block.clone())?;
 

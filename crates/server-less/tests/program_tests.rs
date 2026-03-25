@@ -416,7 +416,7 @@ heartbeat_secs = 99
 // --- Serde-nested Config tests ---
 
 /// A type that uses #[serde(flatten)] — incompatible with #[derive(Config)].
-#[derive(serde::Deserialize, Debug, PartialEq)]
+#[derive(serde::Deserialize, Debug, Default, PartialEq)]
 struct RulesConfig {
     #[serde(default)]
     strict: bool,
@@ -429,7 +429,7 @@ fn default_max_rules() -> u32 {
 }
 
 /// A HashMap-backed config section — no named fields, so Config is impossible.
-#[derive(serde::Deserialize, Debug, PartialEq)]
+#[derive(serde::Deserialize, Debug, Default, PartialEq)]
 struct AliasMap {
     #[serde(flatten)]
     entries: std::collections::HashMap<String, String>,

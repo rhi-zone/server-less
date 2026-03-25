@@ -242,6 +242,7 @@ pub struct SchemaValueParser<T: Clone + Send + Sync + 'static> {
     /// parser-construction time (command build, not per-parse), which is
     /// acceptable for a CLI binary: the leak is bounded (a few bytes per
     /// variant) and the memory is reclaimed when the process exits.
+    #[allow(dead_code)]
     variants: Option<std::sync::Arc<[&'static str]>>,
     _marker: std::marker::PhantomData<T>,
 }

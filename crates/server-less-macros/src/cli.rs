@@ -133,6 +133,10 @@ pub(crate) struct CliArgs {
     pub config_ty: Option<syn::Path>,
     /// Name of the generated config subcommand (default: `"config"`).
     pub config_cmd_name: Option<String>,
+    /// Whether to prepend the program name to the description: `"name - description"`.
+    /// Default: `true` when both name and description are set. Set to `false` to use
+    /// the description verbatim.
+    pub name_prefix: Option<bool>,
 }
 
 impl Parse for CliArgs {
@@ -153,6 +157,13 @@ impl Parse for CliArgs {
                 }
                 "no_async" => {
                     args.no_async = true;
+                    if input.peek(Token![,]) {
+                        input.parse::<Token![,]>()?;
+                    }
+                    continue;
+                }
+                "name_prefix" if !input.peek(Token![=]) => {
+                    args.name_prefix = Some(true);
                     if input.peek(Token![,]) {
                         input.parse::<Token![,]>()?;
                     }
@@ -202,6 +213,10 @@ impl Parse for CliArgs {
                     let lit: syn::LitStr = input.parse()?;
                     args.defaults = Some(lit.value());
                 }
+                "name_prefix" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.name_prefix = Some(lit.value());
+                }
                 other => {
                     if other == "about" {
                         return Err(syn::Error::new(
@@ -213,7 +228,7 @@ impl Parse for CliArgs {
                     }
                     const VALID: &[&str] = &[
                         "name", "version", "description", "homepage", "global",
-                        "defaults", "no_sync", "no_async",
+                        "defaults", "no_sync", "no_async", "name_prefix",
                     ];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
@@ -223,7 +238,7 @@ impl Parse for CliArgs {
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
                              \n\
-                             Valid arguments: name, version, description, homepage, global, defaults, no_sync, no_async\n\
+                             Valid arguments: name, version, description, homepage, global, defaults, no_sync, no_async, name_prefix\n\
                              \n\
                              Example: #[cli(name = \"my-app\", description = \"My CLI tool\")]\n\
                              Bare flags: #[cli(no_sync)] or #[cli(no_async)]\n\
@@ -439,7 +454,11 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         Some(ref v) => quote! { #v },
         None => quote! { ::std::env!("CARGO_PKG_VERSION") },
     };
-    let about = args.description.unwrap_or_default();
+    let about = match (args.description.as_deref(), args.name_prefix) {
+        (Some(desc), Some(false)) => desc.to_string(),
+        (Some(desc), _) => format!("{app_name} - {desc}"),
+        (None, _) => String::new(),
+    };
     let global_flags_with_help = args.global;
     let global_flags: Vec<String> = global_flags_with_help
         .iter()

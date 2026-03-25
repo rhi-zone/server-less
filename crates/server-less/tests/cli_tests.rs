@@ -1155,7 +1155,7 @@ struct NoDisplayItem {
 }
 
 impl NameWithDisplayVec {
-    fn fmt_items(&self, items: &Vec<NoDisplayItem>) -> String {
+    fn fmt_items(&self, items: &[NoDisplayItem]) -> String {
         items.iter().map(|i| i.value.clone()).collect::<Vec<_>>().join("\n")
     }
 }
@@ -1780,6 +1780,34 @@ async fn test_async_output_schema_flag() {
         "async --output-schema dispatch failed: {:?}",
         result
     );
+}
+
+// --- name_prefix tests ---
+
+#[derive(Clone)]
+struct NamePrefixService;
+
+#[cli(name = "my-tool", description = "Does useful things")]
+impl NamePrefixService {}
+
+#[derive(Clone)]
+struct NoPrefixService;
+
+#[cli(name = "my-tool", description = "Does useful things", name_prefix = false)]
+impl NoPrefixService {}
+
+#[test]
+fn test_name_prefix_default() {
+    let cmd = NamePrefixService::cli_command();
+    let about = cmd.get_about().map(|s| s.to_string()).unwrap_or_default();
+    assert_eq!(about, "my-tool - Does useful things");
+}
+
+#[test]
+fn test_name_prefix_false() {
+    let cmd = NoPrefixService::cli_command();
+    let about = cmd.get_about().map(|s| s.to_string()).unwrap_or_default();
+    assert_eq!(about, "Does useful things");
 }
 
 #[tokio::test]

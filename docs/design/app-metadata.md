@@ -110,12 +110,33 @@ The old attributes are deprecated but kept for backwards compatibility until a m
 | Protocol / Feature | Field(s) used |
 |--------------------|---------------|
 | OpenAPI `info` | `name` → title, `description`, `version`, `homepage` → contact URL |
-| CLI help header | `name`, `description` |
+| CLI help header | `name`, `description` — formatted as `name - description` |
 | CLI `--version` | `version` |
 | Config file default path | `name` → `{name}.toml` |
 | OpenRPC `info` | `name`, `description`, `version`, `homepage` |
 | MCP server info | `name`, `description`, `version` |
 | AsyncAPI `info` | `name`, `description`, `version` |
+
+## CLI Help Header Format
+
+When both `name` and `description` are set, the CLI help header is formatted as:
+
+```
+name - description
+```
+
+For example, `name = "normalize"` and `description = "Structural code intelligence"` produces:
+
+```
+normalize - Structural code intelligence
+```
+
+To use the description verbatim (without the name prefix), set `name_prefix = false` on `#[cli]` or `#[program]`:
+
+```rust
+#[cli(description = "Structural code intelligence", name_prefix = false)]
+impl MyTool { ... }
+```
 
 ## Disabling Fields Per-Protocol
 
