@@ -2,8 +2,11 @@
 set -e
 
 echo "Running cargo fmt..."
+staged=$(git diff --cached --name-only)
 cargo fmt --all
-git add -u
+if [ -n "$staged" ]; then
+  echo "$staged" | xargs git add
+fi
 
 echo "Running cargo clippy..."
 cargo clippy --all-targets --all-features -- -D warnings
