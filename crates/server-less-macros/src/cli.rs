@@ -474,9 +474,16 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
 
     let partitioned = partition_methods(&methods, has_cli_skip);
 
-    // Resolve method groups
+    // Resolve method groups — consider all methods (leaf + mounts) for group discovery
     let group_registry = extract_groups(&impl_block)?;
-    let group_order = build_group_order(&partitioned.leaf, &group_registry)?;
+    let all_methods: Vec<&MethodInfo> = partitioned
+        .leaf
+        .iter()
+        .chain(partitioned.static_mounts.iter())
+        .chain(partitioned.slug_mounts.iter())
+        .copied()
+        .collect();
+    let group_order = build_group_order(&all_methods, &group_registry)?;
     let has_groups = !group_order.is_empty();
 
     // Generate subcommands for leaf methods.
@@ -514,17 +521,17 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 ungrouped.push((name, about));
             }
         }
-        // Static mounts
+        // Static mounts — ungrouped ones only
         for m in &partitioned.static_mounts {
-            if !has_cli_hidden(m) {
+            if !has_cli_hidden(m) && resolve_method_group(m, &group_registry)?.is_none() {
                 let name = cli_name(m);
                 let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
             }
         }
-        // Slug mounts
+        // Slug mounts — ungrouped ones only
         for m in &partitioned.slug_mounts {
-            if !has_cli_hidden(m) {
+            if !has_cli_hidden(m) && resolve_method_group(m, &group_registry)?.is_none() {
                 let name = cli_name(m);
                 let (about, _) = split_docs(&m.docs);
                 ungrouped.push((name, about));
@@ -534,10 +541,15 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             sections.push((None, ungrouped));
         }
 
-        // Grouped methods in registry order
+        // Grouped methods in registry order (leaf + mounts)
         for group in &group_order {
             let mut entries = Vec::new();
-            for m in &partitioned.leaf {
+            for m in partitioned
+                .leaf
+                .iter()
+                .chain(partitioned.static_mounts.iter())
+                .chain(partitioned.slug_mounts.iter())
+            {
                 if has_cli_hidden(m) {
                     continue;
                 }
@@ -579,23 +591,25 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             text.push('\n');
         }
 
-        Some(quote! { .after_help(#text) })
+        Some(quote! { .after_help(#text).subcommand_value_name("COMMAND") })
     } else {
         None
     };
 
-    // Generate subcommands for static mounts
+    // Generate subcommands for static mounts.
+    // When groups are active, mounts are hidden from clap's Commands section but
+    // get an explicit bin_name to preserve parent name in usage lines.
     let static_mount_subcommands: Vec<_> = partitioned
         .static_mounts
         .iter()
-        .map(|m| generate_static_mount_subcommand(m, has_cli_hidden(m)))
+        .map(|m| generate_static_mount_subcommand(m, has_cli_hidden(m) || has_groups))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate subcommands for slug mounts
     let slug_mount_subcommands: Vec<_> = partitioned
         .slug_mounts
         .iter()
-        .map(|m| generate_slug_mount_subcommand(m, has_qualified, has_cli_hidden(m)))
+        .map(|m| generate_slug_mount_subcommand(m, has_qualified, has_cli_hidden(m) || has_groups))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Find the default action (if any) — the method marked #[cli(default)].
