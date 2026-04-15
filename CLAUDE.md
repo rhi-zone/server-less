@@ -283,19 +283,13 @@ Rules of thumb:
 
 ## Session Handoff
 
-Use plan mode as a handoff mechanism when:
-- A task is fully complete (committed, pushed, docs updated)
-- The session has drifted from its original purpose
-- Context has accumulated enough that a fresh start would help
+Use `/handoff` to end a session and leave context for the next one. It updates TODO.md with open threads — the next session reads TODO.md as advisory context, not instructions.
 
-**For handoffs:** enter plan mode, write a plan containing only: next tasks, blocked/pending items, and what was done this session (only if it directly affects what comes next). Nothing else — no commands, no build steps, no context summaries. Those belong in CLAUDE.md or TODO.md. The next session reads both fresh. **Do NOT investigate first** — the session is context-heavy and about to be discarded.
-
-**For mid-session planning** on a different topic: investigating inside plan mode is fine — context isn't being thrown away.
+If the next session needs a structured execution plan, use plan mode after reading TODO.md — that plan is built fresh from current state, not inherited from a previous session.
 
 **Initiate a handoff after a significant mid-session correction.** When a correction happens after substantial wrong-path work, the wrong reasoning is still in context and keeps pulling. Writing down the invariant and starting fresh beats continuing with poisoned context — the next session loads the invariant from turn 1 before any wrong reasoning exists.
 
-**TODO.md is the lossless record.** Flush any new items to TODO.md before the handoff. Anything worth preserving belongs in CLAUDE.md or TODO.md — not in memory files.
-
+**TODO.md is the lossless record.** Anything worth preserving belongs in CLAUDE.md or TODO.md — not in memory files.
 ## Commit Convention
 
 Use conventional commits: `type(scope): message`
