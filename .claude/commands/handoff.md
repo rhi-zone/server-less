@@ -1,5 +1,5 @@
 ---
-description: Session handoff — capture open threads in TODO.md for the next session
+description: Hand off to a fresh session when current topic is complete, drifts off-topic, context grows heavy, or after a major mid-session correction. One topic per session.
 allowed-tools: [Read, Glob, Grep, Bash, Edit, Write]
 ---
 
