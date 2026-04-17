@@ -44,6 +44,29 @@ This ensures the next session sees the trust boundary explicitly, even if it doe
    - Update existing items if context has changed
    - Keep items the session didn't touch
    - Ensure the trust-boundary line is present at the top of the open-threads section
-4. Show the user the final TODO.md content. Ask if anything should be adjusted before ending the session.
+4. Enter plan mode with a **short** plan that communicates direction. **Critical:** the plan must mark itself as pre-research — a starting hypothesis, NOT a verified directive. The next session hasn't done the investigation; the previous session's intent should inform, not command.
 
-Do not enter plan mode. Do not write a plan. The persistence mechanism is TODO.md, not a plan.
+   Use suggestive, deferential language:
+   - "suggests continuing with..." not "do..."
+   - "main open question was..." not "decide..."
+   - "was leaning toward A" not "use A"
+   - Include an explicit "verify current state before acting" or equivalent
+
+   Example:
+
+   > Starting context (unverified — verify before acting): previous session was designing the X module and leaning toward approach A. Main open question: whether A handles edge case Y. See TODO.md for open threads. Next session should check current state first.
+
+   Rules:
+   - Point at TODO.md, don't duplicate it
+   - Name the direction/focus, not specific tasks
+   - Do NOT narrate what was done (git has that)
+   - Do NOT include commands, build steps, or context summaries
+   - Frame everything as "what the previous session was thinking," not "what needs to be done"
+   - If you find yourself writing more than a few lines, you're leaking task content — move it to TODO.md instead
+
+5. ExitPlanMode lets the user approve, redirect, or start a fresh session.
+
+The division of labor:
+- **TODO.md** carries task content as advisory context (diffable, verifiable)
+- **The plan** carries direction/intent as an explicitly unverified starting hypothesis
+- Neither should duplicate the other, and neither should be trusted without verification
