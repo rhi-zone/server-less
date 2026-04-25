@@ -185,7 +185,7 @@
 //! ```no_run
 //! use server_less::prelude::*;
 //! # #[cfg(feature = "config")]
-//! use server_less::{Config as ConfigTrait, ConfigSource};
+//! use server_less::{ConfigLoad, ConfigSource};
 //!
 //! # #[cfg(feature = "config")]
 //! #[derive(server_less::Config)]
@@ -349,7 +349,7 @@ pub use server_less_macros::__app_meta;
 pub use server_less_macros::Config;
 #[cfg(feature = "config")]
 #[doc(hidden)]
-pub use server_less_core::config::{Config as ConfigTrait, ConfigError, ConfigFieldMeta, ConfigSource};
+pub use server_less_core::config::{ConfigLoad, ConfigError, ConfigFieldMeta, ConfigSource};
 
 // Re-export deps for generated code — users shouldn't need to add these directly
 #[cfg(feature = "cli")]

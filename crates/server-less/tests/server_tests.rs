@@ -183,7 +183,7 @@ fn test_server_config_custom_cmd_name() {
 
 #[test]
 fn test_server_config_load_defaults() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     let cfg = ServerConfig::load(&[ConfigSource::Defaults]).unwrap();
     assert_eq!(cfg.host, "0.0.0.0");
     assert_eq!(cfg.port, 3000);

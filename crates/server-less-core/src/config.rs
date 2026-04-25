@@ -1,14 +1,14 @@
 //! Config management types for `#[derive(Config)]`.
 //!
-//! Provides the [`Config`] trait, [`ConfigSource`] enum, [`ConfigError`], and
+//! Provides the [`ConfigLoad`] trait, [`ConfigSource`] enum, [`ConfigError`], and
 //! [`ConfigFieldMeta`] for runtime introspection.  The proc macro generates
-//! implementations of `Config` for user-defined structs; this module supplies
+//! implementations of `ConfigLoad` for user-defined structs; this module supplies
 //! the interface those implementations depend on.
 //!
 //! # Source precedence
 //!
 //! Sources are applied in the order they appear in the slice passed to
-//! [`Config::load`].  Later sources win over earlier ones.  The conventional
+//! [`ConfigLoad::load`].  Later sources win over earlier ones.  The conventional
 //! order is: defaults first, then file, then environment, then CLI overrides
 //! (highest priority).  `#[derive(Config)]` uses the same order when it
 //! calls `load` internally.
@@ -16,7 +16,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use server_less_core::config::{Config, ConfigSource};
+//! use server_less_core::config::{ConfigLoad, ConfigSource};
 //!
 //! #[derive(Config)]
 //! struct AppConfig {
@@ -103,7 +103,7 @@ pub enum ConfigSource {
     /// `prefix` is uppercased automatically; `None` means no prefix.
     Env { prefix: Option<String> },
 
-    /// An already-parsed TOML table passed to a nested `Config::load` call.
+    /// An already-parsed TOML table passed to a nested `ConfigLoad::load` call.
     ///
     /// This variant is for internal use by `#[derive(Config)]`-generated code
     /// when loading `#[param(nested)]` sub-structs.  It is **not** part of the
@@ -122,7 +122,7 @@ pub enum ConfigSource {
     MergeTomlTable(toml::Value),
 }
 
-/// Error returned by [`Config::load`].
+/// Error returned by [`ConfigLoad::load`].
 #[derive(Debug)]
 pub enum ConfigError {
     /// A required field has no value from any source.
@@ -179,9 +179,9 @@ impl From<std::io::Error> for ConfigError {
     }
 }
 
-/// Metadata about a single field in a [`Config`]-implementing struct.
+/// Metadata about a single field in a [`ConfigLoad`]-implementing struct.
 ///
-/// Returned by [`Config::field_meta`] for runtime introspection — e.g. to
+/// Returned by [`ConfigLoad::field_meta`] for runtime introspection — e.g. to
 /// generate a config file template or validate a user-supplied file.
 #[derive(Debug, Clone)]
 pub struct ConfigFieldMeta {
@@ -205,7 +205,7 @@ pub struct ConfigFieldMeta {
     pub required: bool,
     /// For `#[param(nested)]` fields: metadata of the child struct's fields.
     ///
-    /// `Some` when the field is a nested `Config` sub-struct; `None` for
+    /// `Some` when the field is a nested `ConfigLoad` sub-struct; `None` for
     /// leaf (scalar/`Option`) fields.
     pub nested: Option<&'static [ConfigFieldMeta]>,
     /// Env-var prefix override for nested fields (from `#[param(env_prefix = "SEARCH")]`).
@@ -220,7 +220,9 @@ pub struct ConfigFieldMeta {
 ///
 /// Provides config loading from multiple sources with a defined precedence order,
 /// and field introspection for tooling.
-pub trait Config: Sized {
+///
+/// Named `ConfigLoad` to avoid clashing with the `Config` derive macro name.
+pub trait ConfigLoad: Sized {
     /// Load this config by applying `sources` in order (later sources win).
     ///
     /// The conventional source slice is:

@@ -1,13 +1,13 @@
 //! Implementation of `#[derive(Config)]`.
 //!
-//! Generates a [`server_less_core::config::Config`] impl for a struct with named fields.
+//! Generates a [`server_less_core::config::ConfigLoad`] impl for a struct with named fields.
 
 use heck::ToShoutySnakeCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields};
 
-use server_less_parse::parse_param_attrs;
+use server_less_parse::{extract_option_type, is_option_type, parse_param_attrs};
 
 /// Metadata extracted from a single struct field.
 struct FieldMeta {
@@ -36,23 +36,6 @@ struct FieldMeta {
     nested_serde: bool,
     /// Env-var prefix override for a nested field (`#[param(env_prefix = "SEARCH")]`).
     env_prefix: Option<String>,
-}
-
-fn is_option_type(ty: &syn::Type) -> bool {
-    inner_option_type(ty).is_some()
-}
-
-/// Extract the `T` from `Option<T>`, or `None` if the type isn't `Option<T>`.
-fn inner_option_type(ty: &syn::Type) -> Option<&syn::Type> {
-    if let syn::Type::Path(tp) = ty
-        && let Some(seg) = tp.path.segments.last()
-        && seg.ident == "Option"
-        && let syn::PathArguments::AngleBracketed(args) = &seg.arguments
-        && let Some(syn::GenericArgument::Type(inner)) = args.args.first()
-    {
-        return Some(inner);
-    }
-    None
 }
 
 pub fn expand_config(input: DeriveInput) -> syn::Result<TokenStream2> {
@@ -113,7 +96,7 @@ pub fn expand_config(input: DeriveInput) -> syn::Result<TokenStream2> {
     let field_meta_impl = generate_field_meta(&field_metas, struct_name);
 
     Ok(quote! {
-        impl ::server_less::config::Config for #struct_name {
+        impl ::server_less::config::ConfigLoad for #struct_name {
             fn load(sources: &[::server_less::config::ConfigSource]) -> ::std::result::Result<Self, ::server_less::config::ConfigError> {
                 #load_impl
             }
@@ -321,7 +304,7 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                             }
                         }
                     }
-                    <#ty as ::server_less::config::Config>::load(&__nested_sources)
+                    <#ty as ::server_less::config::ConfigLoad>::load(&__nested_sources)
                         .map_err(|e| {
                             // Prefix the field name to the error for better diagnostics.
                             match e {
@@ -348,7 +331,7 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
             let ty = &f.ty;
             let name_str = name.to_string();
 
-            if let Some(inner_ty) = inner_option_type(ty) {
+            if let Some(inner_ty) = extract_option_type(ty) {
                 quote! {
                     #name: match #name {
                         ::std::option::Option::None => ::std::option::Option::None,
@@ -606,7 +589,7 @@ fn generate_field_meta(fields: &[FieldMeta], _struct_name: &syn::Ident) -> Token
             let type_name_str = quote!(#ty).to_string();
             let nested_meta = if f.nested && !f.nested_serde {
                 // Regular nested: expose child field_meta() for introspection.
-                quote! { ::std::option::Option::Some(<#ty as ::server_less::config::Config>::field_meta()) }
+                quote! { ::std::option::Option::Some(<#ty as ::server_less::config::ConfigLoad>::field_meta()) }
             } else {
                 // Leaf fields and serde-nested fields: opaque, no child introspection.
                 quote! { ::std::option::Option::None }

@@ -181,7 +181,7 @@ fn test_config_cmd_custom_name() {
 
 #[test]
 fn test_derive_config_load_defaults() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     let cfg = AppConfig::load(&[ConfigSource::Defaults]).unwrap();
     assert_eq!(cfg.host, "localhost");
     assert_eq!(cfg.port, 8080);
@@ -190,7 +190,7 @@ fn test_derive_config_load_defaults() {
 
 #[test]
 fn test_derive_config_field_meta() {
-    use server_less::ConfigTrait;
+    use server_less::ConfigLoad;
     let meta = AppConfig::field_meta();
     assert_eq!(meta.len(), 3);
 
@@ -237,7 +237,7 @@ struct FullNestedConfig {
 
 #[test]
 fn test_nested_config_load_defaults() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     let cfg = FullNestedConfig::load(&[ConfigSource::Defaults]).unwrap();
     assert_eq!(cfg.app_name, "myapp");
     assert!(cfg.daemon.enabled);
@@ -248,7 +248,7 @@ fn test_nested_config_load_defaults() {
 
 #[test]
 fn test_nested_config_from_toml_file() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     use std::io::Write;
 
     let mut f = tempfile::NamedTempFile::new().unwrap();
@@ -283,7 +283,7 @@ index_path = "/var/search"
 
 #[test]
 fn test_nested_config_env_prefix_inheritance() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
 
     // APP_DAEMON_ENABLED and APP_DAEMON_HEARTBEAT_SECS should be read
     // SAFETY: single-threaded test, no other threads reading these vars.
@@ -311,7 +311,7 @@ fn test_nested_config_env_prefix_inheritance() {
 
 #[test]
 fn test_nested_config_env_prefix_override() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
 
     #[derive(Config)]
     struct OverriddenPrefixConfig {
@@ -342,7 +342,7 @@ fn test_nested_config_env_prefix_override() {
 
 #[test]
 fn test_nested_config_field_meta_populated() {
-    use server_less::ConfigTrait;
+    use server_less::ConfigLoad;
     let meta = FullNestedConfig::field_meta();
 
     let app_name_meta = meta.iter().find(|f| f.name == "app_name").expect("app_name field");
@@ -363,7 +363,7 @@ fn test_nested_config_field_meta_populated() {
 
 #[test]
 fn test_nested_config_merge_file() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     use std::io::Write;
 
     // Global config: sets everything
@@ -459,7 +459,7 @@ struct SerdeNestedConfig {
 
 #[test]
 fn test_serde_nested_load_from_toml_file() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     use std::io::Write;
 
     let mut f = tempfile::NamedTempFile::new().unwrap();
@@ -498,7 +498,7 @@ notes = "hello"
 
 #[test]
 fn test_serde_nested_serde_defaults_via_serde_default() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     use std::io::Write;
 
     // Only provide the required sections (rules and aliases), no extras
@@ -530,7 +530,7 @@ max_rules = 10
 
 #[test]
 fn test_serde_nested_file_key_override() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     use std::io::Write;
 
     let mut f = tempfile::NamedTempFile::new().unwrap();
@@ -558,7 +558,7 @@ mykey = "myval"
 
 #[test]
 fn test_serde_nested_env_vars_ignored() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     use std::io::Write;
 
     // Set env vars that would normally be picked up for a Config-nested type.
@@ -602,7 +602,7 @@ max_rules = 5
 
 #[test]
 fn test_serde_nested_merge_file_semantics() {
-    use server_less::{ConfigSource, ConfigTrait};
+    use server_less::{ConfigSource, ConfigLoad};
     use std::io::Write;
 
     // Primary file: sets rules and aliases

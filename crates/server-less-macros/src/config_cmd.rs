@@ -155,7 +155,7 @@ fn generate_methods(
                 section: ::std::option::Option<&str>,
                 config_file: &::std::path::Path,
             ) -> ::std::result::Result<(), ::std::boxed::Box<dyn ::std::error::Error>> {
-                use ::server_less_core::config::{Config, ConfigSource};
+                use ::server_less_core::config::{ConfigLoad, ConfigSource};
 
                 // Best-effort load for "current value" display.
                 let sources = [
@@ -163,9 +163,9 @@ fn generate_methods(
                     ConfigSource::File(config_file.to_path_buf()),
                     ConfigSource::Env { prefix: ::std::option::Option::Some(#env_prefix.to_string()) },
                 ];
-                let _loaded = <#config_ty as Config>::load(&sources).ok();
+                let _loaded = <#config_ty as ConfigLoad>::load(&sources).ok();
 
-                let meta = <#config_ty as Config>::field_meta();
+                let meta = <#config_ty as ConfigLoad>::field_meta();
                 for field in meta {
                     let key = field.file_key.unwrap_or(field.name);
                     if let ::std::option::Option::Some(s) = section {
@@ -196,9 +196,9 @@ fn generate_methods(
             }
 
             fn _config_schema() -> ::std::result::Result<(), ::std::boxed::Box<dyn ::std::error::Error>> {
-                use ::server_less_core::config::Config;
+                use ::server_less_core::config::ConfigLoad;
 
-                let meta = <#config_ty as Config>::field_meta();
+                let meta = <#config_ty as ConfigLoad>::field_meta();
                 let mut properties = ::server_less::serde_json::Map::new();
                 let mut required_fields = ::std::vec::Vec::<::server_less::serde_json::Value>::new();
 
@@ -237,14 +237,14 @@ fn generate_methods(
             fn _config_validate(
                 config_file: &::std::path::Path,
             ) -> ::std::result::Result<(), ::std::boxed::Box<dyn ::std::error::Error>> {
-                use ::server_less_core::config::{Config, ConfigSource};
+                use ::server_less_core::config::{ConfigLoad, ConfigSource};
 
                 let sources = [
                     ConfigSource::Defaults,
                     ConfigSource::File(config_file.to_path_buf()),
                     ConfigSource::Env { prefix: ::std::option::Option::Some(#env_prefix.to_string()) },
                 ];
-                match <#config_ty as Config>::load(&sources) {
+                match <#config_ty as ConfigLoad>::load(&sources) {
                     ::std::result::Result::Ok(_) => {
                         println!("Config valid");
                         ::std::result::Result::Ok(())
