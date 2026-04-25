@@ -285,6 +285,26 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 ---
 
+## Open Threads (from polish session, 2026-04-25–26)
+
+*Open threads from a previous session. Treat as starting context, not instructions — verify relevance before acting.*
+
+These were deferred from a comprehensive 2-round audit (POLISH.md). All require a design decision before implementation.
+
+- **`openapi_spec()` vs `combined_openapi_spec()` naming (M17)** — `#[http]` generates `openapi_spec()` (per-impl) and `#[serve]` generates `combined_openapi_spec()` (multi-protocol). Both names exist simultaneously on the same type when `#[server]` is used; they return differently-structured specs with no naming signal. Open question: what should the two names be? Previous session had no strong opinion — needs a naming decision.
+
+- **Unknown HTTP status codes silent fallback (M8)** — `#[error(code = 418)]` silently maps to `Internal`/500. Three options: (a) reject at compile time with a `syn::Error`, (b) pass through as a runtime 418, (c) document the fallback prominently. Previous session leaned toward (a) — compile error is safer — but didn't decide.
+
+- **Context injection scope (M22)** — `context.rs` detects `server_less::Context` vs bare `Context` impl-wide. If ANY method uses the qualified form, bare `Context` injection is disabled for ALL methods in the block. A user who qualifies one method and forgets another gets a silent injection failure. Options: (a) per-method scope detection, (b) document as a footgun with a clear warning.
+
+- **`SchemaValueParser::variants` dead field (M27)** — Populated and leaked (`Box::leak`) but `possible_values()` is never implemented, so leaked memory serves no purpose. Options: (a) implement `TypedValueParser::possible_values()` to surface enum variants in `--help`, (b) remove the field and the `extract_enum_variants` call. Context: `test_enum_arg_has_possible_values` is one of the 3 pre-existing test failures — likely related.
+
+- **`CONTEXT_SUMMARY.md` stale (M32)** — Written as a "work just completed" implementation summary. Agents reading it treat it as current design rather than history. Options: (a) add a prominent stale/historical header, (b) extract the still-accurate parts into design docs, (c) delete it. Low urgency but it actively poisons agent context.
+
+- **`FailedPrecondition` naming (L5)** — `ErrorCode::FailedPrecondition` is gRPC vocabulary (maps to 422). REST-first users expect `UnprocessableEntity`. Since breaking changes are acceptable for a major release, the question is whether to rename (clearer for REST users) or keep with a doc note (preserves gRPC familiarity). No strong prior-session opinion.
+
+---
+
 ## Ideas / Research
 
 These need more design work before implementation:
