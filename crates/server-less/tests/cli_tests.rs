@@ -1815,13 +1815,19 @@ async fn test_async_output_schema_flag() {
 struct NamePrefixService;
 
 #[cli(name = "my-tool", description = "Does useful things")]
-impl NamePrefixService {}
+impl NamePrefixService {
+    /// A placeholder subcommand
+    fn run(&self) {}
+}
 
 #[derive(Clone)]
 struct NoPrefixService;
 
 #[cli(name = "my-tool", description = "Does useful things", name_prefix = false)]
-impl NoPrefixService {}
+impl NoPrefixService {
+    /// A placeholder subcommand
+    fn run(&self) {}
+}
 
 #[test]
 fn test_name_prefix_default() {

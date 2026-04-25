@@ -11,6 +11,30 @@ use syn::ItemEnum;
 use syn::ItemStruct;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
 
+/// Check that an impl block has at least one method, or emit a macro-specific error.
+///
+/// `macro_name` should be the attribute name as written by the user (e.g. `"http"`).
+macro_rules! check_not_empty_impl {
+    ($impl_block:expr, $macro_name:literal) => {{
+        let has_methods = $impl_block
+            .items
+            .iter()
+            .any(|item| matches!(item, syn::ImplItem::Fn(_)));
+        if !has_methods {
+            // TODO: downgrade to warning once proc_macro_warning stabilizes (https://github.com/rust-lang/rust/issues/54140)
+            return syn::Error::new(
+                $impl_block.brace_token.span.open(),
+                concat!(
+                    "#[", $macro_name, "] applied to an empty impl block — no routes will be generated.\n",
+                    "Add at least one method, or remove the attribute."
+                ),
+            )
+            .to_compile_error()
+            .into();
+        }
+    }};
+}
+
 /// Parse an impl block from the token stream, or emit a macro-specific error.
 ///
 /// `macro_name` should be the attribute name as written by the user (e.g. `"http"`).
@@ -416,6 +440,7 @@ mod tool;
 pub fn http(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as http::HttpArgs);
     let impl_block = parse_impl_block!(item, "http");
+    check_not_empty_impl!(impl_block, "http");
     let name = type_name(&impl_block.self_ty);
 
     match http::expand_http(args, impl_block) {
@@ -532,6 +557,7 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as cli::CliArgs);
     let impl_block = parse_impl_block!(item, "cli");
+    check_not_empty_impl!(impl_block, "cli");
     let name = type_name(&impl_block.self_ty);
 
     match cli::expand_cli(args, impl_block) {
@@ -597,6 +623,7 @@ pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as mcp::McpArgs);
     let impl_block = parse_impl_block!(item, "mcp");
+    check_not_empty_impl!(impl_block, "mcp");
     let name = type_name(&impl_block.self_ty);
 
     match mcp::expand_mcp(args, impl_block) {
@@ -688,6 +715,7 @@ pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as ws::WsArgs);
     let impl_block = parse_impl_block!(item, "ws");
+    check_not_empty_impl!(impl_block, "ws");
     let name = type_name(&impl_block.self_ty);
 
     match ws::expand_ws(args, impl_block) {
@@ -739,6 +767,7 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as jsonrpc::JsonRpcArgs);
     let impl_block = parse_impl_block!(item, "jsonrpc");
+    check_not_empty_impl!(impl_block, "jsonrpc");
     let name = type_name(&impl_block.self_ty);
 
     match jsonrpc::expand_jsonrpc(args, impl_block) {
@@ -779,6 +808,7 @@ pub fn jsonrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as openrpc::OpenRpcArgs);
     let impl_block = parse_impl_block!(item, "openrpc");
+    check_not_empty_impl!(impl_block, "openrpc");
     let name = type_name(&impl_block.self_ty);
 
     match openrpc::expand_openrpc(args, impl_block) {
@@ -822,6 +852,7 @@ pub fn openrpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as markdown::MarkdownArgs);
     let impl_block = parse_impl_block!(item, "markdown");
+    check_not_empty_impl!(impl_block, "markdown");
     let name = type_name(&impl_block.self_ty);
 
     match markdown::expand_markdown(args, impl_block) {
@@ -865,6 +896,7 @@ pub fn markdown(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as asyncapi::AsyncApiArgs);
     let impl_block = parse_impl_block!(item, "asyncapi");
+    check_not_empty_impl!(impl_block, "asyncapi");
     let name = type_name(&impl_block.self_ty);
 
     match asyncapi::expand_asyncapi(args, impl_block) {
@@ -902,6 +934,7 @@ pub fn asyncapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn connect(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as connect::ConnectArgs);
     let impl_block = parse_impl_block!(item, "connect");
+    check_not_empty_impl!(impl_block, "connect");
     let name = type_name(&impl_block.self_ty);
 
     match connect::expand_connect(args, impl_block) {
@@ -945,6 +978,7 @@ pub fn connect(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as grpc::GrpcArgs);
     let impl_block = parse_impl_block!(item, "grpc");
+    check_not_empty_impl!(impl_block, "grpc");
     let name = type_name(&impl_block.self_ty);
 
     match grpc::expand_grpc(args, impl_block) {
@@ -988,6 +1022,7 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as capnp::CapnpArgs);
     let impl_block = parse_impl_block!(item, "capnp");
+    check_not_empty_impl!(impl_block, "capnp");
     let name = type_name(&impl_block.self_ty);
 
     match capnp::expand_capnp(args, impl_block) {
@@ -1031,6 +1066,7 @@ pub fn capnp(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as thrift::ThriftArgs);
     let impl_block = parse_impl_block!(item, "thrift");
+    check_not_empty_impl!(impl_block, "thrift");
     let name = type_name(&impl_block.self_ty);
 
     match thrift::expand_thrift(args, impl_block) {
@@ -1075,6 +1111,7 @@ pub fn thrift(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn smithy(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as smithy::SmithyArgs);
     let impl_block = parse_impl_block!(item, "smithy");
+    check_not_empty_impl!(impl_block, "smithy");
     let name = type_name(&impl_block.self_ty);
 
     match smithy::expand_smithy(args, impl_block) {
@@ -1117,6 +1154,7 @@ pub fn smithy(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as jsonschema::JsonSchemaArgs);
     let impl_block = parse_impl_block!(item, "jsonschema");
+    check_not_empty_impl!(impl_block, "jsonschema");
     let name = type_name(&impl_block.self_ty);
 
     match jsonschema::expand_jsonschema(args, impl_block) {
@@ -1252,6 +1290,7 @@ pub fn jsonschema(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn graphql(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as graphql::GraphqlArgs);
     let impl_block = parse_impl_block!(item, "graphql");
+    check_not_empty_impl!(impl_block, "graphql");
     let name = type_name(&impl_block.self_ty);
 
     match graphql::expand_graphql(args, impl_block) {
@@ -1404,6 +1443,7 @@ pub fn graphql_input(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn serve(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as http::ServeArgs);
     let impl_block = parse_impl_block!(item, "serve");
+    check_not_empty_impl!(impl_block, "serve");
     let name = type_name(&impl_block.self_ty);
 
     match http::expand_serve(args, impl_block) {
@@ -1669,6 +1709,7 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as rpc_preset::RpcArgs);
     let impl_block = parse_impl_block!(item, "rpc");
+    check_not_empty_impl!(impl_block, "rpc");
     let name = type_name(&impl_block.self_ty);
 
     match rpc_preset::expand_rpc(args, impl_block) {
@@ -1709,6 +1750,7 @@ pub fn rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as tool::ToolArgs);
     let impl_block = parse_impl_block!(item, "tool");
+    check_not_empty_impl!(impl_block, "tool");
     let name = type_name(&impl_block.self_ty);
 
     match tool::expand_tool(args, impl_block) {
@@ -1754,6 +1796,7 @@ pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn program(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as program::ProgramArgs);
     let impl_block = parse_impl_block!(item, "program");
+    check_not_empty_impl!(impl_block, "program");
     let name = type_name(&impl_block.self_ty);
 
     match program::expand_program(args, impl_block) {

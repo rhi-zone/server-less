@@ -1,0 +1,6 @@
+error: #[cli] applied to an empty impl block — no routes will be generated.
+       Add at least one method, or remove the attribute.
+ --> tests/fixtures/cli_empty_impl.rs:5:12
+  |
+5 | impl MyApp {}
+  |            ^
