@@ -1,0 +1,5 @@
+error: expected string literal
+ --> tests/fixtures/cli_wrong_type_str_arg.rs:6:14
+  |
+6 | #[cli(name = 42)]
+  |              ^^

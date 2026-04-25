@@ -1,0 +1,5 @@
+error: expected `impl`
+ --> tests/fixtures/http_on_struct.rs:5:1
+  |
+5 | struct MyService {
+  | ^^^^^^

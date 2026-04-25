@@ -1,0 +1,5 @@
+error: expected boolean literal
+ --> tests/fixtures/http_wrong_type_bool_arg.rs:6:18
+  |
+6 | #[http(openapi = "yes")]
+  |                  ^^^^^

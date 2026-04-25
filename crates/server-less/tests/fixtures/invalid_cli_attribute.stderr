@@ -1,6 +1,6 @@
 error: unknown argument `nonexistent_attr`
 
-       Valid arguments: name, version, description, homepage, global, defaults, no_sync, no_async
+       Valid arguments: name, version, description, homepage, global, defaults, no_sync, no_async, name_prefix
 
        Example: #[cli(name = "my-app", description = "My CLI tool")]
        Bare flags: #[cli(no_sync)] or #[cli(no_async)]

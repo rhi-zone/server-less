@@ -1,0 +1,5 @@
+error: expected string literal
+ --> tests/fixtures/http_wrong_type_str_arg.rs:6:17
+  |
+6 | #[http(prefix = false)]
+  |                 ^^^^^
