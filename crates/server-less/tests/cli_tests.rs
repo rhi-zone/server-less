@@ -917,6 +917,33 @@ fn test_params_json_bool_field() {
     assert!(result.is_ok());
 }
 
+// ── Type-mismatch parameter handling ─────────────────────────────────
+//
+// When `"abc"` is passed for a `u32` parameter, clap's value_parser rejects it
+// before dispatch — `try_get_matches_from` returns `Err` rather than silently
+// defaulting to 0. We verify via the clap Command directly so that the process
+// is not terminated by clap's error-and-exit path.
+
+#[test]
+fn test_type_mismatch_u32_param_returns_err() {
+    // try_get_matches_from returns Err instead of calling process::exit
+    let result = ParamsJsonService::cli_command()
+        .try_get_matches_from(["pj-app", "create", "--name", "test", "--count", "abc"]);
+    assert!(result.is_err(), "expected Err for unparseable u32, got Ok");
+}
+
+#[test]
+fn test_type_mismatch_error_message_mentions_param() {
+    let result = ParamsJsonService::cli_command()
+        .try_get_matches_from(["pj-app", "create", "--name", "test", "--count", "abc"]);
+    let err = result.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("count") || msg.contains("invalid digit") || msg.contains("parse"),
+        "error message should mention the argument or parse failure, got: {msg}"
+    );
+}
+
 // ── Short flag and help text tests ────────────────────────────────────
 
 #[derive(Clone)]
