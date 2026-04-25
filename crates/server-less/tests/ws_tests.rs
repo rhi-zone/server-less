@@ -210,30 +210,28 @@ fn test_ws_handle_wrong_type_required_param() {
 }
 
 #[test]
-fn test_ws_handle_wrong_type_optional_param_is_none() {
+fn test_ws_handle_wrong_type_optional_param_returns_error() {
     let service = TestService::new();
     // "limit" is Option<u32> but we send a non-numeric string.
-    // Present-but-invalid optional params silently become None (via `.ok()`);
-    // the method then uses its `unwrap_or(10)` default and succeeds.
-    // See TODO.md — this is a known behavior, not a bug being ignored.
+    // Present-but-invalid optional params return an error — the value was sent, so
+    // silently dropping it would hide caller bugs.
     let response = service.ws_handle_message(
         r#"{"method": "search", "params": {"query": "test", "limit": "abc"}}"#,
     );
     assert!(response.is_ok());
 
     let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
-    // No error key — the call succeeded with limit treated as None
+    // An error must be returned — the caller sent a value that couldn't be deserialized
     assert!(
-        json.get("error").is_none(),
-        "expected no error for invalid optional param, got: {:?}",
+        json.get("error").is_some(),
+        "expected an error for invalid optional param type, got: {:?}",
         json
     );
-    // limit fell back to None → unwrap_or(10) → 10 results
-    assert_eq!(
-        json["result"].as_array().map(|a| a.len()),
-        Some(10),
-        "expected 10 results (None default), got: {:?}",
-        json
+    let msg = json["error"]["message"].as_str().unwrap_or("");
+    assert!(
+        msg.contains("limit") || msg.contains("invalid") || msg.contains("Invalid"),
+        "error message should mention 'limit' or 'invalid type', got: {}",
+        msg
     );
 }
 

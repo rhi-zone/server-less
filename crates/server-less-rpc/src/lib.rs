@@ -17,12 +17,20 @@ pub fn generate_param_extraction(param: &ParamInfo) -> TokenStream {
     let ty = &param.ty;
 
     if param.is_optional {
-        // For Option<T>, extract inner value, return None if missing/null
+        // For Option<T>:
+        //   - absent or null → None (correct)
+        //   - present but wrong type → error (value was sent but dropped silently before)
         quote! {
-            let #name: #ty = args.get(#name_str)
-                .and_then(|v| if v.is_null() { None } else {
-                    ::server_less::serde_json::from_value(v.clone()).ok()
-                });
+            let #name: #ty = match args.get(#name_str) {
+                None => None,
+                Some(__v) if __v.is_null() => None,
+                Some(__v) => match ::server_less::serde_json::from_value(__v.clone()) {
+                    Ok(__val) => Some(__val),
+                    Err(__e) => return Err(format!(
+                        "Optional parameter '{}' has invalid type: {}", #name_str, __e
+                    )),
+                },
+            };
         }
     } else {
         // Required parameter - error if missing
@@ -54,6 +62,49 @@ pub fn generate_param_extractions_for(params: &[&ParamInfo]) -> Vec<TokenStream>
         .iter()
         .map(|p| generate_param_extraction(p))
         .collect()
+}
+
+/// Generate code that warns (via `eprintln!`) for any key in the params object
+/// that is not in the compile-time-known set of parameter names.
+///
+/// The generated code is inserted at the top of a dispatch arm, before param extraction.
+/// It only runs when `args` is a JSON object (positional arrays are silently skipped
+/// because key-based unknown detection is not meaningful there).
+pub fn generate_unknown_param_warning(
+    method_name_str: &str,
+    params: &[&ParamInfo],
+) -> TokenStream {
+    let known: Vec<String> = params.iter().map(|p| p.name_str()).collect();
+    let expected_display = known.join(", ");
+    if known.is_empty() {
+        // No known params — any key is unknown
+        quote! {
+            if let Some(__obj) = args.as_object() {
+                for __key in __obj.keys() {
+                    eprintln!(
+                        "[server-less] warning: unknown parameter `{}` in call to `{}` (expected: {})",
+                        __key, #method_name_str, #expected_display,
+                    );
+                }
+            }
+        }
+    } else {
+        quote! {
+            if let Some(__obj) = args.as_object() {
+                for __key in __obj.keys() {
+                    match __key.as_str() {
+                        #(#known)|* => {}
+                        __unknown => {
+                            eprintln!(
+                                "[server-less] warning: unknown parameter `{}` in call to `{}` (expected: {})",
+                                __unknown, #method_name_str, #expected_display,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Generate the method call expression.
@@ -220,12 +271,15 @@ pub fn generate_dispatch_arm(
         };
     }
 
+    let all_param_refs: Vec<&ParamInfo> = method.params.iter().collect();
+    let unknown_warn = generate_unknown_param_warning(&method_name_str, &all_param_refs);
     let param_extractions = generate_all_param_extractions(method);
     let call = generate_method_call(method, async_handling);
     let response = generate_json_response(method);
 
     quote! {
         #method_name_str => {
+            #unknown_warn
             #(#param_extractions)*
             #call
             #response
@@ -275,11 +329,29 @@ pub fn generate_dispatch_arm_with_injections(
         })
         .collect();
 
+    // Only non-injected params are expected in the JSON object
+    let injected_indices: std::collections::HashSet<usize> =
+        injected_params.iter().map(|(i, _)| *i).collect();
+    let json_param_refs: Vec<&ParamInfo> = method
+        .params
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| {
+            if injected_indices.contains(&i) {
+                None
+            } else {
+                Some(p)
+            }
+        })
+        .collect();
+    let unknown_warn = generate_unknown_param_warning(&method_name_str, &json_param_refs);
+
     let call = generate_method_call(method, async_handling);
     let response = generate_json_response(method);
 
     quote! {
         #method_name_str => {
+            #unknown_warn
             #(#param_extractions)*
             #call
             #response
@@ -525,7 +597,7 @@ mod tests {
     // ---------------------------------------------------------------
 
     #[test]
-    fn param_extraction_optional_uses_and_then() {
+    fn param_extraction_optional_uses_match() {
         let method = parse_method(quote! {
             fn search(&self, limit: Option<u32>) {}
         });
@@ -533,9 +605,15 @@ mod tests {
         let tokens = generate_param_extraction(&method.params[0]);
         let code = tokens.to_string();
 
+        // New pattern: absent/null → None, present-wrong-type → Err
         assert!(
-            code.contains("and_then"),
-            "optional param should use and_then pattern, got: {}",
+            code.contains("is_null"),
+            "optional param should handle null, got: {}",
+            code
+        );
+        assert!(
+            code.contains("Optional parameter"),
+            "optional param should return an error for wrong type, got: {}",
             code
         );
         assert!(

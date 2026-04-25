@@ -675,6 +675,125 @@ async fn test_jsonrpc_wrong_type_param_returns_32602() {
 }
 
 // ============================================================================
+// Optional Wrong-Type and Unknown Param Tests
+// ============================================================================
+
+/// Service with optional parameters for type-mismatch testing.
+#[derive(Clone)]
+struct OptionalParamService;
+
+#[jsonrpc]
+impl OptionalParamService {
+    /// Search with required query and optional limit
+    pub fn search(&self, query: String, limit: Option<u32>) -> String {
+        format!("query={} limit={:?}", query, limit)
+    }
+
+    /// Method with no parameters (for unknown-param warning test)
+    pub fn ping(&self) -> String {
+        "pong".to_string()
+    }
+}
+
+/// Optional parameter present with wrong type → -32602 (not silent None).
+#[tokio::test]
+async fn test_jsonrpc_optional_wrong_type_returns_32602() {
+    let svc = OptionalParamService;
+    // `limit` is Option<u32>; passing a string should produce -32602
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "search",
+        "params": {"query": "hello", "limit": "not-a-number"},
+        "id": 20
+    });
+
+    let response = svc.jsonrpc_handle(request).await;
+
+    assert!(
+        response["error"].is_object(),
+        "optional param with wrong type must return an error, got: {}",
+        response
+    );
+    assert_eq!(
+        response["error"]["code"],
+        -32602,
+        "optional wrong-type must produce -32602, got: {}",
+        response["error"]["code"]
+    );
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("limit"),
+        "error message should mention 'limit', got: {}",
+        response["error"]["message"]
+    );
+}
+
+/// Optional parameter absent → success (None), not an error.
+#[tokio::test]
+async fn test_jsonrpc_optional_absent_is_ok() {
+    let svc = OptionalParamService;
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "search",
+        "params": {"query": "hello"},
+        "id": 21
+    });
+
+    let response = svc.jsonrpc_handle(request).await;
+    assert!(response["error"].is_null(), "absent optional should succeed, got: {}", response);
+    assert!(response["result"].is_string(), "should return a string result, got: {}", response);
+}
+
+/// Unknown parameter sent → call still succeeds (warning goes to stderr).
+///
+/// This test verifies the happy-path: unknown params don't break dispatch.
+/// To observe the warning message run the tests with `-- --nocapture`.
+#[tokio::test]
+async fn test_jsonrpc_unknown_param_does_not_break_dispatch() {
+    let svc = OptionalParamService;
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "ping",
+        "params": {"unexpected_key": "value"},
+        "id": 22
+    });
+
+    let response = svc.jsonrpc_handle(request).await;
+    assert!(
+        response["error"].is_null(),
+        "unknown param should not cause an error, got: {}",
+        response
+    );
+    assert_eq!(
+        response["result"], "pong",
+        "should still return the correct result"
+    );
+}
+
+/// Unknown parameter with known params → call still succeeds.
+#[tokio::test]
+async fn test_jsonrpc_unknown_extra_param_does_not_break_dispatch() {
+    let svc = OptionalParamService;
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "search",
+        "params": {"query": "hello", "limit": 5, "typo_param": "oops"},
+        "id": 23
+    });
+
+    let response = svc.jsonrpc_handle(request).await;
+    assert!(
+        response["error"].is_null(),
+        "unknown extra param should not cause an error, got: {}",
+        response
+    );
+    assert!(response["result"].is_string(), "should still return a result");
+}
+
+// ============================================================================
 // Hidden Method Tests
 // ============================================================================
 

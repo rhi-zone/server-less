@@ -855,3 +855,108 @@ async fn test_mcp_wrong_type_param_async_returns_error() {
         err
     );
 }
+
+/// Optional parameter present with wrong type → Err (not silent None).
+#[test]
+fn test_mcp_optional_wrong_type_returns_error() {
+    let svc = BadParamService;
+
+    // `limit` is Option<u32>; passing a string should fail, not silently become None
+    let result = svc.mcp_call(
+        "bp_search",
+        serde_json::json!({"query": "hello", "limit": "not-a-number"}),
+    );
+    assert!(
+        result.is_err(),
+        "optional param with wrong type should return Err, got: {:?}",
+        result
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("limit") || err.contains("invalid") || err.contains("Invalid"),
+        "error should mention 'limit' or 'invalid type', got: {}",
+        err
+    );
+}
+
+/// Optional parameter absent → success (None), not an error.
+#[test]
+fn test_mcp_optional_absent_is_ok() {
+    let svc = BadParamService;
+
+    // `limit` is optional; omitting it should succeed with None
+    let result = svc.mcp_call("bp_search", serde_json::json!({"query": "hello"}));
+    assert!(
+        result.is_ok(),
+        "absent optional param should succeed, got: {:?}",
+        result
+    );
+}
+
+/// Async path: optional wrong type → Err.
+#[tokio::test]
+async fn test_mcp_optional_wrong_type_async_returns_error() {
+    let svc = BadParamService;
+
+    let result = svc
+        .mcp_call_async(
+            "bp_search",
+            serde_json::json!({"query": "hello", "limit": "bad"}),
+        )
+        .await;
+    assert!(
+        result.is_err(),
+        "async optional param with wrong type should return Err, got: {:?}",
+        result
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("limit") || err.contains("invalid") || err.contains("Invalid"),
+        "error should mention 'limit' or 'invalid type', got: {}",
+        err
+    );
+}
+
+/// Unknown parameter sent → call still succeeds (warning goes to stderr).
+///
+/// This test verifies the happy-path: unknown params don't break dispatch.
+/// To observe the warning message run the tests with `-- --nocapture`.
+#[test]
+fn test_mcp_unknown_param_does_not_break_dispatch() {
+    let svc = BadParamService;
+
+    // `bp_greet` only takes `name`; `unexpected_key` is unknown
+    let result = svc.mcp_call(
+        "bp_greet",
+        serde_json::json!({"name": "Alice", "unexpected_key": "oops"}),
+    );
+    assert!(
+        result.is_ok(),
+        "unknown param should not cause an error, got: {:?}",
+        result
+    );
+    assert_eq!(
+        result.unwrap(),
+        serde_json::json!("Hello, Alice!"),
+        "should still return the correct result"
+    );
+}
+
+/// Unknown parameter alongside correct ones → call succeeds.
+#[tokio::test]
+async fn test_mcp_unknown_param_async_does_not_break_dispatch() {
+    let svc = BadParamService;
+
+    let result = svc
+        .mcp_call_async(
+            "bp_greet",
+            serde_json::json!({"name": "Bob", "typo_param": "ignored"}),
+        )
+        .await;
+    assert!(
+        result.is_ok(),
+        "unknown param in async call should not cause an error, got: {:?}",
+        result
+    );
+    assert_eq!(result.unwrap(), serde_json::json!("Hello, Bob!"));
+}

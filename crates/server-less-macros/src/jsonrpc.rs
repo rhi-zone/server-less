@@ -672,10 +672,16 @@ fn generate_jsonrpc_param_extraction(param: &server_less_parse::ParamInfo) -> To
 
     if param.is_optional {
         quote! {
-            let #name: #ty = args.get(#name_str)
-                .and_then(|v| if v.is_null() { None } else {
-                    ::server_less::serde_json::from_value(v.clone()).ok()
-                });
+            let #name: #ty = match args.get(#name_str) {
+                None => None,
+                Some(__v) if __v.is_null() => None,
+                Some(__v) => match ::server_less::serde_json::from_value(__v.clone()) {
+                    Ok(__val) => Some(__val),
+                    Err(__e) => return Err((-32602i32, format!(
+                        "Optional parameter '{}' has invalid type: {}", #name_str, __e
+                    ))),
+                },
+            };
         }
     } else {
         quote! {
@@ -711,6 +717,8 @@ fn generate_sync_dispatch_arm(
 
     // For Context methods: extract regular params but inject a fresh Context
     let param_extractions = server_less_rpc::generate_param_extractions_for(&regular_params);
+    let unknown_warn =
+        server_less_rpc::generate_unknown_param_warning(&method_name_str, &regular_params);
 
     let mut arg_exprs = Vec::new();
     for param in &method.params {
@@ -728,6 +736,7 @@ fn generate_sync_dispatch_arm(
 
     Ok(quote! {
         #method_name_str => {
+            #unknown_warn
             #(#param_extractions)*
             #call
             #response
@@ -754,9 +763,13 @@ fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Resul
             .iter()
             .map(generate_jsonrpc_param_extraction)
             .collect();
+        let all_param_refs: Vec<&server_less_parse::ParamInfo> = method.params.iter().collect();
+        let unknown_warn =
+            server_less_rpc::generate_unknown_param_warning(&method_name_str, &all_param_refs);
         let call = server_less_rpc::generate_method_call(method, AsyncHandling::Await);
         return Ok(quote! {
             #method_name_str => {
+                #unknown_warn
                 #(#param_extractions)*
                 #call
                 #response
@@ -769,6 +782,8 @@ fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Resul
         .iter()
         .map(|p| generate_jsonrpc_param_extraction(p))
         .collect();
+    let unknown_warn =
+        server_less_rpc::generate_unknown_param_warning(&method_name_str, &regular_params);
 
     // Build argument list: Context first (if present), then regular params in order
     let mut arg_exprs = Vec::new();
@@ -786,6 +801,7 @@ fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Resul
 
     Ok(quote! {
         #method_name_str => {
+            #unknown_warn
             #(#param_extractions)*
             #call
             #response
