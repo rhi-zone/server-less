@@ -1,0 +1,5 @@
+error: server-less macros do not yet support generic impl blocks — remove the type parameters or implement the trait manually
+ --> tests/fixtures/http_generic_impl.rs:5:6
+  |
+5 | impl<T> Foo<T> {
+  |      ^
