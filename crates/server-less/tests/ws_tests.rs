@@ -187,6 +187,57 @@ fn test_ws_invalid_json() {
 }
 
 // ============================================================================
+// Bad-parameter Tests
+// ============================================================================
+
+#[test]
+fn test_ws_handle_wrong_type_required_param() {
+    let service = TestService::new();
+    // "a" is i32 but we send a string — should return an error, not succeed with a default
+    let response =
+        service.ws_handle_message(r#"{"method": "add", "params": {"a": "not-a-number", "b": 1}}"#);
+    assert!(response.is_ok()); // envelope is valid JSON-RPC
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Invalid parameter"),
+        "expected 'Invalid parameter' in error, got: {:?}",
+        json
+    );
+}
+
+#[test]
+fn test_ws_handle_wrong_type_optional_param_is_none() {
+    let service = TestService::new();
+    // "limit" is Option<u32> but we send a non-numeric string.
+    // Present-but-invalid optional params silently become None (via `.ok()`);
+    // the method then uses its `unwrap_or(10)` default and succeeds.
+    // See TODO.md — this is a known behavior, not a bug being ignored.
+    let response = service.ws_handle_message(
+        r#"{"method": "search", "params": {"query": "test", "limit": "abc"}}"#,
+    );
+    assert!(response.is_ok());
+
+    let json: serde_json::Value = serde_json::from_str(&response.unwrap()).unwrap();
+    // No error key — the call succeeded with limit treated as None
+    assert!(
+        json.get("error").is_none(),
+        "expected no error for invalid optional param, got: {:?}",
+        json
+    );
+    // limit fell back to None → unwrap_or(10) → 10 results
+    assert_eq!(
+        json["result"].as_array().map(|a| a.len()),
+        Some(10),
+        "expected 10 results (None default), got: {:?}",
+        json
+    );
+}
+
+// ============================================================================
 // Async Method Tests
 // ============================================================================
 
