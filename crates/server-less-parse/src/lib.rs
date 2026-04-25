@@ -436,7 +436,7 @@ pub struct ParsedParamAttrs {
 
 /// Compute Levenshtein edit distance between two strings.
 #[allow(clippy::needless_range_loop)]
-fn levenshtein(a: &str, b: &str) -> usize {
+pub fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let m = a.len();
@@ -461,7 +461,7 @@ fn levenshtein(a: &str, b: &str) -> usize {
 }
 
 /// Return the closest candidate to `input` within edit distance ≤ 2, or `None`.
-fn did_you_mean<'a>(input: &str, candidates: &[&'a str]) -> Option<&'a str> {
+pub fn did_you_mean<'a>(input: &str, candidates: &[&'a str]) -> Option<&'a str> {
     candidates
         .iter()
         .filter_map(|&c| {
@@ -609,6 +609,12 @@ pub fn parse_param_attrs(attrs: &[syn::Attribute]) -> syn::Result<ParsedParamAtt
                 )))
             }
         })?;
+    }
+
+    // `#[param(serde)]` implies `nested = true` — serde-deserialization only
+    // applies to nested sub-structs, so treat `serde` alone as `nested, serde`.
+    if nested_serde {
+        nested = true;
     }
 
     Ok(ParsedParamAttrs {

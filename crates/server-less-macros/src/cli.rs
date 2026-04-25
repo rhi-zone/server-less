@@ -438,11 +438,12 @@ fn strip_cli_attrs(impl_block: &ItemImpl) -> ItemImpl {
 // partition_methods is now shared from server_less_parse
 
 pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let args = CliArgs {
         name: args.name.or(app_meta.name),
         description: args.description.or(app_meta.description),
-        version: args.version.or_else(|| app_meta.version.and_then(|v| v)),
+        version: args.version.or_else(|| app_meta.version.into_explicit()),
         homepage: args.homepage.or(app_meta.homepage),
         ..args
     };

@@ -10,6 +10,7 @@ use syn::ItemEnum;
 #[cfg(feature = "graphql")]
 use syn::ItemStruct;
 use syn::{DeriveInput, ItemImpl, parse_macro_input};
+use syn::spanned::Spanned;
 
 /// Check that an impl block has at least one method, or emit a macro-specific error.
 ///
@@ -58,43 +59,7 @@ macro_rules! parse_impl_block {
     }};
 }
 
-/// Compute the Levenshtein edit distance between two strings.
-#[allow(clippy::needless_range_loop)]
-fn levenshtein(a: &str, b: &str) -> usize {
-    let a: Vec<char> = a.chars().collect();
-    let b: Vec<char> = b.chars().collect();
-    let m = a.len();
-    let n = b.len();
-    let mut dp = vec![vec![0usize; n + 1]; m + 1];
-    for i in 0..=m {
-        dp[i][0] = i;
-    }
-    for j in 0..=n {
-        dp[0][j] = j;
-    }
-    for i in 1..=m {
-        for j in 1..=n {
-            dp[i][j] = if a[i - 1] == b[j - 1] {
-                dp[i - 1][j - 1]
-            } else {
-                1 + dp[i - 1][j - 1].min(dp[i - 1][j]).min(dp[i][j - 1])
-            };
-        }
-    }
-    dp[m][n]
-}
-
-/// Return the closest candidate to `input` within edit distance ≤ 2, or `None`.
-pub(crate) fn did_you_mean<'a>(input: &str, candidates: &[&'a str]) -> Option<&'a str> {
-    candidates
-        .iter()
-        .filter_map(|&c| {
-            let d = levenshtein(input, c);
-            if d <= 2 { Some((d, c)) } else { None }
-        })
-        .min_by_key(|&(d, _)| d)
-        .map(|(_, c)| c)
-}
+pub(crate) use server_less_parse::did_you_mean;
 
 /// When `SERVER_LESS_DEBUG=1` is set at build time, print the generated token
 /// stream to stderr so implementors can inspect macro output without `cargo expand`.
@@ -178,6 +143,22 @@ pub(crate) fn is_protocol_impl_emitter(impl_block: &ItemImpl, current: &str) -> 
             .iter()
             .any(|name| attr.path().is_ident(name))
     })
+}
+
+/// Returns an error if the impl block has generic type parameters.
+/// Protocol macros do not yet support generic impl blocks.
+pub(crate) fn reject_generic_impl(impl_block: &syn::ItemImpl) -> syn::Result<()> {
+    if !impl_block.generics.params.is_empty() {
+        let span = impl_block.generics.params.first()
+            .map(|p| p.span())
+            .unwrap_or_else(|| impl_block.generics.span());
+        return Err(syn::Error::new(
+            span,
+            "server-less macros do not yet support generic impl blocks — \
+             remove the type parameters or implement the trait manually",
+        ));
+    }
+    Ok(())
 }
 
 
@@ -1926,7 +1907,7 @@ pub fn __app_meta(args: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Derive config loading from multiple sources for a struct.
 ///
-/// `#[derive(Config)]` generates a [`server_less_core::config::Config`]
+/// `#[derive(Config)]` generates a [`server_less_core::config::ConfigLoad`]
 /// implementation that loads values from defaults, TOML files, and environment
 /// variables, with a configurable precedence order.
 ///

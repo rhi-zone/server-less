@@ -19,13 +19,45 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{ItemImpl, parse::Parser, punctuated::Punctuated};
 
+/// Version specification for `#[app(version = ...)]`.
+///
+/// Three states:
+/// - `Auto` — use `env!("CARGO_PKG_VERSION")` (the default when `version` is absent)
+/// - `Disabled` — `version = false`; suppress `--version` entirely
+/// - `Explicit(v)` — `version = "1.0.0"`; hard-code the given string
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum VersionSpec {
+    /// Use `env!("CARGO_PKG_VERSION")` (default).
+    #[default]
+    Auto,
+    /// Suppress version output (`version = false`).
+    Disabled,
+    /// Hard-coded version string (`version = "1.0.0"`).
+    Explicit(String),
+}
+
+impl VersionSpec {
+    /// Return the explicit version string, or `None` for `Auto`/`Disabled`.
+    ///
+    /// Use this when a downstream field accepts `Option<String>` and falls back
+    /// to `env!("CARGO_PKG_VERSION")` on its own.  `Disabled` is intentionally
+    /// treated as absent here — the disable semantics only matter when the
+    /// downstream macro reads `version` directly from its own args.
+    pub fn into_explicit(self) -> Option<String> {
+        match self {
+            VersionSpec::Explicit(v) => Some(v),
+            VersionSpec::Auto | VersionSpec::Disabled => None,
+        }
+    }
+}
+
 /// Parsed contents of `#[app(...)]` or `#[__app_meta(...)]`.
 #[derive(Debug, Clone, Default)]
 pub struct AppMeta {
     pub name: Option<String>,
     pub description: Option<String>,
-    /// `None` = use CARGO_PKG_VERSION, `Some(None)` = disabled, `Some(Some(v))` = explicit
-    pub version: Option<Option<String>>,
+    /// How to resolve the version: auto (CARGO_PKG_VERSION), disabled, or explicit.
+    pub version: VersionSpec,
     pub homepage: Option<String>,
 }
 
@@ -72,14 +104,14 @@ fn parse_app_args(args: proc_macro2::TokenStream) -> syn::Result<AppMeta> {
                         lit: syn::Lit::Str(s),
                         ..
                     }) => {
-                        meta.version = Some(Some(s.value()));
+                        meta.version = VersionSpec::Explicit(s.value());
                     }
                     syn::Expr::Lit(syn::ExprLit {
                         lit: syn::Lit::Bool(b),
                         ..
                     }) if !b.value => {
                         // version = false → disabled
-                        meta.version = Some(None);
+                        meta.version = VersionSpec::Disabled;
                     }
                     _ => {
                         return Err(syn::Error::new_spanned(
@@ -152,9 +184,9 @@ pub fn build_meta_attr(meta: &AppMeta) -> TokenStream2 {
         parts.push(quote! { description = #desc });
     }
     match &meta.version {
-        Some(Some(v)) => parts.push(quote! { version = #v }),
-        Some(None) => parts.push(quote! { version = false }),
-        None => {}
+        VersionSpec::Explicit(v) => parts.push(quote! { version = #v }),
+        VersionSpec::Disabled => parts.push(quote! { version = false }),
+        VersionSpec::Auto => {}
     }
     if let Some(hp) = &meta.homepage {
         parts.push(quote! { homepage = #hp });

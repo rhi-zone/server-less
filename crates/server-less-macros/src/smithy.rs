@@ -99,6 +99,7 @@ impl Parse for SmithyArgs {
 }
 
 pub(crate) fn expand_smithy(args: SmithyArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
@@ -120,7 +121,7 @@ pub(crate) fn expand_smithy(args: SmithyArgs, mut impl_block: ItemImpl) -> syn::
         .unwrap_or_else(|| format!("com.example.{}", struct_name_str.to_snake_case()));
     let version = args
         .version
-        .or_else(|| app_meta.version.and_then(|v| v))
+        .or_else(|| app_meta.version.into_explicit())
         .unwrap_or_else(|| "2024-01-01".to_string());
 
     // Check for schema attribute to enable validation

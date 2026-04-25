@@ -297,11 +297,12 @@ fn strip_http_attrs(impl_block: &ItemImpl) -> ItemImpl {
 }
 
 pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let args = HttpArgs {
         name: args.name.or(app_meta.name),
         description: args.description.or(app_meta.description),
-        version: args.version.or_else(|| app_meta.version.and_then(|v| v)),
+        version: args.version.or_else(|| app_meta.version.into_explicit()),
         homepage: args.homepage.or(app_meta.homepage),
         ..args
     };

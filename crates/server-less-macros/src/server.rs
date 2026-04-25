@@ -119,7 +119,7 @@ pub(crate) fn expand_server(args: ServerArgs, mut impl_block: ItemImpl) -> syn::
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let name = args.name.or(app_meta.name);
     let description = args.description.or(app_meta.description);
-    let version = args.version.or_else(|| app_meta.version.and_then(|v| v));
+    let version = args.version.or_else(|| app_meta.version.into_explicit());
     let homepage = args.homepage.or(app_meta.homepage);
 
     let http_args = HttpArgs {

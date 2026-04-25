@@ -124,7 +124,7 @@ pub(crate) fn expand_asyncapi(
         .unwrap_or_else(|| struct_name_str.clone());
     let version = args
         .version
-        .or_else(|| app_meta.version.and_then(|v| v))
+        .or_else(|| app_meta.version.into_explicit())
         .unwrap_or_else(|| "1.0.0".to_string());
     let server = args
         .server
