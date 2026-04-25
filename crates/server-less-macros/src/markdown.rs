@@ -42,6 +42,8 @@
 //! // Returns formatted Markdown documentation
 //! ```
 
+use crate::app::extract_app_meta;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use heck::ToTitleCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -80,9 +82,15 @@ impl Parse for MarkdownArgs {
                     args.types = lit.value();
                 }
                 other => {
+                    const VALID: &[&str] = &["title", "types"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: title, types"),
+                        format!(
+                            "unknown argument `{other}`{suggestion}. Valid arguments: title, types"
+                        ),
                     ));
                 }
             }
@@ -98,17 +106,22 @@ impl Parse for MarkdownArgs {
 
 pub(crate) fn expand_markdown(
     args: MarkdownArgs,
-    impl_block: ItemImpl,
+    mut impl_block: ItemImpl,
 ) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let generics_clone = impl_block.generics.clone();
     let (impl_generics, _ty_generics, where_clause) = generics_clone.split_for_impl();
     let self_ty = impl_block.self_ty.clone();
     let struct_name_str = struct_name.to_string();
-    let methods = extract_methods(&impl_block)?;
+    let methods: Vec<_> = extract_methods(&impl_block)?
+        .into_iter()
+        .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
+        .collect();
 
     let title = args
         .title
+        .or(app_meta.name.map(|n| format!("{} API", n)))
         .unwrap_or_else(|| format!("{} API", struct_name_str));
     let show_types = args.types;
 

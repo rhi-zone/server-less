@@ -40,6 +40,8 @@
 //! let spec = ChatService::asyncapi_spec();
 //! ```
 
+use crate::app::extract_app_meta;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -80,10 +82,14 @@ impl Parse for AsyncApiArgs {
                     args.server = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] = &["title", "version", "server"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`. Valid arguments: title, version, server"
+                            "unknown argument `{other}`{suggestion}. Valid arguments: title, version, server"
                         ),
                     ));
                 }
@@ -100,16 +106,26 @@ impl Parse for AsyncApiArgs {
 
 pub(crate) fn expand_asyncapi(
     args: AsyncApiArgs,
-    impl_block: ItemImpl,
+    mut impl_block: ItemImpl,
 ) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods = extract_methods(&impl_block)?;
+    let methods: Vec<_> = extract_methods(&impl_block)?
+        .into_iter()
+        .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
+        .collect();
 
-    let title = args.title.unwrap_or_else(|| struct_name_str.clone());
-    let version = args.version.unwrap_or_else(|| "1.0.0".to_string());
+    let title = args
+        .title
+        .or(app_meta.name)
+        .unwrap_or_else(|| struct_name_str.clone());
+    let version = args
+        .version
+        .or_else(|| app_meta.version.and_then(|v| v))
+        .unwrap_or_else(|| "1.0.0".to_string());
     let server = args
         .server
         .unwrap_or_else(|| "ws://localhost:8080".to_string());
@@ -122,8 +138,14 @@ pub(crate) fn expand_asyncapi(
     let message_specs: Vec<String> = methods.iter().map(generate_message_spec).collect();
     let messages_json = message_specs.join(",\n");
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "asyncapi") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
             /// Get the AsyncAPI specification for this service.

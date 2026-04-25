@@ -55,6 +55,7 @@
 //! // {"jsonrpc": "2.0", "result": 8, "id": 1}
 //! ```
 
+use crate::app::extract_app_meta;
 use crate::server_attrs::{has_server_hidden, has_server_skip};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
@@ -105,7 +106,8 @@ impl Parse for JsonRpcArgs {
     }
 }
 
-pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let _app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;

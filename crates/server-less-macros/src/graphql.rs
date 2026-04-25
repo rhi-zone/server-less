@@ -77,6 +77,7 @@
 //! let app = service.graphql_router();  // Serves GraphQL + Playground at /graphql
 //! ```
 
+use crate::app::extract_app_meta;
 use crate::context::{has_qualified_context, partition_context_params, should_inject_context};
 use heck::ToLowerCamelCase;
 
@@ -155,7 +156,10 @@ impl Parse for GraphqlArgs {
     }
 }
 
-pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_graphql(args: GraphqlArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
+    // args.name takes precedence over app_meta.name for GraphQL schema naming.
+    let _effective_name = args.name.or(app_meta.name);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;

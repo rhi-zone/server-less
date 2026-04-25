@@ -40,6 +40,8 @@
 //! let schema = WeatherService::smithy_schema();
 //! ```
 
+use crate::app::extract_app_meta;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use heck::{ToPascalCase, ToSnakeCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -74,9 +76,15 @@ impl Parse for SmithyArgs {
                     args.version = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] = &["namespace", "version"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: namespace, version"),
+                        format!(
+                            "unknown argument `{other}`{suggestion}. Valid arguments: namespace, version"
+                        ),
                     ));
                 }
             }
@@ -90,17 +98,30 @@ impl Parse for SmithyArgs {
     }
 }
 
-pub(crate) fn expand_smithy(args: SmithyArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_smithy(args: SmithyArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods = extract_methods(&impl_block)?;
+    let methods: Vec<_> = extract_methods(&impl_block)?
+        .into_iter()
+        .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
+        .collect();
 
     let namespace = args
         .namespace
+        .or_else(|| {
+            app_meta
+                .name
+                .as_ref()
+                .map(|n| format!("com.example.{}", n.to_snake_case()))
+        })
         .unwrap_or_else(|| format!("com.example.{}", struct_name_str.to_snake_case()));
-    let version = args.version.unwrap_or_else(|| "2024-01-01".to_string());
+    let version = args
+        .version
+        .or_else(|| app_meta.version.and_then(|v| v))
+        .unwrap_or_else(|| "2024-01-01".to_string());
 
     // Check for schema attribute to enable validation
     let schema_path = impl_block.attrs.iter().find_map(|attr| {
@@ -210,8 +231,14 @@ service {service_name} {{
         quote! {}
     };
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "smithy") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
             /// Get the Smithy IDL schema for this service.

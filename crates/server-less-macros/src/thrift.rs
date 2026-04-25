@@ -42,6 +42,8 @@
 //! let schema = UserService::thrift_schema();
 //! ```
 
+use crate::app::extract_app_meta;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -76,9 +78,15 @@ impl Parse for ThriftArgs {
                     args.schema = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] = &["namespace", "schema"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: namespace, schema"),
+                        format!(
+                            "unknown argument `{other}`{suggestion}. Valid arguments: namespace, schema"
+                        ),
                     ));
                 }
             }
@@ -92,12 +100,16 @@ impl Parse for ThriftArgs {
     }
 }
 
-pub(crate) fn expand_thrift(args: ThriftArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_thrift(args: ThriftArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let _app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods = extract_methods(&impl_block)?;
+    let methods: Vec<_> = extract_methods(&impl_block)?
+        .into_iter()
+        .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
+        .collect();
 
     let namespace = args
         .namespace
@@ -177,8 +189,14 @@ service {service_name} {{
         quote! {}
     };
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "thrift") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
             /// Get the Thrift schema for this service.
