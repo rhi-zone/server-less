@@ -601,7 +601,7 @@ fn generate_handler(
     let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
     let method_name_str = method_name.to_string();
 
-    let (param_extractions, param_calls, param_names) =
+    let (param_extractions, param_pre_stmts, param_calls, param_names) =
         generate_param_handling(method, has_qualified)?;
 
     // When tracing is enabled, bind each user-visible parameter to a named local variable
@@ -643,6 +643,18 @@ fn generate_handler(
 
     let response = generate_response_handling(method, &call, response_overrides)?;
 
+    // When pre_stmts exist they contain early returns of type `Response<Body>`, so the final
+    // expression must also return that same concrete type — otherwise Rust's type checker rejects
+    // the `impl IntoResponse` return as having two different concrete types.
+    let response = if !param_pre_stmts.is_empty() {
+        quote! { {
+            use ::server_less::axum::response::IntoResponse as _;
+            (#response).into_response()
+        }}
+    } else {
+        response
+    };
+
     let handler = if debug {
         quote! {
             async fn #handler_name(
@@ -651,6 +663,7 @@ fn generate_handler(
             ) -> impl ::server_less::axum::response::IntoResponse {
                 let state = state_extractor.0;
                 eprintln!("[server-less] {} called", #method_name_str);
+                #(#param_pre_stmts)*
                 #(#param_trace_stmts)*
                 let __sl_response = #response;
                 eprintln!("[server-less] {} returned", #method_name_str);
@@ -664,6 +677,7 @@ fn generate_handler(
                 #(#param_extractions),*
             ) -> impl ::server_less::axum::response::IntoResponse {
                 let state = state_extractor.0;
+                #(#param_pre_stmts)*
                 #(#param_trace_stmts)*
                 #response
             }
@@ -675,6 +689,7 @@ fn generate_handler(
                 #(#param_extractions),*
             ) -> impl ::server_less::axum::response::IntoResponse {
                 let state = state_extractor.0;
+                #(#param_pre_stmts)*
                 #response
             }
         }
@@ -745,10 +760,11 @@ fn has_http_trace(method: &MethodInfo) -> bool {
 fn generate_param_handling(
     method: &MethodInfo,
     has_qualified: bool,
-) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>, Vec<Option<String>>)> {
+) -> syn::Result<(Vec<TokenStream2>, Vec<TokenStream2>, Vec<TokenStream2>, Vec<Option<String>>)> {
     use server_less_parse::ParamLocation;
 
     let mut extractions = Vec::new();
+    let mut pre_stmts = Vec::new();
     let mut calls = Vec::new();
     // Parallel to `calls`: None for injected params (Context), Some(name) for user-visible params.
     let mut param_names: Vec<Option<String>> = Vec::new();
@@ -826,9 +842,22 @@ fn generate_param_handling(
                         body_extractor.0.get(#name_str).and_then(|v| ::server_less::serde_json::from_value::<#inner_ty>(v.clone()).ok())
                     });
             } else {
-                calls.push(quote! {
-                        ::server_less::serde_json::from_value::<#ty>(body_extractor.0.get(#name_str).cloned().unwrap_or_default()).unwrap_or_default()
-                    });
+                let var_ident = format_ident!("__sl_req_{}", param.name_str());
+                pre_stmts.push(quote! {
+                    let #var_ident: #ty = match body_extractor.0.get(#name_str)
+                        .and_then(|v| ::server_less::serde_json::from_value::<#ty>(v.clone()).ok())
+                    {
+                        ::std::option::Option::Some(v) => v,
+                        ::std::option::Option::None => {
+                            use ::server_less::axum::response::IntoResponse as _;
+                            return (
+                                ::server_less::axum::http::StatusCode::BAD_REQUEST,
+                                format!("Request body field '{}' is required", #name_str),
+                            ).into_response();
+                        }
+                    };
+                });
+                calls.push(quote! { #var_ident });
             }
             param_names.push(Some(param.name_str()));
         }
@@ -874,9 +903,22 @@ fn generate_param_handling(
                         .unwrap_or(#default_expr)
                 });
             } else {
-                calls.push(quote! {
-                    query_extractor.0.get(#name_str).and_then(|v| v.parse::<#ty>().ok()).unwrap_or_default()
+                let var_ident = format_ident!("__sl_req_{}", param.name_str());
+                pre_stmts.push(quote! {
+                    let #var_ident: #ty = match query_extractor.0.get(#name_str)
+                        .and_then(|v| v.parse::<#ty>().ok())
+                    {
+                        ::std::option::Option::Some(v) => v,
+                        ::std::option::Option::None => {
+                            use ::server_less::axum::response::IntoResponse as _;
+                            return (
+                                ::server_less::axum::http::StatusCode::BAD_REQUEST,
+                                format!("Query parameter '{}' is required", #name_str),
+                            ).into_response();
+                        }
+                    };
                 });
+                calls.push(quote! { #var_ident });
             }
             param_names.push(Some(param.name_str()));
         }
@@ -904,18 +946,29 @@ fn generate_param_handling(
                         .and_then(|v| v.parse::<#inner_ty>().ok())
                 });
             } else {
-                calls.push(quote! {
-                    headers.get(#name_str)
+                let var_ident = format_ident!("__sl_req_{}", param.name_str());
+                pre_stmts.push(quote! {
+                    let #var_ident: #ty = match headers.get(#name_str)
                         .and_then(|v| v.to_str().ok())
                         .and_then(|v| v.parse::<#ty>().ok())
-                        .unwrap_or_default()
+                    {
+                        ::std::option::Option::Some(v) => v,
+                        ::std::option::Option::None => {
+                            use ::server_less::axum::response::IntoResponse as _;
+                            return (
+                                ::server_less::axum::http::StatusCode::BAD_REQUEST,
+                                format!("Header '{}' is required", #name_str),
+                            ).into_response();
+                        }
+                    };
                 });
+                calls.push(quote! { #var_ident });
             }
             param_names.push(Some(param.name_str()));
         }
     }
 
-    Ok((extractions, calls, param_names))
+    Ok((extractions, pre_stmts, calls, param_names))
 }
 
 fn generate_response_handling(

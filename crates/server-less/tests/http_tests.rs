@@ -1454,6 +1454,168 @@ fn test_per_method_trace_openapi_still_works() {
     );
 }
 
+// --- Required parameter validation ---
+
+#[derive(Clone)]
+struct RequiredParamService;
+
+#[http(prefix = "/test")]
+impl RequiredParamService {
+    // `page` and `limit` are not id-like, so they're inferred as query params on a GET request.
+    pub fn list_things(&self, page: u32, limit: u32) -> String {
+        format!("page {} limit {}", page, limit)
+    }
+}
+
+/// Missing required query param returns 400.
+#[tokio::test]
+async fn test_missing_required_query_param_returns_400() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = RequiredParamService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/test/things")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Missing required query param should return 400; got: {}",
+        response.status()
+    );
+}
+
+/// Unparseable required query param returns 400.
+#[tokio::test]
+async fn test_invalid_required_query_param_type_returns_400() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = RequiredParamService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/test/things?page=not-a-number&limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Unparseable required query param should return 400; got: {}",
+        response.status()
+    );
+}
+
+/// Valid required query params succeed.
+#[tokio::test]
+async fn test_valid_required_query_params_returns_200() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = RequiredParamService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/test/things?page=1&limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Valid required query params should return 200; got: {}",
+        response.status()
+    );
+}
+
+// --- Required body field validation ---
+
+#[derive(Clone)]
+struct RequiredBodyService;
+
+#[http(prefix = "/test-body")]
+impl RequiredBodyService {
+    pub fn create_widget(&self, name: String, count: u32) -> String {
+        format!("{} x{}", name, count)
+    }
+}
+
+/// Missing required body field returns 400.
+#[tokio::test]
+async fn test_missing_required_body_field_returns_400() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = RequiredBodyService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/test-body/widgets")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"widget"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Missing required body field should return 400; got: {}",
+        response.status()
+    );
+}
+
+/// Valid body fields succeed.
+#[tokio::test]
+async fn test_valid_required_body_fields_returns_200() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = RequiredBodyService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/test-body/widgets")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"widget","count":5}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Valid required body fields should return 200; got: {}",
+        response.status()
+    );
+}
+
 /// Verify that a traced handler actually returns the correct value at runtime.
 #[tokio::test]
 async fn test_trace_handler_returns_correct_response() {
