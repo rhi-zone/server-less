@@ -2,7 +2,7 @@
 
 Created: bf18ee2a0e903fc4054b38b354405fbcd7263bd9
 Last run: 2026-04-25
-Round: 1
+Round: 2
 Project type: Rust proc-macro library (6 crates)
 
 ## Lenses
@@ -12,6 +12,8 @@ Project type: Rust proc-macro library (6 crates)
 - error-surface
 - naming-consistency
 - legacy-debt
+- completeness _(round 2)_
+- cross-macro behavioral consistency _(round 2)_
 
 ## Scope
 Full codebase (`crates/`, `docs/`, `README.md`, `CONTEXT_*.md`)
@@ -87,3 +89,42 @@ Full codebase (`crates/`, `docs/`, `README.md`, `CONTEXT_*.md`)
 - [DEFERRED] `crates/server-less-core/src/lib.rs:245` — `SchemaValueParser::variants` populated and leaked but `possible_values()` never implemented — leaked memory serves no purpose. Decision: implement `possible_values()` or remove the field? _(M27)_
 - [DEFERRED] `CONTEXT_SUMMARY.md` — Written in "work just completed" style that agents misread as current design. Decision: add stale header, update, or delete? _(M32)_
 - [DEFERRED] `crates/server-less-core/src/error.rs:7` — `FailedPrecondition` is gRPC vocabulary for 422. Decision: rename to `UnprocessableEntity` or keep gRPC vocab with a doc note? _(L5)_
+
+## Findings — Round 2
+
+### HIGH severity
+
+- [APPROVED] `crates/server-less-macros/src/graphql.rs:769` — `value_to_graphql` nested fn emitted once per method inside `quote!` → N duplicate definitions in same scope → compile error for any service with >1 method. Fix: hoist to a single definition outside the per-method loop. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/graphql.rs:795` — All non-primitive Rust return types silently declared as `String` in GraphQL schema with no warning or error. Fix: emit a `syn::Error` for unmapped types (or at minimum a `compile_warning!`). _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/capnp.rs:104` — Missing `id` silently generates `@0x0000000000000000`; Cap'n Proto toolchain rejects zero IDs at schema compile time. Fix: emit a `syn::Error` requiring `id` or generate a deterministic non-zero ID with a warning. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/thrift.rs:262` — `Option<T>` maps to `"string"` for all `T` — loses both optionality and inner type. `Option<i32>` → Thrift `string`. Fix: unwrap `Option<T>` and map the inner type. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/smithy.rs:334` — `Vec<T>` produces a bare `List` shape name with no member type — invalid Smithy model. Fix: emit `List { member: { target: <inner_type> } }`. _(severity: high)_
+- [APPROVED] `grpc.rs`, `capnp.rs`, `thrift.rs`, `smithy.rs`, `connect.rs`, `asyncapi.rs`, `jsonschema.rs` — All 7 unconditionally emit `#impl_block`, ignoring `is_protocol_impl_emitter`. Stacking with `#[http]`/`#[jsonrpc]`/`#[ws]`/`#[graphql]` produces duplicate `impl` blocks. Fix: gate on `is_protocol_impl_emitter` as `jsonrpc.rs`, `ws.rs`, `graphql.rs`, `openrpc.rs`, `markdown.rs` already do. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/asyncapi.rs:163` — `asyncapi_yaml()` is a fake YAML converter (string-replaces `{`, `}`, `[`, `]` on JSON output) — produces malformed non-YAML for any non-trivial schema. Fix: use a real YAML serialization crate, or remove the method and document the limitation. _(severity: high)_
+
+### MEDIUM severity
+
+- [APPROVED] `grpc.rs`, `capnp.rs`, `thrift.rs`, `smithy.rs`, `connect.rs`, `openrpc.rs`, `asyncapi.rs`, `markdown.rs`, `jsonschema.rs` — `has_server_skip`/`has_server_hidden` not respected; `#[server(skip)]` methods appear unconditionally in generated schemas/docs. Fix: filter via `has_server_skip`/`has_server_hidden` as reference macros do. _(severity: medium)_
+- [APPROVED] `grpc.rs`, `capnp.rs`, `thrift.rs`, `smithy.rs`, `connect.rs`, `openrpc.rs`, `asyncapi.rs`, `jsonschema.rs` — `server_less::Context` params not excluded; appear as schema fields/proto messages/spec params. Fix: call `partition_context_params` and exclude Context params from schema output. _(severity: medium)_
+- [APPROVED] All 12 audited macros (`graphql`, `grpc`, `capnp`, `thrift`, `smithy`, `connect`, `jsonrpc`, `ws`, `openrpc`, `asyncapi`, `markdown`, `jsonschema`) — `extract_app_meta` not called; `#[app(name, description, version)]` passthrough has no effect on schema titles, package names, or doc headings. Fix: call `extract_app_meta` and use values as fallbacks. _(severity: medium)_
+- [APPROVED] `grpc.rs`, `capnp.rs`, `thrift.rs`, `smithy.rs`, `connect.rs`, `openrpc.rs`, `asyncapi.rs`, `jsonschema.rs` — `Option<T>`, `Vec<T>`, `Result<T,E>` inner types not unwrapped in type-mapping functions; raw outer type string passed directly, producing wrong schema types silently. Fix: extract inner types before mapping. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/graphql.rs:865` — `generate_resolver_arm` always returns `Ok(Value::String("todo"))` — dead stub wired into real generated methods. Fix: remove or replace with a proper dispatch or a clear `unimplemented!`. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/grpc.rs:268` — Custom types silently become `bytes` in proto schema; `Vec<User>` → `repeated string`, `User` → `bytes` with no diagnostic. Fix: emit an error or warning for unmapped types. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/capnp.rs:211` — Method ordinals `@0`, `@1`, ... regenerated from scratch each time; inserting a method reshuffles all ordinals, silently breaking wire compatibility. Fix: emit a warning that ordinal stability is the user's responsibility, or document prominently. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/smithy.rs:105` — Schema path read from a bare `#[schema = "..."]` impl-block attribute, while `grpc`/`capnp` accept `schema = "..."` as a macro argument. Fix: make smithy consistent with grpc/capnp. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/graphql.rs:158` / `jsonrpc.rs:108` / `ws.rs:325` — `#[app]` not extracted in these runtime macros either. Fix: call `extract_app_meta`. _(severity: medium)_
+
+### LOW severity
+
+- [APPROVED] `grpc.rs`, `capnp.rs`, `thrift.rs`, `smithy.rs`, `connect.rs`, `openrpc.rs`, `asyncapi.rs`, `markdown.rs`, `jsonschema.rs` — Unknown attribute key errors have no `did_you_mean` suggestion. Fix: add `did_you_mean` as reference macros do. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/graphql.rs:797` — Type detection uses `contains("DateTime")`, `contains("Uuid")`, `contains("Url")` substring matching — `UserUrl`, `UpdateDateTime` etc. falsely classified as custom scalars. Fix: match on the final path segment only. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/thrift.rs` — No `f32` mapping; falls through to `binary`. Fix: add `f32 → double` branch. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/smithy.rs:314` — Unsigned types (`u8`→`Byte`, `u16`→`Short`, etc.) silently mapped to signed Smithy types. Fix: document or add unsigned wrappers. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/ws.rs` — No path validation; `path = ""` or missing `/` prefix silently produces invalid axum route. Fix: validate in `expand_ws` as `http.rs` does. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/markdown.rs` — `#[param(help = "...")]` not read; parameter descriptions come only from type info. Fix: read `help` from `ParsedParamAttrs` when generating param table. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/thrift.rs:200` — Generated Thrift IDL uses a grouped-args-struct style that may not parse with standard Thrift IDL tooling. Fix: verify against Thrift reference parser or switch to inline param list style. _(severity: low)_
+- [APPROVED] `openrpc.rs:132`, `asyncapi.rs:131`, `jsonschema.rs:123` — `serde_json::from_str(...).unwrap_or_default()` silently returns empty on parse failure, producing a spec with no methods. Fix: propagate the error. _(severity: low)_
+
+### DEFERRED — pending design decisions
+
+- [DEFERRED] `crates/server-less-macros/src/markdown.rs` — Should `server_less::Context` params be excluded from generated Markdown docs, or documented with a note? Decision: depends on whether a doc reader should see Context as an implementation detail or a visible concept. _(R2-M2 for markdown)_
