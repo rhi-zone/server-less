@@ -162,7 +162,7 @@ use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
 // Import Context helpers
-use crate::context::has_qualified_context;
+use crate::context::{has_qualified_context, has_qualified_special_param, should_inject_special_param};
 
 /// Check if a type is server_less::WsSender (fully qualified)
 fn is_qualified_ws_sender(ty: &syn::Type) -> bool {
@@ -194,24 +194,12 @@ fn is_bare_ws_sender(ty: &syn::Type) -> bool {
 
 /// Check if this type should be treated as server_less::WsSender for injection
 fn should_inject_ws_sender(ty: &syn::Type, has_qualified: bool) -> bool {
-    if is_qualified_ws_sender(ty) {
-        true
-    } else if is_bare_ws_sender(ty) {
-        // Only inject bare WsSender if no qualified version exists in the impl block
-        !has_qualified
-    } else {
-        false
-    }
+    should_inject_special_param(ty, is_qualified_ws_sender, is_bare_ws_sender, has_qualified)
 }
 
 /// Scan all methods to detect if any use qualified server_less::WsSender
 fn has_qualified_ws_sender(methods: &[MethodInfo]) -> bool {
-    methods.iter().any(|method| {
-        method
-            .params
-            .iter()
-            .any(|param| is_qualified_ws_sender(&param.ty))
-    })
+    has_qualified_special_param(methods, is_qualified_ws_sender)
 }
 
 /// Partition parameters into Context, WsSender, and regular groups

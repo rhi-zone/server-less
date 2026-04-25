@@ -85,6 +85,43 @@ pub fn has_qualified_context(methods: &[MethodInfo]) -> bool {
     })
 }
 
+/// Generic helper: check if a type should be treated as a special injectable param.
+///
+/// Two-pass detection strategy (same logic used for both Context and WsSender):
+/// - If `has_qualified_in_impl` is true: Only the qualified form is injected
+/// - If `has_qualified_in_impl` is false: Both bare and qualified forms are injected
+///
+/// Pass the predicate pair from whichever type family you're detecting.
+pub fn should_inject_special_param(
+    ty: &Type,
+    is_qualified: fn(&Type) -> bool,
+    is_bare: fn(&Type) -> bool,
+    has_qualified_in_impl: bool,
+) -> bool {
+    if is_qualified(ty) {
+        true
+    } else if is_bare(ty) {
+        !has_qualified_in_impl
+    } else {
+        false
+    }
+}
+
+/// Generic helper: scan all methods to detect if any use the qualified form of a special param.
+///
+/// Pass the `is_qualified` predicate for the type you're scanning for.
+pub fn has_qualified_special_param(
+    methods: &[MethodInfo],
+    is_qualified: fn(&Type) -> bool,
+) -> bool {
+    methods.iter().any(|method| {
+        method
+            .params
+            .iter()
+            .any(|param| is_qualified(&param.ty))
+    })
+}
+
 /// Partition parameters into Context and non-Context groups
 ///
 /// Returns `(context_param, other_params)` where:
