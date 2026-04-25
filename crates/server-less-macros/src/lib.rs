@@ -154,7 +154,12 @@ fn strip_first_impl(tokens: TokenStream2) -> TokenStream2 {
 /// the impl block multiple times, exactly ONE macro — the one with the highest
 /// priority that's present — takes responsibility for emitting it.
 const PROTOCOL_PRIORITY: &[&str] = &[
-    "cli", "http", "mcp", "jsonrpc", "ws", "graphql", "openapi", "openrpc",
+    // Runtime protocols (higher priority — emit the impl block)
+    "cli", "http", "mcp", "jsonrpc", "ws", "graphql",
+    // Spec generators
+    "openapi", "openrpc",
+    // Schema generators (lower priority — defer impl block to runtime macros)
+    "grpc", "capnp", "thrift", "smithy", "connect", "asyncapi", "jsonschema", "markdown",
 ];
 
 /// Returns `true` if this protocol macro should emit the original impl block.

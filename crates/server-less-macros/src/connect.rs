@@ -38,6 +38,8 @@
 //! let schema = ChatService::connect_schema();
 //! ```
 
+use crate::app::extract_app_meta;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -66,9 +68,15 @@ impl Parse for ConnectArgs {
                     args.package = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] = &["package"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: package"),
+                        format!(
+                            "unknown argument `{other}`{suggestion}. Valid arguments: package"
+                        ),
                     ));
                 }
             }
@@ -82,15 +90,20 @@ impl Parse for ConnectArgs {
     }
 }
 
-pub(crate) fn expand_connect(args: ConnectArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_connect(args: ConnectArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods = extract_methods(&impl_block)?;
+    let methods: Vec<_> = extract_methods(&impl_block)?
+        .into_iter()
+        .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
+        .collect();
 
     let package = args
         .package
+        .or(app_meta.name.map(|n| n.to_snake_case()))
         .unwrap_or_else(|| struct_name_str.to_snake_case());
     let service_name = struct_name_str.clone();
 
@@ -127,8 +140,14 @@ service {service_name} {{
         })
         .collect();
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "connect") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
             /// Get the Protocol Buffers schema for Connect.

@@ -43,6 +43,8 @@
 //! let schema = Calculator::capnp_schema();
 //! ```
 
+use crate::app::extract_app_meta;
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -77,9 +79,15 @@ impl Parse for CapnpArgs {
                     args.schema = Some(lit.value());
                 }
                 other => {
+                    const VALID: &[&str] = &["id", "schema"];
+                    let suggestion = crate::did_you_mean(other, VALID)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: id, schema"),
+                        format!(
+                            "unknown argument `{other}`{suggestion}. Valid arguments: id, schema"
+                        ),
                     ));
                 }
             }
@@ -93,12 +101,16 @@ impl Parse for CapnpArgs {
     }
 }
 
-pub(crate) fn expand_capnp(args: CapnpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_capnp(args: CapnpArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    let _app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods = extract_methods(&impl_block)?;
+    let methods: Vec<_> = extract_methods(&impl_block)?
+        .into_iter()
+        .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
+        .collect();
 
     // Use provided ID or generate a placeholder
     let schema_id = args.id.unwrap_or_else(|| "0x0000000000000000".to_string());
@@ -177,8 +189,14 @@ interface {interface_name} {{
         quote! {}
     };
 
+    let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "capnp") {
+        quote! { #impl_block }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        #impl_block
+        #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
             /// Get the Cap'n Proto schema for this service.
