@@ -209,7 +209,7 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
                     409 => quote! { ::server_less::ErrorCode::Conflict },
                     410 => quote! { ::server_less::ErrorCode::NotFound },
                     411 => quote! { ::server_less::ErrorCode::InvalidInput },
-                    412 => quote! { ::server_less::ErrorCode::FailedPrecondition },
+                    412 => quote! { ::server_less::ErrorCode::UnprocessableEntity },
                     413 => quote! { ::server_less::ErrorCode::InvalidInput },
                     414 => quote! { ::server_less::ErrorCode::InvalidInput },
                     415 => quote! { ::server_less::ErrorCode::InvalidInput },
@@ -217,12 +217,12 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
                     417 => quote! { ::server_less::ErrorCode::InvalidInput },
                     418 => quote! { ::server_less::ErrorCode::Internal },
                     421 => quote! { ::server_less::ErrorCode::InvalidInput },
-                    422 => quote! { ::server_less::ErrorCode::FailedPrecondition },
+                    422 => quote! { ::server_less::ErrorCode::UnprocessableEntity },
                     423 => quote! { ::server_less::ErrorCode::Conflict },
-                    424 => quote! { ::server_less::ErrorCode::FailedPrecondition },
+                    424 => quote! { ::server_less::ErrorCode::UnprocessableEntity },
                     425 => quote! { ::server_less::ErrorCode::Internal },
                     426 => quote! { ::server_less::ErrorCode::InvalidInput },
-                    428 => quote! { ::server_less::ErrorCode::FailedPrecondition },
+                    428 => quote! { ::server_less::ErrorCode::UnprocessableEntity },
                     429 => quote! { ::server_less::ErrorCode::RateLimited },
                     431 => quote! { ::server_less::ErrorCode::InvalidInput },
                     451 => quote! { ::server_less::ErrorCode::Forbidden },
@@ -267,7 +267,7 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
                                  use a named ErrorCode variant instead\n\
                                  \n\
                                  Valid named variants: NotFound, InvalidInput, Unauthenticated, \
-                                 Forbidden, Conflict, FailedPrecondition, RateLimited, Internal, \
+                                 Forbidden, Conflict, UnprocessableEntity, RateLimited, Internal, \
                                  NotImplemented, Unavailable\n\
                                  \n\
                                  Known numeric codes: IANA 4xx/5xx plus Cloudflare/nginx/IIS vendor codes.\n\

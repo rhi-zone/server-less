@@ -16,7 +16,7 @@ pub enum ErrorCode {
     /// 409 Conflict / ALREADY_EXISTS / exit 1
     Conflict,
     /// 422 Unprocessable Entity / FAILED_PRECONDITION / exit 1
-    FailedPrecondition,
+    UnprocessableEntity,
     /// 429 Too Many Requests / RESOURCE_EXHAUSTED / exit 1
     RateLimited,
     /// 500 Internal Server Error / INTERNAL / exit 1
@@ -36,7 +36,7 @@ impl ErrorCode {
             ErrorCode::Forbidden => 403,
             ErrorCode::NotFound => 404,
             ErrorCode::Conflict => 409,
-            ErrorCode::FailedPrecondition => 422,
+            ErrorCode::UnprocessableEntity => 422,
             ErrorCode::RateLimited => 429,
             ErrorCode::Internal => 500,
             ErrorCode::NotImplemented => 501,
@@ -50,7 +50,7 @@ impl ErrorCode {
             ErrorCode::NotFound => 1,
             ErrorCode::InvalidInput => 2,
             ErrorCode::Unauthenticated | ErrorCode::Forbidden => 3,
-            ErrorCode::Conflict | ErrorCode::FailedPrecondition => 4,
+            ErrorCode::Conflict | ErrorCode::UnprocessableEntity => 4,
             ErrorCode::RateLimited => 5,
             ErrorCode::Internal | ErrorCode::Unavailable => 1,
             ErrorCode::NotImplemented => 1,
@@ -65,7 +65,7 @@ impl ErrorCode {
             ErrorCode::Forbidden => "PERMISSION_DENIED",
             ErrorCode::NotFound => "NOT_FOUND",
             ErrorCode::Conflict => "ALREADY_EXISTS",
-            ErrorCode::FailedPrecondition => "FAILED_PRECONDITION",
+            ErrorCode::UnprocessableEntity => "FAILED_PRECONDITION",
             ErrorCode::RateLimited => "RESOURCE_EXHAUSTED",
             ErrorCode::Internal => "INTERNAL",
             ErrorCode::NotImplemented => "UNIMPLEMENTED",
@@ -85,7 +85,7 @@ impl ErrorCode {
             ErrorCode::Forbidden => -32001,
             ErrorCode::NotFound => -32002,
             ErrorCode::Conflict => -32003,
-            ErrorCode::FailedPrecondition => -32004,
+            ErrorCode::UnprocessableEntity => -32004,
             ErrorCode::RateLimited => -32005,
             ErrorCode::Internal => -32603,
             ErrorCode::NotImplemented => -32601,
@@ -142,7 +142,7 @@ impl fmt::Display for ErrorCode {
             ErrorCode::Forbidden => "FORBIDDEN",
             ErrorCode::NotFound => "NOT_FOUND",
             ErrorCode::Conflict => "CONFLICT",
-            ErrorCode::FailedPrecondition => "FAILED_PRECONDITION",
+            ErrorCode::UnprocessableEntity => "UNPROCESSABLE_ENTITY",
             ErrorCode::RateLimited => "RATE_LIMITED",
             ErrorCode::Internal => "INTERNAL",
             ErrorCode::NotImplemented => "NOT_IMPLEMENTED",
