@@ -713,3 +713,145 @@ fn test_mcp_param_help_in_input_schema() {
         .unwrap();
     assert_eq!(title_desc, "Optional title prefix");
 }
+
+// ============================================================================
+// Bad Parameter Tests
+// ============================================================================
+
+/// Service with required and typed parameters for bad-param testing.
+#[derive(Clone)]
+struct BadParamService;
+
+#[mcp(namespace = "bp")]
+impl BadParamService {
+    /// Greet someone by name (name is required)
+    pub fn greet(&self, name: String) -> String {
+        format!("Hello, {}!", name)
+    }
+
+    /// Add two integers (both required)
+    pub fn add(&self, a: i64, b: i64) -> i64 {
+        a + b
+    }
+
+    /// Search with optional limit
+    pub fn search(&self, query: String, limit: Option<u32>) -> String {
+        format!("query={} limit={:?}", query, limit)
+    }
+}
+
+/// Missing required parameter returns an error, not a panic.
+#[test]
+fn test_mcp_missing_required_param_returns_error() {
+    let svc = BadParamService;
+
+    // `name` is required but not provided
+    let result = svc.mcp_call("bp_greet", serde_json::json!({}));
+    assert!(
+        result.is_err(),
+        "calling with missing required param should return Err, got: {:?}",
+        result
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("name") || err.contains("Missing"),
+        "error should mention the missing param or 'Missing', got: {}",
+        err
+    );
+}
+
+/// Missing one of multiple required parameters returns an error.
+#[test]
+fn test_mcp_missing_one_of_multiple_required_params_returns_error() {
+    let svc = BadParamService;
+
+    // `b` is required but not provided
+    let result = svc.mcp_call("bp_add", serde_json::json!({"a": 1}));
+    assert!(
+        result.is_err(),
+        "calling with one missing required param should return Err, got: {:?}",
+        result
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("b") || err.contains("Missing"),
+        "error should mention the missing param 'b' or 'Missing', got: {}",
+        err
+    );
+}
+
+/// Parameter of wrong type returns an error, not a panic.
+#[test]
+fn test_mcp_wrong_type_param_returns_error() {
+    let svc = BadParamService;
+
+    // `a` and `b` must be integers; passing strings should fail deserialization
+    let result = svc.mcp_call("bp_add", serde_json::json!({"a": "not-a-number", "b": 2}));
+    assert!(
+        result.is_err(),
+        "calling with wrong-type param should return Err, got: {:?}",
+        result
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("a") || err.contains("Invalid"),
+        "error should mention the bad param 'a' or 'Invalid', got: {}",
+        err
+    );
+}
+
+/// Missing optional parameter is fine — should succeed with None.
+#[test]
+fn test_mcp_missing_optional_param_is_ok() {
+    let svc = BadParamService;
+
+    // `limit` is optional; omitting it should succeed
+    let result = svc.mcp_call("bp_search", serde_json::json!({"query": "hello"}));
+    assert!(
+        result.is_ok(),
+        "calling with missing optional param should succeed, got: {:?}",
+        result
+    );
+}
+
+/// Async path: missing required parameter returns an error too.
+#[tokio::test]
+async fn test_mcp_missing_required_param_async_returns_error() {
+    let svc = BadParamService;
+
+    let result = svc
+        .mcp_call_async("bp_greet", serde_json::json!({}))
+        .await;
+    assert!(
+        result.is_err(),
+        "async call with missing required param should return Err, got: {:?}",
+        result
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("name") || err.contains("Missing"),
+        "error should mention the missing param or 'Missing', got: {}",
+        err
+    );
+}
+
+/// Async path: wrong-type parameter returns an error.
+#[tokio::test]
+async fn test_mcp_wrong_type_param_async_returns_error() {
+    let svc = BadParamService;
+
+    let result = svc
+        .mcp_call_async("bp_add", serde_json::json!({"a": "bad", "b": 3}))
+        .await;
+    assert!(
+        result.is_err(),
+        "async call with wrong-type param should return Err, got: {:?}",
+        result
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("a") || err.contains("Invalid"),
+        "error should mention the bad param 'a' or 'Invalid', got: {}",
+        err
+    );
+}
