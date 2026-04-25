@@ -48,7 +48,10 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, ReturnInfo, extract_methods, get_impl_name};
+use server_less_parse::{
+    MethodInfo, ParamInfo, ReturnInfo, extract_methods, get_impl_name, unwrap_option_type,
+    unwrap_result_ok_type, unwrap_vec_type,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 /// Arguments for the #[thrift] attribute
@@ -234,9 +237,9 @@ fn generate_thrift_method(method: &MethodInfo, index: usize) -> String {
 }
 
 /// Get Thrift return type
-fn get_thrift_return_type(ret: &ReturnInfo) -> &'static str {
+fn get_thrift_return_type(ret: &ReturnInfo) -> String {
     if ret.is_unit {
-        "void"
+        "void".to_string()
     } else {
         rust_type_to_thrift(&ret.ty)
     }
@@ -263,84 +266,64 @@ fn generate_thrift_structs(method: &MethodInfo) -> Vec<String> {
 /// Generate a Thrift field definition
 fn generate_thrift_field(param: &ParamInfo, index: usize) -> String {
     let name = param.name_str().to_snake_case();
-    let thrift_type = rust_type_to_thrift(&Some(param.ty.clone()));
+    // Unwrap Option<T> — the `optional` keyword is emitted separately below
+    let ty = if let Some(inner) = unwrap_option_type(&param.ty) {
+        inner.clone()
+    } else {
+        param.ty.clone()
+    };
+    let thrift_type = rust_type_to_thrift(&Some(ty));
     let optional = if param.is_optional { "optional " } else { "" };
     format!("  {}: {}{} {};", index, optional, thrift_type, name)
 }
 
 /// Convert Rust type to Thrift type
-fn rust_type_to_thrift(ty: &Option<syn::Type>) -> &'static str {
+fn rust_type_to_thrift(ty: &Option<syn::Type>) -> String {
     let Some(ty) = ty else {
-        return "void";
+        return "void".to_string();
     };
+    rust_type_to_thrift_ty(ty)
+}
 
+/// Convert a `syn::Type` reference to a Thrift type string.
+fn rust_type_to_thrift_ty(ty: &syn::Type) -> String {
+    // Unwrap Result<T, E> → T
+    if let Some(ok) = unwrap_result_ok_type(ty) {
+        return rust_type_to_thrift_ty(ok);
+    }
+    // Unwrap Option<T> → map inner (optional keyword handled by caller)
+    if let Some(inner) = unwrap_option_type(ty) {
+        return rust_type_to_thrift_ty(inner);
+    }
+    // Vec<u8> → binary
     let type_str = quote!(#ty).to_string();
-
-    // Check compound types first
     if type_str.contains("Vec < u8 >") || type_str.contains("Vec<u8>") || type_str.contains("[u8]")
     {
-        "binary"
-    } else if type_str.contains("Vec") {
-        "list<string>" // simplified
-    } else if type_str.contains("HashMap") || type_str.contains("BTreeMap") {
-        "map<string, string>" // simplified
+        return "binary".to_string();
+    }
+    // Vec<T> → list<inner>
+    if let Some(inner) = unwrap_vec_type(ty) {
+        return format!("list<{}>", rust_type_to_thrift_ty(inner));
+    }
+    if type_str.contains("HashMap") || type_str.contains("BTreeMap") {
+        "map<string, string>".to_string() // simplified
     } else if type_str.contains("HashSet") || type_str.contains("BTreeSet") {
-        "set<string>" // simplified
-    } else if type_str.contains("Option") {
-        // Option<T>: extract inner type and map it. The `optional` keyword is
-        // emitted separately by generate_thrift_field via ParamInfo::is_optional.
-        let inner = extract_inner_type(&type_str);
-        rust_type_to_thrift_str(inner)
+        "set<string>".to_string() // simplified
     } else if type_str.contains("String") || type_str.contains("str") {
-        "string"
+        "string".to_string()
     } else if type_str.contains("bool") {
-        "bool"
+        "bool".to_string()
     } else if type_str.contains("i8") {
-        "byte"
+        "byte".to_string()
     } else if type_str.contains("i16") {
-        "i16"
+        "i16".to_string()
     } else if type_str.contains("i32") {
-        "i32"
+        "i32".to_string()
     } else if type_str.contains("i64") {
-        "i64"
+        "i64".to_string()
     } else if type_str.contains("f64") {
-        "double"
+        "double".to_string()
     } else {
-        "binary" // fallback
+        "binary".to_string() // fallback
     }
-}
-
-/// Map a type string (without Option wrapper) to a Thrift type name.
-fn rust_type_to_thrift_str(type_str: &str) -> &'static str {
-    if type_str.contains("String") || type_str.contains("str") {
-        "string"
-    } else if type_str.contains("bool") {
-        "bool"
-    } else if type_str.contains("i8") {
-        "byte"
-    } else if type_str.contains("i16") {
-        "i16"
-    } else if type_str.contains("i32") {
-        "i32"
-    } else if type_str.contains("i64") {
-        "i64"
-    } else if type_str.contains("f64") {
-        "double"
-    } else if type_str.contains("Vec") {
-        "list<string>"
-    } else {
-        "binary"
-    }
-}
-
-/// Extract the inner type string from a generic wrapper like `Option < T >` or `Vec < T >`.
-fn extract_inner_type(type_str: &str) -> &str {
-    // Find the first '<' and last '>' and return the content between them, trimmed.
-    if let Some(start) = type_str.find('<') {
-        let rest = &type_str[start + 1..];
-        if let Some(end) = rest.rfind('>') {
-            return rest[..end].trim();
-        }
-    }
-    type_str
 }

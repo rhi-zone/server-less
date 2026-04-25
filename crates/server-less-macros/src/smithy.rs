@@ -46,7 +46,10 @@ use heck::{ToPascalCase, ToSnakeCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{
+    MethodInfo, ParamInfo, extract_methods, get_impl_name, unwrap_option_type, unwrap_result_ok_type,
+    unwrap_vec_type,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 /// Arguments for the #[smithy] attribute
@@ -318,7 +321,13 @@ fn generate_structures(method: &MethodInfo) -> Vec<String> {
 /// Generate a Smithy field definition
 fn generate_field(param: &ParamInfo) -> String {
     let name = param.name_str().to_snake_case();
-    let smithy_type = rust_type_to_smithy(&Some(param.ty.clone()));
+    // Unwrap Option<T> — the field is implicitly optional in Smithy when @required is absent
+    let ty = if let Some(inner) = unwrap_option_type(&param.ty) {
+        inner.clone()
+    } else {
+        param.ty.clone()
+    };
+    let smithy_type = rust_type_to_smithy(&Some(ty));
     let required = if param.is_optional {
         ""
     } else {
@@ -328,45 +337,56 @@ fn generate_field(param: &ParamInfo) -> String {
 }
 
 /// Convert Rust type to Smithy type
-fn rust_type_to_smithy(ty: &Option<syn::Type>) -> &'static str {
+fn rust_type_to_smithy(ty: &Option<syn::Type>) -> String {
     let Some(ty) = ty else {
-        return "Unit";
+        return "Unit".to_string();
     };
+    rust_type_to_smithy_ty(ty)
+}
 
+/// Convert a `syn::Type` reference to a Smithy type string.
+fn rust_type_to_smithy_ty(ty: &syn::Type) -> String {
+    // Unwrap Result<T, E> → T
+    if let Some(ok) = unwrap_result_ok_type(ty) {
+        return rust_type_to_smithy_ty(ok);
+    }
+    // Unwrap Option<T> → map inner (optional is expressed by omitting @required)
+    if let Some(inner) = unwrap_option_type(ty) {
+        return rust_type_to_smithy_ty(inner);
+    }
     let type_str = quote!(#ty).to_string();
-
     if type_str.contains("String") || type_str.contains("str") {
-        "String"
+        "String".to_string()
     } else if type_str.contains("i8") {
-        "Byte"
+        "Byte".to_string()
     } else if type_str.contains("i16") {
-        "Short"
+        "Short".to_string()
     } else if type_str.contains("i32") {
-        "Integer"
+        "Integer".to_string()
     } else if type_str.contains("i64") {
-        "Long"
+        "Long".to_string()
     } else if type_str.contains("u8") {
-        "Byte"
+        "Byte".to_string()
     } else if type_str.contains("u16") {
-        "Short"
+        "Short".to_string()
     } else if type_str.contains("u32") {
-        "Integer"
+        "Integer".to_string()
     } else if type_str.contains("u64") {
-        "Long"
+        "Long".to_string()
     } else if type_str.contains("f32") {
-        "Float"
+        "Float".to_string()
     } else if type_str.contains("f64") {
-        "Double"
+        "Double".to_string()
     } else if type_str.contains("bool") {
-        "Boolean"
-    } else if type_str.contains("Vec") {
+        "Boolean".to_string()
+    } else if unwrap_vec_type(ty).is_some() {
         // Vec<T> requires a named List shape in Smithy IDL. Bare `List` is not
         // valid — a proper model needs a separate `list FooList { member: T }`
         // shape definition. For now we emit `StringList` as a placeholder for
         // Vec<String> / Vec<u8>, which covers the most common case. Complex
         // element types require manual Smithy model authoring.
-        "StringList"
+        "StringList".to_string()
     } else {
-        "Document"
+        "Document".to_string()
     }
 }

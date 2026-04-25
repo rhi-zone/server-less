@@ -35,6 +35,8 @@ pub struct MethodInfo {
     /// Explicit wire name override from `#[server(name = "...")]` or protocol-specific
     /// `#[cli(name = "...")]`, `#[mcp(name = "...")]`, etc.
     pub wire_name: Option<String>,
+    /// `#[cfg(...)]` attributes on this method, to be propagated to generated dispatch items.
+    pub cfg_attrs: Vec<syn::Attribute>,
 }
 
 /// Registry of declared method groups from `#[server(groups(...))]`.
@@ -241,6 +243,14 @@ impl MethodInfo {
         // Extract wire name from #[server(name = "...")] or protocol-specific attrs
         let wire_name = extract_wire_name(&method.attrs);
 
+        // Collect #[cfg(...)] attributes for propagation to generated dispatch items
+        let cfg_attrs: Vec<syn::Attribute> = method
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("cfg"))
+            .cloned()
+            .collect();
+
         Ok(Some(Self {
             method: method.clone(),
             name,
@@ -250,6 +260,7 @@ impl MethodInfo {
             is_async,
             group,
             wire_name,
+            cfg_attrs,
         }))
     }
 }
@@ -941,6 +952,48 @@ pub fn extract_option_type(ty: &Type) -> Option<Type> {
 /// Check if a type is `Option<T>`
 pub fn is_option_type(ty: &Type) -> bool {
     extract_option_type(ty).is_some()
+}
+
+/// If `ty` is `Option<T>`, returns `Some(&T)`. Otherwise returns `None`.
+pub fn unwrap_option_type(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        let seg = type_path.path.segments.last()?;
+        if seg.ident != "Option" { return None; }
+        if let PathArguments::AngleBracketed(args) = &seg.arguments {
+            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                return Some(inner);
+            }
+        }
+    }
+    None
+}
+
+/// If `ty` is `Vec<T>`, returns `Some(&T)`. Otherwise returns `None`.
+pub fn unwrap_vec_type(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        let seg = type_path.path.segments.last()?;
+        if seg.ident != "Vec" { return None; }
+        if let PathArguments::AngleBracketed(args) = &seg.arguments {
+            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                return Some(inner);
+            }
+        }
+    }
+    None
+}
+
+/// If `ty` is `Result<T, E>`, returns `Some(&T)`. Otherwise returns `None`.
+pub fn unwrap_result_ok_type(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        let seg = type_path.path.segments.last()?;
+        if seg.ident != "Result" { return None; }
+        if let PathArguments::AngleBracketed(args) = &seg.arguments {
+            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                return Some(inner);
+            }
+        }
+    }
+    None
 }
 
 /// Check if a type is Result<T, E> and extract T and E

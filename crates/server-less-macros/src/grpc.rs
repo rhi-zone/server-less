@@ -51,7 +51,10 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{
+    MethodInfo, ParamInfo, extract_methods, get_impl_name, unwrap_option_type, unwrap_result_ok_type,
+    unwrap_vec_type,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 #[derive(Default)]
@@ -259,15 +262,41 @@ fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
 
 fn generate_proto_field(param: &ParamInfo, field_num: usize) -> String {
     let name = param.name_str().to_snake_case();
-    let proto_type = rust_type_to_proto(&Some(param.ty.clone()));
+    // Unwrap Option<T> — the `optional` keyword is emitted separately below
+    let ty = if let Some(inner) = unwrap_option_type(&param.ty) {
+        inner.clone()
+    } else {
+        param.ty.clone()
+    };
+    let proto_type = rust_type_to_proto(&Some(ty));
     let optional = if param.is_optional { "optional " } else { "" };
     format!("  {}{} {} = {};", optional, proto_type, name, field_num)
 }
 
-fn rust_type_to_proto(ty: &Option<syn::Type>) -> &'static str {
+fn rust_type_to_proto(ty: &Option<syn::Type>) -> String {
     let Some(ty) = ty else {
-        return "google.protobuf.Empty";
+        return "google.protobuf.Empty".to_string();
     };
+    // Unwrap Result<T, E> → T
+    let ty = if let Some(ok) = unwrap_result_ok_type(ty) {
+        std::borrow::Cow::Borrowed(ok)
+    } else {
+        std::borrow::Cow::Borrowed(ty)
+    };
+    // Unwrap Vec<T> → "repeated <mapped_T>"
+    if let Some(inner) = unwrap_vec_type(&ty) {
+        return format!("repeated {}", rust_type_to_proto_scalar(inner));
+    }
+    // Unwrap Option<T> → map inner (optional keyword handled by caller)
+    let ty = if let Some(inner) = unwrap_option_type(&ty) {
+        inner
+    } else {
+        &*ty
+    };
+    rust_type_to_proto_scalar(ty).to_string()
+}
+
+fn rust_type_to_proto_scalar(ty: &syn::Type) -> &'static str {
     let type_str = quote!(#ty).to_string();
     if type_str.contains("String") || type_str.contains("str") {
         "string"
@@ -285,11 +314,9 @@ fn rust_type_to_proto(ty: &Option<syn::Type>) -> &'static str {
         "double"
     } else if type_str.contains("bool") {
         "bool"
-    } else if type_str.contains("Vec") {
-        "repeated string"
     } else {
         // NOTE: unknown type mapping — if this type should map to a specific proto type,
-        // add it to rust_type_to_proto(). Defaulting to bytes.
+        // add it to rust_type_to_proto_scalar(). Defaulting to bytes.
         "bytes"
     }
 }

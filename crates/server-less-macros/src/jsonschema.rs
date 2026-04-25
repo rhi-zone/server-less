@@ -47,7 +47,10 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{
+    MethodInfo, ParamInfo, extract_methods, get_impl_name, unwrap_option_type, unwrap_result_ok_type,
+    unwrap_vec_type,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 /// Arguments for the #[jsonschema] attribute
@@ -252,16 +255,27 @@ fn get_type_schema(ty: &Option<syn::Type>) -> String {
     let Some(ty) = ty else {
         return r#"{"type": "null"}"#.to_string();
     };
+    get_type_schema_ty(ty)
+}
 
+/// Get JSON Schema for a `syn::Type` reference.
+fn get_type_schema_ty(ty: &syn::Type) -> String {
+    // Unwrap Result<T, E> → T
+    if let Some(ok) = unwrap_result_ok_type(ty) {
+        return get_type_schema_ty(ok);
+    }
+    // Option<T> → nullable schema
+    if let Some(inner) = unwrap_option_type(ty) {
+        let inner_schema = get_type_schema_ty(inner);
+        return format!(r#"{{"anyOf": [null, {}]}}"#, inner_schema);
+    }
+    // Vec<T> → {"type": "array", "items": <inner_schema>}
+    if let Some(inner) = unwrap_vec_type(ty) {
+        let inner_schema = get_type_schema_ty(inner);
+        return format!(r#"{{"type": "array", "items": {}}}"#, inner_schema);
+    }
     let type_str = quote!(#ty).to_string();
-
-    // Check container types first (note: quote! adds spaces)
-    if type_str.contains("Vec<") || type_str.contains("Vec <") {
-        r#"{"type": "array", "items": {}}"#.to_string()
-    } else if type_str.contains("Option<") || type_str.contains("Option <") {
-        // For simplicity, just allow null - could be enhanced to parse inner type
-        r#"{"type": ["null", "object"]}"#.to_string()
-    } else if type_str.contains("HashMap") || type_str.contains("BTreeMap") {
+    if type_str.contains("HashMap") || type_str.contains("BTreeMap") {
         r#"{"type": "object", "additionalProperties": true}"#.to_string()
     } else if type_str.contains("String") || type_str.contains("str") {
         r#"{"type": "string"}"#.to_string()

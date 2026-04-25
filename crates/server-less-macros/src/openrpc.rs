@@ -46,7 +46,10 @@ use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{
+    MethodInfo, ParamInfo, extract_methods, get_impl_name, unwrap_option_type, unwrap_result_ok_type,
+    unwrap_vec_type,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 /// Arguments for the #[openrpc] attribute
@@ -213,9 +216,27 @@ fn get_json_schema(ty: &Option<syn::Type>) -> String {
     let Some(ty) = ty else {
         return r#"{"type": "null"}"#.to_string();
     };
+    get_json_schema_ty(ty)
+}
 
+/// Get JSON Schema for a `syn::Type` reference.
+fn get_json_schema_ty(ty: &syn::Type) -> String {
+    // Unwrap Result<T, E> → T
+    if let Some(ok) = unwrap_result_ok_type(ty) {
+        return get_json_schema_ty(ok);
+    }
+    // Option<T> → {"type": ["null", <inner_schema_type>]}
+    if let Some(inner) = unwrap_option_type(ty) {
+        let inner_schema = get_json_schema_ty(inner);
+        // Extract the type value from the inner schema to compose a nullable schema
+        return format!(r#"{{"anyOf": [null, {}]}}"#, inner_schema);
+    }
+    // Vec<T> → {"type": "array", "items": <inner_schema>}
+    if let Some(inner) = unwrap_vec_type(ty) {
+        let inner_schema = get_json_schema_ty(inner);
+        return format!(r#"{{"type": "array", "items": {}}}"#, inner_schema);
+    }
     let type_str = quote!(#ty).to_string();
-
     if type_str.contains("String") || type_str.contains("str") {
         r#"{"type": "string"}"#.to_string()
     } else if type_str.contains("i8")
@@ -234,11 +255,6 @@ fn get_json_schema(ty: &Option<syn::Type>) -> String {
         r#"{"type": "number"}"#.to_string()
     } else if type_str.contains("bool") {
         r#"{"type": "boolean"}"#.to_string()
-    } else if type_str.contains("Vec") {
-        r#"{"type": "array"}"#.to_string()
-    } else if type_str.contains("Option") {
-        // For Option<T>, we could extract T but keep it simple
-        r#"{"type": "string"}"#.to_string()
     } else {
         r#"{"type": "object"}"#.to_string()
     }

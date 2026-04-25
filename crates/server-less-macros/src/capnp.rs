@@ -49,7 +49,10 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name};
+use server_less_parse::{
+    MethodInfo, ParamInfo, extract_methods, get_impl_name, unwrap_option_type, unwrap_result_ok_type,
+    unwrap_vec_type,
+};
 use syn::{ItemImpl, Token, parse::Parse};
 
 /// Arguments for the #[capnp] attribute
@@ -283,45 +286,58 @@ fn generate_capnp_field(param: &ParamInfo, index: usize) -> String {
 }
 
 /// Convert Rust type to Cap'n Proto type
-fn rust_type_to_capnp(ty: &Option<syn::Type>) -> &'static str {
+fn rust_type_to_capnp(ty: &Option<syn::Type>) -> String {
     let Some(ty) = ty else {
-        return "Void";
+        return "Void".to_string();
     };
+    rust_type_to_capnp_ty(ty)
+}
 
+/// Convert a `syn::Type` reference to a Cap'n Proto type string.
+fn rust_type_to_capnp_ty(ty: &syn::Type) -> String {
+    // Unwrap Result<T, E> → T
+    if let Some(ok) = unwrap_result_ok_type(ty) {
+        return rust_type_to_capnp_ty(ok);
+    }
+    // Unwrap Option<T> → map inner (Cap'n Proto uses union for optional; emit inner type)
+    if let Some(inner) = unwrap_option_type(ty) {
+        return rust_type_to_capnp_ty(inner);
+    }
     let type_str = quote!(#ty).to_string();
-
-    // Check compound types first (Vec, Option) before primitives
+    // Vec<u8> → Data
     if type_str.contains("Vec < u8 >") || type_str.contains("Vec<u8>") || type_str.contains("[u8]")
     {
-        "Data"
-    } else if type_str.contains("Vec") {
-        "List(Text)" // simplified
-    } else if type_str.contains("Option") || type_str.contains("String") || type_str.contains("str")
-    {
-        "Text" // simplified - Cap'n Proto doesn't have optional, uses union
+        return "Data".to_string();
+    }
+    // Vec<T> → List(inner)
+    if let Some(inner) = unwrap_vec_type(ty) {
+        return format!("List({})", rust_type_to_capnp_ty(inner));
+    }
+    if type_str.contains("String") || type_str.contains("str") {
+        "Text".to_string()
     } else if type_str.contains("i8") {
-        "Int8"
+        "Int8".to_string()
     } else if type_str.contains("i16") {
-        "Int16"
+        "Int16".to_string()
     } else if type_str.contains("i32") {
-        "Int32"
+        "Int32".to_string()
     } else if type_str.contains("i64") {
-        "Int64"
+        "Int64".to_string()
     } else if type_str.contains("u8") {
-        "UInt8"
+        "UInt8".to_string()
     } else if type_str.contains("u16") {
-        "UInt16"
+        "UInt16".to_string()
     } else if type_str.contains("u32") {
-        "UInt32"
+        "UInt32".to_string()
     } else if type_str.contains("u64") {
-        "UInt64"
+        "UInt64".to_string()
     } else if type_str.contains("f32") {
-        "Float32"
+        "Float32".to_string()
     } else if type_str.contains("f64") {
-        "Float64"
+        "Float64".to_string()
     } else if type_str.contains("bool") {
-        "Bool"
+        "Bool".to_string()
     } else {
-        "Data" // fallback to bytes
+        "Data".to_string() // fallback to bytes
     }
 }
