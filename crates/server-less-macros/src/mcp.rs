@@ -55,7 +55,7 @@
 //! Also implements `McpNamespace` trait for composition.
 
 use crate::context::{has_qualified_context, partition_context_params};
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
@@ -152,6 +152,9 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     // Detect whether any method uses qualified server_less::Context (two-pass strategy).
     let has_qualified = has_qualified_context(&methods);
 
+    for m in &methods {
+        validate_server_attrs(m)?;
+    }
     let partitioned = partition_methods(&methods, has_server_skip);
 
     // Separate hidden from visible leaf methods.

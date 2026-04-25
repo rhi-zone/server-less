@@ -13,7 +13,7 @@ use server_less_parse::{MethodInfo, ParamInfo};
 /// Generate code to extract a parameter from a `serde_json::Value` args object.
 pub fn generate_param_extraction(param: &ParamInfo) -> TokenStream {
     let name = &param.name;
-    let name_str = param.name.to_string();
+    let name_str = param.name_str();
     let ty = &param.ty;
 
     if param.is_optional {
@@ -435,7 +435,7 @@ pub fn generate_param_schema(params: &[ParamInfo]) -> (Vec<TokenStream>, Vec<Str
     let properties: Vec<_> = params
         .iter()
         .map(|p| {
-            let param_name = p.name.to_string();
+            let param_name = p.name_str();
             let param_type = infer_json_type(&p.ty);
             let description = p
                 .help_text
@@ -451,7 +451,7 @@ pub fn generate_param_schema(params: &[ParamInfo]) -> (Vec<TokenStream>, Vec<Str
     let required: Vec<_> = params
         .iter()
         .filter(|p| !p.is_optional)
-        .map(|p| p.name.to_string())
+        .map(|p| p.name_str())
         .collect();
 
     (properties, required)
@@ -462,7 +462,7 @@ pub fn generate_param_schema_for(params: &[&ParamInfo]) -> (Vec<TokenStream>, Ve
     let properties: Vec<_> = params
         .iter()
         .map(|p| {
-            let param_name = p.name.to_string();
+            let param_name = p.name_str();
             let param_type = infer_json_type(&p.ty);
             let description = p
                 .help_text
@@ -478,7 +478,7 @@ pub fn generate_param_schema_for(params: &[&ParamInfo]) -> (Vec<TokenStream>, Ve
     let required: Vec<_> = params
         .iter()
         .filter(|p| !p.is_optional)
-        .map(|p| p.name.to_string())
+        .map(|p| p.name_str())
         .collect();
 
     (properties, required)

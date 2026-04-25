@@ -204,6 +204,16 @@ impl ResponseOverride {
             })?;
         }
 
+        if pending_header_name.is_some() {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "incomplete `#[response]` attribute: `header` requires a following \
+                 `value = \"...\"` argument\n\
+                 \n\
+                 Example: #[response(header = \"X-Foo\", value = \"bar\")]",
+            ));
+        }
+
         Ok(result)
     }
 }
@@ -679,7 +689,7 @@ pub fn generate_openapi_spec(
                             "schema": { "type": schema_type }
                         });
                         if let Some(desc) = description {
-                            param.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                            param.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                                 .insert("description".to_string(), ::server_less::serde_json::Value::String(desc.to_string()));
                         }
                         parameters.push(param);
@@ -695,7 +705,7 @@ pub fn generate_openapi_spec(
                             "schema": { "type": schema_type }
                         });
                         if let Some(desc) = description {
-                            param.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                            param.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                                 .insert("description".to_string(), ::server_less::serde_json::Value::String(desc.to_string()));
                         }
                         parameters.push(param);
@@ -711,7 +721,7 @@ pub fn generate_openapi_spec(
                             "schema": { "type": schema_type }
                         });
                         if let Some(desc) = description {
-                            param.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                            param.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                                 .insert("description".to_string(), ::server_less::serde_json::Value::String(desc.to_string()));
                         }
                         parameters.push(param);
@@ -764,7 +774,7 @@ pub fn generate_openapi_spec(
                             }
                         }
                     });
-                    success_response.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                    success_response.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                         .insert("content".to_string(), content_obj);
                 }
 
@@ -772,7 +782,7 @@ pub fn generate_openapi_spec(
                 if #has_custom_headers {
                     let mut headers_obj = ::server_less::serde_json::Map::new();
                     #(#header_insertions)*
-                    success_response.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                    success_response.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                         .insert("headers".to_string(), ::server_less::serde_json::Value::Object(headers_obj));
                 }
 
@@ -795,7 +805,7 @@ pub fn generate_openapi_spec(
 
                 // Add description if specified
                 if has_description {
-                    operation.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                    operation.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                         .insert("description".to_string(), ::server_less::serde_json::Value::String(description_str.to_string()));
                 }
 
@@ -804,23 +814,23 @@ pub fn generate_openapi_spec(
                     let tags_json: Vec<::server_less::serde_json::Value> = tags.iter()
                         .map(|t| ::server_less::serde_json::Value::String(t.to_string()))
                         .collect();
-                    operation.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                    operation.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                         .insert("tags".to_string(), ::server_less::serde_json::Value::Array(tags_json));
                 }
 
                 // Add deprecated flag if true
                 if deprecated {
-                    operation.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                    operation.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                         .insert("deprecated".to_string(), ::server_less::serde_json::Value::Bool(true));
                 }
 
                 if !parameters.is_empty() {
-                    operation.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                    operation.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                         .insert("parameters".to_string(), ::server_less::serde_json::Value::Array(parameters));
                 }
 
                 if let Some(body) = request_body {
-                    operation.as_object_mut().expect("BUG: json!({}) must produce an Object")
+                    operation.as_object_mut().unwrap_or_else(|| unreachable!("BUG: json!({{}}) must produce an Object"))
                         .insert("requestBody".to_string(), body);
                 }
 

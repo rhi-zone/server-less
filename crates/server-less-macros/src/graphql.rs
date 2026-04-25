@@ -85,7 +85,7 @@ use quote::quote;
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
 use syn::{ItemImpl, Token, parse::Parse};
 
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 
 /// Arguments for the #[graphql] attribute
 #[derive(Default)]
@@ -164,6 +164,9 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
     // Detect whether any method uses qualified server_less::Context (two-pass strategy).
     let has_qualified = has_qualified_context(&methods);
 
+    for m in &methods {
+        validate_server_attrs(m)?;
+    }
     // Partition into leaf methods (skip-filtered) and mount points (&T return types).
     let partitioned = partition_methods(&methods, has_server_skip);
 

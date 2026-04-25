@@ -163,6 +163,7 @@ pub trait IntoErrorCode {
 ///
 /// **Not intended for direct use.** Call `HttpStatusHelper(&err).http_status_code()`
 /// from generated code instead.
+#[doc(hidden)]
 pub trait HttpStatusFallback {
     /// Returns the HTTP status code for this error, defaulting to 500.
     fn http_status_code(&self) -> u16;
@@ -181,6 +182,7 @@ pub trait HttpStatusFallback {
 /// use ::server_less::HttpStatusFallback as _;
 /// let status_u16 = ::server_less::HttpStatusHelper(&err).http_status_code();
 /// ```
+#[doc(hidden)]
 pub struct HttpStatusHelper<'a, T>(pub &'a T);
 
 impl<T: IntoErrorCode> HttpStatusHelper<'_, T> {
