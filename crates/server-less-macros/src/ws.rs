@@ -162,7 +162,7 @@ use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
 // Import Context helpers
-use crate::context::{has_qualified_context, has_qualified_special_param, should_inject_special_param};
+use crate::context::{has_qualified_special_param, should_inject_special_param};
 
 /// Check if a type is server_less::WsSender (fully qualified)
 fn is_qualified_ws_sender(ty: &syn::Type) -> bool {
@@ -212,7 +212,6 @@ fn has_qualified_ws_sender(methods: &[MethodInfo]) -> bool {
 /// Returns an error if multiple Context or WsSender parameters are found.
 fn partition_ws_params(
     params: &[ParamInfo],
-    has_qualified_ctx: bool,
     has_qualified_sender: bool,
 ) -> syn::Result<(Option<&ParamInfo>, Option<&ParamInfo>, Vec<&ParamInfo>)> {
     let mut context_param: Option<&ParamInfo> = None;
@@ -220,7 +219,7 @@ fn partition_ws_params(
     let mut other_params = Vec::new();
 
     for param in params {
-        if crate::context::should_inject_context(&param.ty, has_qualified_ctx) {
+        if crate::context::should_inject_context(&param.ty, params) {
             if context_param.is_some() {
                 return Err(syn::Error::new_spanned(
                     &param.ty,
@@ -256,12 +255,11 @@ fn partition_ws_params(
 /// uses WsSender (can't be dispatched through mount).
 fn build_mount_injections(
     params: &[ParamInfo],
-    has_qualified_ctx: bool,
     has_qualified_sender: bool,
 ) -> Option<Vec<(usize, proc_macro2::TokenStream)>> {
     let mut injections = Vec::new();
     for (i, p) in params.iter().enumerate() {
-        if crate::context::should_inject_context(&p.ty, has_qualified_ctx) {
+        if crate::context::should_inject_context(&p.ty, params) {
             injections.push((i, quote! { ::server_less::Context::new() }));
         } else if should_inject_ws_sender(&p.ty, has_qualified_sender) {
             return None; // Can't dispatch methods requiring WsSender through mount
@@ -319,8 +317,8 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
     let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
-    // PASS 1: Scan for qualified server_less::Context and server_less::WsSender usage
-    let has_qualified_ctx = has_qualified_context(&methods);
+    // PASS 1: Scan for qualified server_less::WsSender usage (impl-wide).
+    // Context detection is now per-method — see should_inject_context.
     let has_qualified_sender = has_qualified_ws_sender(&methods);
 
     let path = args.path.unwrap_or_else(|| "/ws".to_string());
@@ -344,7 +342,7 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_dispatch_arm_sync(m, has_qualified_ctx, has_qualified_sender)?;
+            let arm = generate_dispatch_arm_sync(m, has_qualified_sender)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -357,7 +355,7 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_dispatch_arm_async(m, has_qualified_ctx, has_qualified_sender)?;
+            let arm = generate_dispatch_arm_async(m, has_qualified_sender)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -441,7 +439,7 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
 
     // Check if any leaf method uses Context or WsSender
     let uses_injected_params = partitioned.leaf.iter().any(|m| {
-        partition_ws_params(&m.params, has_qualified_ctx, has_qualified_sender)
+        partition_ws_params(&m.params, has_qualified_sender)
             .map(|(ctx, sender, _)| ctx.is_some() || sender.is_some())
             .unwrap_or(false)
     });
@@ -553,7 +551,7 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
         .iter()
         .filter_map(|m| {
             let injections =
-                build_mount_injections(&m.params, has_qualified_ctx, has_qualified_sender)?;
+                build_mount_injections(&m.params, has_qualified_sender)?;
             let arm = server_less_rpc::generate_dispatch_arm_with_injections(
                 m,
                 None,
@@ -573,7 +571,7 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
         .iter()
         .filter_map(|m| {
             let injections =
-                build_mount_injections(&m.params, has_qualified_ctx, has_qualified_sender)?;
+                build_mount_injections(&m.params, has_qualified_sender)?;
             let arm = server_less_rpc::generate_dispatch_arm_with_injections(
                 m,
                 None,
@@ -899,12 +897,10 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
 /// Generate a dispatch match arm for a method (sync version)
 fn generate_dispatch_arm_sync(
     method: &MethodInfo,
-    has_qualified_ctx: bool,
     has_qualified_sender: bool,
 ) -> syn::Result<TokenStream2> {
     generate_dispatch_arm_with_injected_params(
         method,
-        has_qualified_ctx,
         has_qualified_sender,
         AsyncHandling::Error,
     )
@@ -913,12 +909,10 @@ fn generate_dispatch_arm_sync(
 /// Generate a dispatch match arm for a method (async version)
 fn generate_dispatch_arm_async(
     method: &MethodInfo,
-    has_qualified_ctx: bool,
     has_qualified_sender: bool,
 ) -> syn::Result<TokenStream2> {
     generate_dispatch_arm_with_injected_params(
         method,
-        has_qualified_ctx,
         has_qualified_sender,
         AsyncHandling::Await,
     )
@@ -927,15 +921,14 @@ fn generate_dispatch_arm_async(
 /// Generate dispatch arm with Context and WsSender support
 fn generate_dispatch_arm_with_injected_params(
     method: &MethodInfo,
-    has_qualified_ctx: bool,
     has_qualified_sender: bool,
     async_handling: AsyncHandling,
 ) -> syn::Result<TokenStream2> {
     let method_name_str = method.wire_name_or(|n| n);
 
-    // Partition Context, WsSender, and regular parameters
+    // Partition Context, WsSender, and regular parameters (Context detection is per-method)
     let (context_param, sender_param, regular_params) =
-        partition_ws_params(&method.params, has_qualified_ctx, has_qualified_sender)?;
+        partition_ws_params(&method.params, has_qualified_sender)?;
 
     // If no injected params, use default RPC dispatch
     if context_param.is_none() && sender_param.is_none() {
@@ -967,7 +960,7 @@ fn generate_dispatch_arm_with_injected_params(
     // Build argument list: injected params first, then regular params in their original order
     let mut arg_exprs = Vec::new();
     for param in &method.params {
-        if crate::context::should_inject_context(&param.ty, has_qualified_ctx) {
+        if crate::context::should_inject_context(&param.ty, &method.params) {
             arg_exprs.push(quote! { __ctx.clone() });
         } else if should_inject_ws_sender(&param.ty, has_qualified_sender) {
             arg_exprs.push(quote! { __sender.clone() });

@@ -54,7 +54,7 @@
 //!
 //! Also implements `McpNamespace` trait for composition.
 
-use crate::context::{has_qualified_context, partition_context_params};
+use crate::context::partition_context_params;
 use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -150,9 +150,6 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         format!("{}_", namespace)
     };
 
-    // Detect whether any method uses qualified server_less::Context (two-pass strategy).
-    let has_qualified = has_qualified_context(&methods);
-
     for m in &methods {
         validate_server_attrs(m)?;
     }
@@ -172,7 +169,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let leaf_tool_definitions: Vec<_> = visible_leaf
         .iter()
         .map(|m| {
-            let def = generate_tool_definition(&namespace_prefix, m, has_qualified)?;
+            let def = generate_tool_definition(&namespace_prefix, m)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -186,7 +183,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_dispatch_arm_sync(&namespace_prefix, m, has_qualified);
+            let arm = generate_dispatch_arm_sync(&namespace_prefix, m);
             let cfg_attrs = &m.cfg_attrs;
             quote! {
                 #(#cfg_attrs)*
@@ -199,7 +196,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_dispatch_arm_async(&namespace_prefix, m, has_qualified);
+            let arm = generate_dispatch_arm_async(&namespace_prefix, m);
             let cfg_attrs = &m.cfg_attrs;
             quote! {
                 #(#cfg_attrs)*
@@ -371,7 +368,6 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
 fn generate_tool_definition(
     namespace_prefix: &str,
     method: &MethodInfo,
-    has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
     let base_name = method.wire_name_or(|n| n);
     let name = format!("{}{}", namespace_prefix, base_name);
@@ -382,7 +378,7 @@ fn generate_tool_definition(
 
     // Partition out Context parameters — they are injected, not user-visible inputs.
     let (_ctx_param, user_params) =
-        partition_context_params(&method.params, has_qualified)?;
+        partition_context_params(&method.params)?;
 
     // Generate parameter schema using shared utility (excluding Context params)
     let (properties, required_params) = server_less_rpc::generate_param_schema_for(&user_params);
@@ -417,20 +413,18 @@ fn generate_tool_definition(
 fn generate_dispatch_arm_sync(
     namespace_prefix: &str,
     method: &MethodInfo,
-    has_qualified: bool,
 ) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    generate_dispatch_arm_with_context(method, Some(&tool_name), AsyncHandling::Error, has_qualified)
+    generate_dispatch_arm_with_context(method, Some(&tool_name), AsyncHandling::Error)
 }
 
 /// Generate a dispatch match arm for calling a method (async version)
 fn generate_dispatch_arm_async(
     namespace_prefix: &str,
     method: &MethodInfo,
-    has_qualified: bool,
 ) -> TokenStream2 {
     let tool_name = format!("{}{}", namespace_prefix, method.name);
-    generate_dispatch_arm_with_context(method, Some(&tool_name), AsyncHandling::Await, has_qualified)
+    generate_dispatch_arm_with_context(method, Some(&tool_name), AsyncHandling::Await)
 }
 
 /// Generate a dispatch arm that injects Context parameters instead of reading them from JSON.
@@ -438,15 +432,14 @@ fn generate_dispatch_arm_with_context(
     method: &MethodInfo,
     tool_name: Option<&str>,
     async_handling: AsyncHandling,
-    has_qualified: bool,
 ) -> TokenStream2 {
-    // Find context parameter indices for injection.
+    // Find context parameter indices for injection (per-method detection).
     let injections: Vec<(usize, TokenStream2)> = method
         .params
         .iter()
         .enumerate()
         .filter_map(|(i, p)| {
-            if crate::context::should_inject_context(&p.ty, has_qualified) {
+            if crate::context::should_inject_context(&p.ty, &method.params) {
                 Some((i, quote! { ::server_less::Context::default() }))
             } else {
                 None

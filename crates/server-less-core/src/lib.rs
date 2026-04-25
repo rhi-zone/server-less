@@ -242,7 +242,6 @@ pub struct SchemaValueParser<T: Clone + Send + Sync + 'static> {
     /// parser-construction time (command build, not per-parse), which is
     /// acceptable for a CLI binary: the leak is bounded (a few bytes per
     /// variant) and the memory is reclaimed when the process exits.
-    #[allow(dead_code)]
     variants: Option<std::sync::Arc<[&'static str]>>,
     _marker: std::marker::PhantomData<T>,
 }
@@ -313,6 +312,15 @@ where
             .map_err(|e| ::clap::Error::raw(::clap::error::ErrorKind::ValueValidation, e))
     }
 
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = clap::builder::PossibleValue> + '_>> {
+        self.variants.as_ref().map(|variants| {
+            let v: Vec<_> = variants
+                .iter()
+                .map(|s| clap::builder::PossibleValue::new(*s))
+                .collect();
+            Box::new(v.into_iter()) as Box<dyn Iterator<Item = clap::builder::PossibleValue>>
+        })
+    }
 }
 
 /// Runtime method metadata with string-based types.

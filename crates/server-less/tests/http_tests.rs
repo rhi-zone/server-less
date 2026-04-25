@@ -94,7 +94,7 @@ fn test_http_router_created() {
 
 #[test]
 fn test_openapi_spec_generated() {
-    let spec = ItemService::openapi_spec();
+    let spec = ItemService::http_openapi_spec();
 
     // Check basic structure
     assert_eq!(spec.get("openapi").unwrap(), "3.0.0");
@@ -109,7 +109,7 @@ fn test_openapi_spec_generated() {
 
 #[test]
 fn test_openapi_contains_operations() {
-    let spec = ItemService::openapi_spec();
+    let spec = ItemService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // GET /api/v1/items should have get and post
@@ -205,7 +205,7 @@ impl OverrideService {
 
 #[test]
 fn test_custom_path_in_openapi() {
-    let spec = OverrideService::openapi_spec();
+    let spec = OverrideService::http_openapi_spec();
     let paths = spec.get("paths").unwrap().as_object().unwrap();
 
     // Custom path should be present
@@ -218,7 +218,7 @@ fn test_custom_path_in_openapi() {
 
 #[test]
 fn test_method_override_in_openapi() {
-    let spec = OverrideService::openapi_spec();
+    let spec = OverrideService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // get_data should be POST despite the name
@@ -232,7 +232,7 @@ fn test_method_override_in_openapi() {
 
 #[test]
 fn test_combined_override_in_openapi() {
-    let spec = OverrideService::openapi_spec();
+    let spec = OverrideService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // do_something should be PUT at /special/{id}
@@ -246,7 +246,7 @@ fn test_combined_override_in_openapi() {
 
 #[test]
 fn test_skipped_method_not_in_openapi() {
-    let spec = OverrideService::openapi_spec();
+    let spec = OverrideService::http_openapi_spec();
     let paths = spec.get("paths").unwrap().as_object().unwrap();
 
     // internal_helper should not generate any path
@@ -261,7 +261,7 @@ fn test_skipped_method_not_in_openapi() {
 
 #[test]
 fn test_hidden_method_not_in_openapi() {
-    let spec = OverrideService::openapi_spec();
+    let spec = OverrideService::http_openapi_spec();
     let paths = spec.get("paths").unwrap().as_object().unwrap();
 
     // secret_endpoint should not appear in OpenAPI
@@ -276,7 +276,7 @@ fn test_hidden_method_not_in_openapi() {
 
 #[test]
 fn test_normal_method_still_works() {
-    let spec = OverrideService::openapi_spec();
+    let spec = OverrideService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // list_things should be inferred as GET /things
@@ -324,7 +324,7 @@ impl SchemaService {
 
 #[test]
 fn test_openapi_query_parameters() {
-    let spec = SchemaService::openapi_spec();
+    let spec = SchemaService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // list_items should have query parameters
@@ -348,7 +348,7 @@ fn test_openapi_query_parameters() {
 
 #[test]
 fn test_openapi_path_parameters() {
-    let spec = SchemaService::openapi_spec();
+    let spec = SchemaService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // get_item should have path parameter
@@ -366,7 +366,7 @@ fn test_openapi_path_parameters() {
 
 #[test]
 fn test_openapi_request_body() {
-    let spec = SchemaService::openapi_spec();
+    let spec = SchemaService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // create_item should have request body
@@ -390,7 +390,7 @@ fn test_openapi_request_body() {
 
 #[test]
 fn test_openapi_error_responses() {
-    let spec = SchemaService::openapi_spec();
+    let spec = SchemaService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // update_item returns Result, should have error responses
@@ -468,7 +468,7 @@ fn test_response_service_router_created() {
 
 #[test]
 fn test_response_status_override_in_openapi() {
-    let spec = ResponseService::openapi_spec();
+    let spec = ResponseService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // create_resource should have 201 status in OpenAPI
@@ -485,7 +485,7 @@ fn test_response_status_override_in_openapi() {
 
 #[test]
 fn test_response_no_content_in_openapi() {
-    let spec = ResponseService::openapi_spec();
+    let spec = ResponseService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // delete_resource should have 204 No Content
@@ -501,7 +501,7 @@ fn test_response_no_content_in_openapi() {
 
 #[test]
 fn test_response_content_type_in_openapi() {
-    let spec = ResponseService::openapi_spec();
+    let spec = ResponseService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // download_file should have application/octet-stream content type
@@ -523,7 +523,7 @@ fn test_response_content_type_in_openapi() {
 
 #[test]
 fn test_response_custom_headers_in_openapi() {
-    let spec = ResponseService::openapi_spec();
+    let spec = ResponseService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // get_with_header should document custom header
@@ -543,7 +543,7 @@ fn test_response_custom_headers_in_openapi() {
 
 #[test]
 fn test_response_combined_overrides_in_openapi() {
-    let spec = ResponseService::openapi_spec();
+    let spec = ResponseService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // create_with_all should have all customizations
@@ -585,7 +585,7 @@ fn test_response_combined_overrides_in_openapi() {
 
 #[test]
 fn test_response_normal_method_unchanged() {
-    let spec = ResponseService::openapi_spec();
+    let spec = ResponseService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
     // get_normal should have default 200 response
@@ -622,7 +622,7 @@ impl ServerSkipService {
 
 #[test]
 fn test_server_skip_not_in_openapi() {
-    let spec = ServerSkipService::openapi_spec();
+    let spec = ServerSkipService::http_openapi_spec();
     let paths = spec.get("paths").unwrap().as_object().unwrap();
 
     // Public method should appear
@@ -722,7 +722,7 @@ fn test_http_static_mount_router_created() {
 
 #[test]
 fn test_http_static_mount_openapi_paths() {
-    let spec = HttpApp::openapi_spec();
+    let spec = HttpApp::http_openapi_spec();
     let paths = spec.get("paths").unwrap().as_object().unwrap();
 
     let path_keys: Vec<_> = paths.keys().collect();
@@ -825,7 +825,7 @@ fn test_http_server_hidden_not_in_openapi_paths() {
 
 #[test]
 fn test_http_server_hidden_not_in_openapi_spec() {
-    let spec = HiddenHttpService::openapi_spec();
+    let spec = HiddenHttpService::http_openapi_spec();
     let paths = spec.get("paths").unwrap().as_object().unwrap();
     // The spec paths must not mention the hidden endpoint
     let paths_str = serde_json::to_string(paths).unwrap();
@@ -1313,7 +1313,7 @@ fn test_debug_impl_block_compiles_and_router_created() {
 #[test]
 fn test_debug_impl_block_openapi_still_works() {
     // Debug flag must not interfere with OpenAPI generation.
-    let spec = DebugService::openapi_spec();
+    let spec = DebugService::http_openapi_spec();
     assert_eq!(spec.get("openapi").unwrap(), "3.0.0");
     let paths = spec.get("paths").unwrap().as_object().unwrap();
     // list_debug_items → GET /debug_items, get_debug_item → GET /debug_items/{id}
@@ -1405,7 +1405,7 @@ fn test_trace_impl_block_compiles_and_router_created() {
 #[test]
 fn test_trace_impl_block_openapi_still_works() {
     // Trace flag must not interfere with OpenAPI generation.
-    let spec = TraceService::openapi_spec();
+    let spec = TraceService::http_openapi_spec();
     assert_eq!(spec.get("openapi").unwrap(), "3.0.0");
     let paths = spec.get("paths").unwrap().as_object().unwrap();
     assert!(

@@ -168,7 +168,7 @@ fn test_serve_jsonrpc_only() {
 
 #[test]
 fn test_serve_combined_openapi_spec() {
-    let spec = MultiService::combined_openapi_spec();
+    let spec = MultiService::openapi_spec();
 
     // Should have OpenAPI version
     assert_eq!(spec["openapi"], "3.0.0");
@@ -186,7 +186,7 @@ fn test_serve_combined_openapi_spec() {
 
 #[test]
 fn test_serve_http_openapi_has_paths() {
-    let spec = HttpOnlyService::combined_openapi_spec();
+    let spec = HttpOnlyService::openapi_spec();
 
     // Should have the HTTP endpoint path
     let paths = &spec["paths"];
@@ -199,7 +199,7 @@ fn test_serve_http_openapi_has_paths() {
 
 #[test]
 fn test_serve_combined_openapi_includes_jsonrpc() {
-    let spec = CombinedRpcService::combined_openapi_spec();
+    let spec = CombinedRpcService::openapi_spec();
 
     // Should have HTTP paths AND JSON-RPC path
     let paths = &spec["paths"];
@@ -227,9 +227,9 @@ impl NoOpenApiService {
 
 #[test]
 fn test_serve_openapi_disabled() {
-    // Service should still work, just no combined_openapi_spec() method
+    // Service should still work, just no openapi_spec() method
     let service = NoOpenApiService;
     let _router = service.router();
-    // Note: combined_openapi_spec() should NOT exist on this type
+    // Note: combined openapi_spec() should NOT exist on this type
     // (verified by the fact that it compiles without the method)
 }

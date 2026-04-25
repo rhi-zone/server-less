@@ -337,7 +337,7 @@ fn test_http_router_created() {
 
 #[test]
 fn test_http_openapi_has_endpoints() {
-    let spec = HttpCalculator::openapi_spec();
+    let spec = HttpCalculator::http_openapi_spec();
     let paths = spec["paths"].as_object().unwrap();
 
     // Should have our endpoints (create_sum -> POST /sums, get_sqrt -> GET /sqrts)

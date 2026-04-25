@@ -1323,7 +1323,7 @@ async fn test_serve_graphql_health_endpoint() {
 
 #[tokio::test]
 async fn test_serve_graphql_openapi_spec() {
-    let spec = ServeGraphqlService::combined_openapi_spec();
+    let spec = ServeGraphqlService::openapi_spec();
 
     // The spec should include the GraphQL endpoint paths
     let paths = &spec["paths"];

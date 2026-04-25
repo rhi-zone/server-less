@@ -10,8 +10,8 @@
 //! let spec = OpenApiBuilder::new()
 //!     .title("My API")
 //!     .version("1.0.0")
-//!     .merge(UserService::openapi_spec())
-//!     .merge(OrderService::openapi_spec())
+//!     .merge(UserService::http_openapi_spec())
+//!     .merge(OrderService::http_openapi_spec())
 //!     .build()?;
 //! ```
 

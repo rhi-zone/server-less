@@ -9,7 +9,7 @@
 //! A `fn users(&self) -> &UsersService` method on the parent causes
 //! `ApiService::http_router()` to nest `UsersService`'s routes under `/users/`.
 //! The child's `list_users` route (`GET /users`) becomes `GET /users/users` in
-//! the parent's router. The parent's `openapi_spec()` includes all child paths
+//! the parent's router. The parent's `http_openapi_spec()` includes all child paths
 //! with the `/users/` prefix.
 //!
 //! ## MCP mounts
@@ -144,7 +144,7 @@ fn main() {
 
     // --- HTTP ---
     // The parent's OpenAPI spec includes child paths prefixed with /users/.
-    let spec = ApiService::openapi_spec();
+    let spec = ApiService::http_openapi_spec();
     let paths = spec["paths"].as_object().unwrap();
 
     println!("\nHTTP routes in ApiService spec:");

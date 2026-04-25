@@ -288,7 +288,6 @@ pub fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamIn
 pub fn generate_openapi_paths(
     prefix: &str,
     methods_with_overrides: &[(MethodInfo, RouteOverride, ResponseOverride)],
-    has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
     let mut path_constructors = Vec::new();
 
@@ -321,8 +320,8 @@ pub fn generate_openapi_paths(
         let mut param_constructors = Vec::new();
 
         for param in &method.params {
-            // Skip Context parameters
-            if should_inject_context(&param.ty, has_qualified) {
+            // Skip Context parameters (per-method detection)
+            if should_inject_context(&param.ty, &method.params) {
                 continue;
             }
 
@@ -370,7 +369,7 @@ pub fn generate_openapi_paths(
         // Build request body if needed
         let mut body_props = Vec::new();
         for param in &method.params {
-            if should_inject_context(&param.ty, has_qualified) {
+            if should_inject_context(&param.ty, &method.params) {
                 continue;
             }
 
@@ -486,7 +485,6 @@ pub fn generate_openapi_spec(
     struct_name: &syn::Ident,
     prefix: &str,
     methods_with_overrides: &[(MethodInfo, RouteOverride, ResponseOverride)],
-    has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
     let mut operation_data = Vec::new();
 
@@ -523,8 +521,8 @@ pub fn generate_openapi_spec(
         let mut header_params = Vec::new();
 
         for param in &method.params {
-            // Skip Context parameters - they're injected by the framework
-            if should_inject_context(&param.ty, has_qualified) {
+            // Skip Context parameters - they're injected by the framework (per-method detection)
+            if should_inject_context(&param.ty, &method.params) {
                 continue;
             }
 

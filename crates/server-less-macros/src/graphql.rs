@@ -78,7 +78,7 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::context::{has_qualified_context, partition_context_params, should_inject_context};
+use crate::context::{partition_context_params, should_inject_context};
 use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -166,9 +166,6 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, mut impl_block: ItemImpl) -> syn
     let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
-    // Detect whether any method uses qualified server_less::Context (two-pass strategy).
-    let has_qualified = has_qualified_context(&methods);
-
     for m in &methods {
         validate_server_attrs(m)?;
     }
@@ -190,8 +187,8 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, mut impl_block: ItemImpl) -> syn
         .copied()
         .partition(|m| is_query_method(&m.name_str()));
 
-    let query_fields = generate_field_registrations(&query_methods, has_qualified);
-    let mutation_fields = generate_field_registrations(&mutation_methods, has_qualified);
+    let query_fields = generate_field_registrations(&query_methods);
+    let mutation_fields = generate_field_registrations(&mutation_methods);
 
     let query_resolvers = generate_resolver_dispatch(&struct_name, &query_methods);
     let mutation_resolvers = generate_resolver_dispatch(&struct_name, &mutation_methods);
@@ -383,8 +380,8 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, mut impl_block: ItemImpl) -> syn
     // Generate the field-merging helpers used by parent services that mount this service.
     // These allow a parent's `graphql_schema` to inline this service's fields into its own
     // query/mutation Objects without creating a nested schema.
-    let merge_query_helper = generate_merge_query_helper(&struct_name, &query_methods, has_qualified);
-    let merge_mutation_helper = generate_merge_mutation_helper(&struct_name, &mutation_methods, has_qualified);
+    let merge_query_helper = generate_merge_query_helper(&struct_name, &query_methods);
+    let merge_mutation_helper = generate_merge_mutation_helper(&struct_name, &mutation_methods);
 
     let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "graphql") {
         quote! { #impl_block }
@@ -669,11 +666,11 @@ fn is_query_method(name: &str) -> bool {
         || name.starts_with("has_")
 }
 
-fn generate_field_registrations(methods: &[&MethodInfo], has_qualified: bool) -> Vec<TokenStream2> {
+fn generate_field_registrations(methods: &[&MethodInfo]) -> Vec<TokenStream2> {
     methods
         .iter()
         .map(|m| {
-            let field_code = generate_field_registration(m, has_qualified);
+            let field_code = generate_field_registration(m);
             let cfg_attrs = &m.cfg_attrs;
             quote! {
                 #(#cfg_attrs)*
@@ -683,7 +680,7 @@ fn generate_field_registrations(methods: &[&MethodInfo], has_qualified: bool) ->
         .collect()
 }
 
-fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> TokenStream2 {
+fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
     let method_name = method.name_str();
     let method_ident = &method.name;
     let field_name = method_name.to_lower_camel_case();
@@ -694,7 +691,7 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
 
     // Partition params: context params are injected; only user params go into the GraphQL schema.
     let (_ctx_param, user_params) =
-        partition_context_params(&method.params, has_qualified).unwrap_or((None, method.params.iter().collect()));
+        partition_context_params(&method.params).unwrap_or((None, method.params.iter().collect()));
 
     let arg_registrations: Vec<_> = user_params
         .iter()
@@ -735,7 +732,7 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
 
     // Build arg list for method call: inject Context::default() where needed, pass others by name.
     let param_names: Vec<_> = method.params.iter().map(|p| {
-        if should_inject_context(&p.ty, has_qualified) {
+        if should_inject_context(&p.ty, &method.params) {
             quote! { ::server_less::Context::default() }
         } else {
             let name = &p.name;
@@ -1019,9 +1016,8 @@ fn collect_custom_scalars(methods: &[&MethodInfo]) -> Vec<String> {
 fn generate_merge_query_helper(
     _struct_name: &syn::Ident,
     query_methods: &[&MethodInfo],
-    has_qualified: bool,
 ) -> TokenStream2 {
-    let field_registrations = generate_field_registrations(query_methods, has_qualified);
+    let field_registrations = generate_field_registrations(query_methods);
 
     quote! {
         /// Merge this service's query fields into an existing Object builder.
@@ -1059,10 +1055,9 @@ fn generate_merge_query_helper(
 fn generate_merge_mutation_helper(
     _struct_name: &syn::Ident,
     mutation_methods: &[&MethodInfo],
-    has_qualified: bool,
 ) -> TokenStream2 {
     let field_count = mutation_methods.len();
-    let field_registrations = generate_field_registrations(mutation_methods, has_qualified);
+    let field_registrations = generate_field_registrations(mutation_methods);
 
     quote! {
         /// Merge this service's mutation fields into an existing Object builder.

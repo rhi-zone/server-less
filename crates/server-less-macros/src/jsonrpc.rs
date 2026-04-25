@@ -63,7 +63,7 @@ use server_less_rpc::{self, AsyncHandling};
 use syn::{ItemImpl, Token, parse::Parse};
 
 // Import Context helpers
-use crate::context::{has_qualified_context, partition_context_params};
+use crate::context::partition_context_params;
 
 /// Arguments for the #[jsonrpc] attribute
 #[derive(Default)]
@@ -113,9 +113,6 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
     let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
-    // PASS 1: Scan for qualified server_less::Context usage
-    let has_qualified = has_qualified_context(&methods);
-
     let path = args.path.unwrap_or_else(|| "/rpc".to_string());
 
     for m in &methods {
@@ -136,7 +133,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_dispatch_arm(m, has_qualified)?;
+            let arm = generate_dispatch_arm(m)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -149,7 +146,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_sync_dispatch_arm(m, has_qualified)?;
+            let arm = generate_sync_dispatch_arm(m)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -248,7 +245,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
 
     // Check if any leaf method uses Context
     let uses_context = partitioned.leaf.iter().any(|m| {
-        partition_context_params(&m.params, has_qualified)
+        partition_context_params(&m.params)
             .map(|(ctx, _)| ctx.is_some())
             .unwrap_or(false)
     });
@@ -758,12 +755,11 @@ fn generate_jsonrpc_param_extraction(param: &server_less_parse::ParamInfo) -> To
 /// Returns `Err` for async-only methods, mirroring the WsMount sync pattern.
 fn generate_sync_dispatch_arm(
     method: &MethodInfo,
-    has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
     let method_name_str = method.wire_name_or(|n| n);
 
     // Partition Context vs regular parameters
-    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let (context_param, regular_params) = partition_context_params(&method.params)?;
 
     // If no Context, use default RPC dispatch with AsyncHandling::Error
     if context_param.is_none() {
@@ -781,7 +777,7 @@ fn generate_sync_dispatch_arm(
 
     let mut arg_exprs = Vec::new();
     for param in &method.params {
-        if crate::context::should_inject_context(&param.ty, has_qualified) {
+        if crate::context::should_inject_context(&param.ty, &method.params) {
             arg_exprs.push(quote! { ::server_less::Context::new() });
         } else {
             let name = &param.name;
@@ -807,11 +803,11 @@ fn generate_sync_dispatch_arm(
 ///
 /// Returns `Result<Value, (i32, String)>` arms so that JSON-RPC error codes
 /// are propagated from `IntoErrorCode` implementations.
-fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
+fn generate_dispatch_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
     let method_name_str = method.wire_name_or(|n| n);
 
     // Partition Context vs regular parameters
-    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let (context_param, regular_params) = partition_context_params(&method.params)?;
 
     let response = generate_jsonrpc_json_response(method);
 
@@ -847,7 +843,7 @@ fn generate_dispatch_arm(method: &MethodInfo, has_qualified: bool) -> syn::Resul
     // Build argument list: Context first (if present), then regular params in order
     let mut arg_exprs = Vec::new();
     for param in &method.params {
-        if crate::context::should_inject_context(&param.ty, has_qualified) {
+        if crate::context::should_inject_context(&param.ty, &method.params) {
             arg_exprs.push(quote! { __ctx.clone() });
         } else {
             let name = &param.name;

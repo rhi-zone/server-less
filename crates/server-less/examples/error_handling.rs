@@ -122,7 +122,7 @@ async fn main() {
     println!("\nOpenAPI spec:");
     println!(
         "{}",
-        serde_json::to_string_pretty(&TaskService::openapi_spec()).unwrap()
+        serde_json::to_string_pretty(&TaskService::http_openapi_spec()).unwrap()
     );
 
     let app = service.http_router();

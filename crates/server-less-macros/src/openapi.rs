@@ -67,7 +67,6 @@ use quote::quote;
 use server_less_parse::{MethodInfo, extract_groups, extract_methods, get_impl_name, resolve_method_group};
 use syn::{ItemImpl, Token, parse::Parse};
 
-use crate::context::has_qualified_context;
 use crate::openapi_gen::{ResponseOverride, RouteOverride, generate_openapi_spec};
 
 /// Arguments for the #[openapi] attribute
@@ -225,7 +224,6 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
     } else {
         // Standalone mode: generate paths from method naming conventions
         let methods = extract_methods(&impl_block)?;
-        let has_qualified = has_qualified_context(&methods);
         let prefix = args.prefix.unwrap_or_default();
 
         let group_registry = extract_groups(&impl_block)?;
@@ -248,7 +246,7 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
         }
 
         let openapi_fn =
-            generate_openapi_spec(&struct_name, &prefix, &openapi_methods, has_qualified)?;
+            generate_openapi_spec(&struct_name, &prefix, &openapi_methods)?;
 
         let standalone_doc = format!(
             "Get OpenAPI 3.0 specification for this service ({} endpoint{}).",

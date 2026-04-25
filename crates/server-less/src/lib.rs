@@ -50,7 +50,7 @@
 //!
 //! | Macro | Protocol | Generated Methods |
 //! |-------|----------|-------------------|
-//! | `#[http]` | HTTP/REST | `http_router()`, `openapi_spec()` |
+//! | `#[http]` | HTTP/REST | `http_router()`, `http_openapi_spec()` |
 //! | `#[cli]` | Command Line | `cli_command()`, `cli_run()`, `cli_run_with()`, `cli_run_async()`, `cli_run_with_async()` |
 //! | `#[mcp]` | MCP | `mcp_tools()`, `mcp_call()`, `mcp_call_async()` |
 //! | `#[ws]` | WebSocket | `ws_router()`, `ws_handle_message()`, `ws_handle_message_async()` |

@@ -101,7 +101,7 @@ use syn::{ItemImpl, Token, parse::Parse};
 
 // Import Context helpers
 use crate::context::{
-    generate_cli_context_extraction, has_qualified_context, partition_context_params,
+    generate_cli_context_extraction, partition_context_params,
 };
 use crate::app::extract_app_meta;
 use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
@@ -453,8 +453,6 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let self_ty = &impl_block.self_ty;
     let methods = extract_methods(&impl_block)?;
 
-    // PASS 1: Scan for qualified server_less::Context usage
-    let has_qualified = has_qualified_context(&methods);
 
     let app_name = args
         .name
@@ -510,7 +508,6 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .map(|m| {
             let sub = generate_leaf_subcommand(
                 m,
-                has_qualified,
                 &global_flags,
                 has_defaults,
                 has_cli_hidden(m) || has_groups,
@@ -628,7 +625,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let slug_mount_subcommands: Vec<_> = partitioned
         .slug_mounts
         .iter()
-        .map(|m| generate_slug_mount_subcommand(m, has_qualified, has_cli_hidden(m) || has_groups))
+        .map(|m| generate_slug_mount_subcommand(m, has_cli_hidden(m) || has_groups))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Find the default action (if any) — the method marked #[cli(default)].
@@ -651,7 +648,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     // Parent-level args for the default action so that flags like
     // `app --flag` are parsed (and shown in `app --help`) when no subcommand is specified.
     let default_parent_args: Vec<TokenStream2> = if let Some(dm) = default_method {
-        let (_, regular_params) = partition_context_params(&dm.params, has_qualified)?;
+        let (_, regular_params) = partition_context_params(&dm.params)?;
         let filtered: Vec<_> = regular_params
             .iter()
             .filter(|p| {
@@ -681,7 +678,6 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let default_none_arm: Option<TokenStream2> = if let Some(dm) = default_method {
         Some(generate_leaf_match_arm(
             dm,
-            has_qualified,
             &global_flags,
             &defaults_fn_ident,
             true,
@@ -693,7 +689,6 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let async_default_none_arm: Option<TokenStream2> = if let Some(dm) = default_method {
         Some(generate_leaf_match_arm(
             dm,
-            has_qualified,
             &global_flags,
             &defaults_fn_ident,
             true,
@@ -708,7 +703,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, false)?;
+            let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, false)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -720,7 +715,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, true)?;
+            let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, true)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -745,12 +740,12 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let slug_mount_arms: Vec<_> = partitioned
         .slug_mounts
         .iter()
-        .map(|m| generate_slug_mount_arm(m, has_qualified))
+        .map(|m| generate_slug_mount_arm(m))
         .collect::<syn::Result<Vec<_>>>()?;
     let async_slug_mount_arms: Vec<_> = partitioned
         .slug_mounts
         .iter()
-        .map(|m| generate_slug_mount_arm_async(m, has_qualified))
+        .map(|m| generate_slug_mount_arm_async(m))
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Build subcommand documentation
@@ -1051,7 +1046,6 @@ fn split_docs(docs: &Option<String>) -> (String, Option<String>) {
 
 fn generate_leaf_subcommand(
     method: &MethodInfo,
-    has_qualified: bool,
     global_flags: &[String],
     has_defaults: bool,
     hidden: bool,
@@ -1062,7 +1056,7 @@ fn generate_leaf_subcommand(
     let hide = hidden.then(|| quote! { .hide(true) });
 
     // Filter out Context parameters - they're injected, not CLI args
-    let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let (_, regular_params) = partition_context_params(&method.params)?;
 
     // Generate args, skipping params that are global flags
     let filtered: Vec<_> = regular_params
@@ -1126,7 +1120,6 @@ fn generate_static_mount_subcommand(
 
 fn generate_slug_mount_subcommand(
     method: &MethodInfo,
-    has_qualified: bool,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
     let name = cli_name(method);
@@ -1140,7 +1133,7 @@ fn generate_slug_mount_subcommand(
     let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
     let after_help_set = after_help.map(|h| quote! { __cmd = __cmd.after_help(#h); });
 
-    let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let (_, regular_params) = partition_context_params(&method.params)?;
 
     // Generate positional args for slug params (before subcommands)
     let slug_args: Vec<_> = regular_params
@@ -1331,7 +1324,6 @@ fn generate_arg(
 
 fn generate_leaf_match_arm(
     method: &MethodInfo,
-    has_qualified: bool,
     global_flags: &[String],
     defaults_fn_ident: &Option<syn::Ident>,
     // When true: generates `None =>` arm (default action, no subcommand given)
@@ -1345,7 +1337,7 @@ fn generate_leaf_match_arm(
     let method_name = &method.name;
 
     // Partition Context vs regular parameters
-    let (context_param, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let (context_param, regular_params) = partition_context_params(&method.params)?;
 
     // ── Input schema (compile-time JSON) ──────────────────────────────
     let input_schema = {
@@ -1817,7 +1809,7 @@ fn generate_static_mount_arm_async(method: &MethodInfo) -> syn::Result<TokenStre
     })
 }
 
-fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Result<TokenStream2> {
+fn generate_slug_mount_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
     let subcommand_name = cli_name(method);
     let method_name = &method.name;
     let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
@@ -1827,7 +1819,7 @@ fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
         )
     })?;
 
-    let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let (_, regular_params) = partition_context_params(&method.params)?;
 
     let mut slug_extractions = Vec::new();
     let mut slug_names = Vec::new();
@@ -1858,7 +1850,6 @@ fn generate_slug_mount_arm(method: &MethodInfo, has_qualified: bool) -> syn::Res
 
 fn generate_slug_mount_arm_async(
     method: &MethodInfo,
-    has_qualified: bool,
 ) -> syn::Result<TokenStream2> {
     let subcommand_name = cli_name(method);
     let method_name = &method.name;
@@ -1869,7 +1860,7 @@ fn generate_slug_mount_arm_async(
         )
     })?;
 
-    let (_, regular_params) = partition_context_params(&method.params, has_qualified)?;
+    let (_, regular_params) = partition_context_params(&method.params)?;
 
     let mut slug_extractions = Vec::new();
     let mut slug_names = Vec::new();

@@ -407,7 +407,7 @@ mod tool;
 ///
 /// # Generated Methods
 /// - `http_router() -> axum::Router` - Complete router with all endpoints
-/// - `openapi_spec() -> serde_json::Value` - OpenAPI 3.0 specification (unless `openapi = false`)
+/// - `http_openapi_spec() -> serde_json::Value` - HTTP-only OpenAPI 3.0 specification (unless `openapi = false`)
 ///
 /// # OpenAPI Control
 ///
@@ -415,7 +415,7 @@ mod tool;
 /// OpenAPI generation:
 ///
 /// ```ignore
-/// #[http(openapi = false)]  // No openapi_spec() method generated
+/// #[http(openapi = false)]  // No http_openapi_spec() method generated
 /// impl MyService { /* ... */ }
 /// ```
 ///

@@ -55,7 +55,7 @@ fn test_context_injection_compiles() {
 #[test]
 fn test_openapi_with_context() {
     // Context should not appear in OpenAPI spec (it's injected, not user input)
-    let spec = UserService::openapi_spec();
+    let spec = UserService::http_openapi_spec();
 
     let paths = spec.get("paths").unwrap().as_object().unwrap();
     let create_path = paths.get("/users").unwrap().as_object().unwrap();
@@ -76,11 +76,11 @@ fn test_openapi_with_context() {
     }
 }
 
-/// Test collision case - qualified Context
+/// Test per-method context disambiguation.
 ///
-/// This demonstrates the two-pass detection:
-/// - eval_with_auth uses qualified server_less::Context (injected)
-/// - eval_no_context avoids the collision by not using Context at all
+/// With per-method detection, each method independently determines Context injection:
+/// - eval_with_auth uses qualified server_less::Context (injected by the framework)
+/// - eval_no_context avoids Context entirely (no injection)
 #[derive(Clone)]
 struct InterpreterService;
 
@@ -158,9 +158,14 @@ fn test_jsonrpc_with_context() {
     let _router = service.jsonrpc_router();
 }
 
-/// Test JSON-RPC with collision detection
+/// Test JSON-RPC with per-method context disambiguation.
+///
+/// With per-method detection, each method independently determines whether bare
+/// `Context` is injected. To use a user-defined `Context` type alongside
+/// `server_less::Context`, the method must include the qualified form so that
+/// bare `Context` is NOT treated as the framework's Context.
 #[derive(Serialize, Deserialize)]
-struct Context {
+struct AppCtx {
     interpreter_state: String,
 }
 
@@ -169,21 +174,21 @@ struct RpcInterpreter;
 
 #[jsonrpc]
 impl RpcInterpreter {
-    /// Uses framework Context (qualified)
+    /// Uses framework Context (qualified) — injected by the framework
     fn eval(&self, ctx: server_less::Context, code: String) -> String {
         let _request_id = ctx.request_id();
         format!("Evaluated: {}", code)
     }
 
-    /// Uses user's Context type (bare)
-    fn execute(&self, ctx: Context, code: String) -> String {
-        format!("Executed with {}: {}", ctx.interpreter_state, code)
+    /// Uses app-specific context as a plain parameter (renamed to avoid ambiguity)
+    fn execute(&self, state: String, code: String) -> String {
+        format!("Executed with {}: {}", state, code)
     }
 }
 
 #[test]
-fn test_jsonrpc_context_collision() {
-    // If this compiles, two-pass detection works for JSON-RPC
+fn test_jsonrpc_context_disambiguation() {
+    // If this compiles, per-method context detection works for JSON-RPC
     let service = RpcInterpreter;
     let _router = service.jsonrpc_router();
 }
@@ -224,27 +229,32 @@ fn test_ws_with_context() {
     let _router = service.ws_router();
 }
 
-/// Test WebSocket with collision detection
+/// Test WebSocket with per-method context disambiguation.
+///
+/// With per-method detection, each method independently decides whether bare `Context`
+/// is injected. Methods that use the qualified form `server_less::Context` get it injected;
+/// methods without `server_less::Context` get bare `Context` (if present) injected as the
+/// framework's Context.
 #[derive(Clone)]
 struct WsInterpreter;
 
 #[ws]
 impl WsInterpreter {
-    /// Uses framework Context (qualified)
+    /// Uses framework Context (qualified) — injected by the framework
     fn eval(&self, ctx: server_less::Context, code: String) -> String {
         let _request_id = ctx.request_id();
         format!("Evaluated: {}", code)
     }
 
-    /// Uses user's Context type (bare)
-    fn execute(&self, ctx: Context, code: String) -> String {
-        format!("Executed with {}: {}", ctx.interpreter_state, code)
+    /// Plain method without context — no injection, code is a JSON param
+    fn run_code(&self, code: String) -> String {
+        format!("Running: {}", code)
     }
 }
 
 #[test]
-fn test_ws_context_collision() {
-    // If this compiles, two-pass detection works for WebSocket
+fn test_ws_context_per_method() {
+    // If this compiles, per-method context detection works for WebSocket
     let service = WsInterpreter;
     let _router = service.ws_router();
 }

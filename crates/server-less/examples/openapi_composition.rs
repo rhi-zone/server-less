@@ -59,8 +59,8 @@ impl OrderService {
 
 fn main() {
     // Each service generates its own OpenAPI spec
-    let user_spec = UserService::openapi_spec();
-    let order_spec = OrderService::openapi_spec();
+    let user_spec = UserService::http_openapi_spec();
+    let order_spec = OrderService::http_openapi_spec();
 
     println!("=== User Service Spec ===");
     println!("{}", serde_json::to_string_pretty(&user_spec).unwrap());

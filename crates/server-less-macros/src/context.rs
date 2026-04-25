@@ -43,11 +43,14 @@ pub fn is_bare_context(ty: &Type) -> bool {
     false
 }
 
-/// Check if this type should be treated as server_less::Context for injection
+/// Check if this type should be treated as server_less::Context for injection.
 ///
-/// Two-pass detection strategy:
-/// - If `has_qualified` is true: Only qualified `server_less::Context` is injected
-/// - If `has_qualified` is false: Both bare `Context` and qualified are injected
+/// Scope is per-method: each method independently determines whether bare `Context`
+/// is injected. A qualified `server_less::Context` in method A does not affect method B.
+///
+/// Two-pass detection strategy (evaluated per method):
+/// - If this method has a qualified `server_less::Context` param: only qualified form is injected
+/// - If this method has no qualified `server_less::Context` param: both bare and qualified are injected
 ///
 /// This allows users to disambiguate if they have their own Context type:
 /// ```ignore
@@ -59,30 +62,17 @@ pub fn is_bare_context(ty: &Type) -> bool {
 /// fn foo(&self, ctx: server_less::Context) { }  // ✅ Injected
 /// fn bar(&self, ctx: Context) { }  // ❌ NOT injected (user's type)
 /// ```
-pub fn should_inject_context(ty: &Type, has_qualified: bool) -> bool {
+pub fn should_inject_context(ty: &Type, method_params: &[ParamInfo]) -> bool {
     if is_qualified_context(ty) {
         true
     } else if is_bare_context(ty) {
-        // Only inject bare Context if no qualified version exists in the impl block
-        !has_qualified
+        // Only inject bare Context if this method does not also have a qualified Context param.
+        // Per-method: each method independently decides whether bare Context is the framework's type.
+        let method_has_qualified = method_params.iter().any(|p| is_qualified_context(&p.ty));
+        !method_has_qualified
     } else {
         false
     }
-}
-
-/// Scan all methods to detect if any use qualified server_less::Context
-///
-/// This is the "first pass" of the two-pass detection strategy.
-///
-/// - If any method uses `server_less::Context`, we assume bare `Context` is a user type
-/// - If no method uses qualified form, bare `Context` is assumed to be ours
-pub fn has_qualified_context(methods: &[MethodInfo]) -> bool {
-    methods.iter().any(|method| {
-        method
-            .params
-            .iter()
-            .any(|param| is_qualified_context(&param.ty))
-    })
 }
 
 /// Generic helper: check if a type should be treated as a special injectable param.
@@ -122,7 +112,10 @@ pub fn has_qualified_special_param(
     })
 }
 
-/// Partition parameters into Context and non-Context groups
+/// Partition parameters into Context and non-Context groups.
+///
+/// Detection is per-method: whether bare `Context` is injected is determined
+/// solely by the params of this method, not the impl as a whole.
 ///
 /// Returns `(context_param, other_params)` where:
 /// - `context_param` is `Some(param)` if a Context parameter was found
@@ -131,13 +124,12 @@ pub fn has_qualified_special_param(
 /// Returns an error if multiple Context parameters are found.
 pub fn partition_context_params(
     params: &[ParamInfo],
-    has_qualified: bool,
 ) -> syn::Result<(Option<&ParamInfo>, Vec<&ParamInfo>)> {
     let mut context_param: Option<&ParamInfo> = None;
     let mut other_params = Vec::new();
 
     for param in params {
-        if should_inject_context(&param.ty, has_qualified) {
+        if should_inject_context(&param.ty, params) {
             if context_param.is_some() {
                 return Err(syn::Error::new_spanned(
                     &param.ty,
@@ -244,12 +236,30 @@ mod tests {
         let bare_ctx: Type = parse_quote! { Context };
         let qualified_ctx: Type = parse_quote! { server_less::Context };
 
-        // No qualified in impl block - inject both
-        assert!(should_inject_context(&bare_ctx, false));
-        assert!(should_inject_context(&qualified_ctx, false));
+        // Method with no qualified Context — inject both bare and qualified
+        let no_qualified_params: &[ParamInfo] = &[];
+        assert!(should_inject_context(&bare_ctx, no_qualified_params));
+        assert!(should_inject_context(&qualified_ctx, no_qualified_params));
 
-        // Qualified exists in impl block - only inject qualified
-        assert!(!should_inject_context(&bare_ctx, true));
-        assert!(should_inject_context(&qualified_ctx, true));
+        // Method that itself has a qualified Context param — only inject qualified (per-method disambiguation).
+        // Bare Context should NOT be injected when the method already has a qualified ctx param.
+        let qualified_ty: Type = parse_quote! { server_less::Context };
+        let method_has_qualified = [ParamInfo {
+            name: parse_quote! { ctx },
+            ty: qualified_ty,
+            is_optional: false,
+            is_bool: false,
+            is_vec: false,
+            vec_inner: None,
+            is_id: false,
+            wire_name: None,
+            location: None,
+            default_value: None,
+            short_flag: None,
+            help_text: None,
+            is_positional: false,
+        }];
+        assert!(!should_inject_context(&bare_ctx, &method_has_qualified));
+        assert!(should_inject_context(&qualified_ctx, &method_has_qualified));
     }
 }

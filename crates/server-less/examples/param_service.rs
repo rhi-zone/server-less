@@ -63,7 +63,7 @@ async fn main() {
     println!("OpenAPI spec:");
     println!(
         "{}",
-        serde_json::to_string_pretty(&SearchService::openapi_spec()).unwrap()
+        serde_json::to_string_pretty(&SearchService::http_openapi_spec()).unwrap()
     );
 
     println!("\nStarting server on http://localhost:3000");

@@ -72,8 +72,8 @@ impl Parse for ErrorVariantArgs {
                                 &nv.value,
                                 "expected error code name or HTTP status\n\
                                  \n\
-                                 Valid names: NotFound, InvalidInput, Unauthorized, Forbidden, InternalError\n\
-                                 Or use HTTP status: 400, 404, 500, etc.\n\
+                                 Valid names: NotFound, InvalidInput, Unauthenticated, Forbidden, Internal\n\
+                                 Or use HTTP status: IANA 4xx/5xx plus Cloudflare/nginx/IIS vendor codes.\n\
                                  \n\
                                  Example: #[error(code = NotFound)]",
                             ));
@@ -192,20 +192,90 @@ pub fn expand_serverless_error(input: DeriveInput) -> syn::Result<TokenStream> {
                 quote! { ::server_less::ErrorCode::#ident }
             }
             Some(ErrorCodeSpec::Numeric(status)) => {
-                // Map HTTP status to ErrorCode
-
+                // Map HTTP status codes (IANA standard + vendor extensions) to ErrorCode.
+                // Unknown codes produce a compile error — use a named ErrorCode variant instead.
+                let span = variant_name.span();
                 match status {
+                    // ── Standard IANA 4xx ──────────────────────────────────────────
                     400 => quote! { ::server_less::ErrorCode::InvalidInput },
                     401 => quote! { ::server_less::ErrorCode::Unauthenticated },
+                    402 => quote! { ::server_less::ErrorCode::Internal },
                     403 => quote! { ::server_less::ErrorCode::Forbidden },
                     404 => quote! { ::server_less::ErrorCode::NotFound },
+                    405 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    406 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    407 => quote! { ::server_less::ErrorCode::Unauthenticated },
+                    408 => quote! { ::server_less::ErrorCode::Unavailable },
                     409 => quote! { ::server_less::ErrorCode::Conflict },
+                    410 => quote! { ::server_less::ErrorCode::NotFound },
+                    411 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    412 => quote! { ::server_less::ErrorCode::FailedPrecondition },
+                    413 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    414 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    415 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    416 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    417 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    418 => quote! { ::server_less::ErrorCode::Internal },
+                    421 => quote! { ::server_less::ErrorCode::InvalidInput },
                     422 => quote! { ::server_less::ErrorCode::FailedPrecondition },
+                    423 => quote! { ::server_less::ErrorCode::Conflict },
+                    424 => quote! { ::server_less::ErrorCode::FailedPrecondition },
+                    425 => quote! { ::server_less::ErrorCode::Internal },
+                    426 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    428 => quote! { ::server_less::ErrorCode::FailedPrecondition },
                     429 => quote! { ::server_less::ErrorCode::RateLimited },
+                    431 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    451 => quote! { ::server_less::ErrorCode::Forbidden },
+                    // ── Standard IANA 5xx ──────────────────────────────────────────
                     500 => quote! { ::server_less::ErrorCode::Internal },
                     501 => quote! { ::server_less::ErrorCode::NotImplemented },
+                    502 => quote! { ::server_less::ErrorCode::Unavailable },
                     503 => quote! { ::server_less::ErrorCode::Unavailable },
-                    _ => quote! { ::server_less::ErrorCode::Internal },
+                    504 => quote! { ::server_less::ErrorCode::Unavailable },
+                    505 => quote! { ::server_less::ErrorCode::Internal },
+                    506 => quote! { ::server_less::ErrorCode::Internal },
+                    507 => quote! { ::server_less::ErrorCode::Internal },
+                    508 => quote! { ::server_less::ErrorCode::Internal },
+                    510 => quote! { ::server_less::ErrorCode::Internal },
+                    511 => quote! { ::server_less::ErrorCode::Unauthenticated },
+                    // ── Cloudflare vendor 5xx ──────────────────────────────────────
+                    520 => quote! { ::server_less::ErrorCode::Internal },
+                    521 => quote! { ::server_less::ErrorCode::Unavailable },
+                    522 => quote! { ::server_less::ErrorCode::Unavailable },
+                    523 => quote! { ::server_less::ErrorCode::Unavailable },
+                    524 => quote! { ::server_less::ErrorCode::Unavailable },
+                    525 => quote! { ::server_less::ErrorCode::Internal },
+                    526 => quote! { ::server_less::ErrorCode::Internal },
+                    527 => quote! { ::server_less::ErrorCode::Unavailable },
+                    530 => quote! { ::server_less::ErrorCode::Unavailable },
+                    // ── nginx vendor ───────────────────────────────────────────────
+                    444 => quote! { ::server_less::ErrorCode::Internal },
+                    494 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    495 => quote! { ::server_less::ErrorCode::Internal },
+                    496 => quote! { ::server_less::ErrorCode::Unauthenticated },
+                    497 => quote! { ::server_less::ErrorCode::InvalidInput },
+                    499 => quote! { ::server_less::ErrorCode::Internal },
+                    // ── IIS vendor ─────────────────────────────────────────────────
+                    440 => quote! { ::server_less::ErrorCode::Unauthenticated },
+                    449 => quote! { ::server_less::ErrorCode::Internal },
+                    // ── Unknown ────────────────────────────────────────────────────
+                    other => {
+                        return Err(syn::Error::new(
+                            span,
+                            format!(
+                                "unknown HTTP status code {other}; \
+                                 use a named ErrorCode variant instead\n\
+                                 \n\
+                                 Valid named variants: NotFound, InvalidInput, Unauthenticated, \
+                                 Forbidden, Conflict, FailedPrecondition, RateLimited, Internal, \
+                                 NotImplemented, Unavailable\n\
+                                 \n\
+                                 Known numeric codes: IANA 4xx/5xx plus Cloudflare/nginx/IIS vendor codes.\n\
+                                 \n\
+                                 Example: #[error(code = NotFound)]"
+                            ),
+                        ));
+                    }
                 }
             }
             None => {
