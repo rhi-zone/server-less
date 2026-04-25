@@ -134,6 +134,24 @@ impl ErrorCode {
     }
 }
 
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            ErrorCode::InvalidInput => "INVALID_INPUT",
+            ErrorCode::Unauthenticated => "UNAUTHENTICATED",
+            ErrorCode::Forbidden => "FORBIDDEN",
+            ErrorCode::NotFound => "NOT_FOUND",
+            ErrorCode::Conflict => "CONFLICT",
+            ErrorCode::FailedPrecondition => "FAILED_PRECONDITION",
+            ErrorCode::RateLimited => "RATE_LIMITED",
+            ErrorCode::Internal => "INTERNAL",
+            ErrorCode::NotImplemented => "NOT_IMPLEMENTED",
+            ErrorCode::Unavailable => "UNAVAILABLE",
+        };
+        f.write_str(s)
+    }
+}
+
 /// Trait for converting errors to protocol-agnostic error codes.
 ///
 /// Implement this for your error types, or use the derive macro.
@@ -275,7 +293,7 @@ impl ErrorResponse {
     /// Create a new `ErrorResponse` from an `ErrorCode` and a message.
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
-            code: format!("{:?}", code).to_uppercase(),
+            code: code.to_string(),
             message: message.into(),
             details: None,
         }

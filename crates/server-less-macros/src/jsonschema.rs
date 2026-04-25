@@ -66,7 +66,7 @@ impl Parse for JsonSchemaArgs {
             input.parse::<Token![=]>()?;
 
             match ident.to_string().as_str() {
-                "title" => {
+                "name" | "title" => {
                     let lit: syn::LitStr = input.parse()?;
                     args.title = Some(lit.value());
                 }
@@ -77,7 +77,7 @@ impl Parse for JsonSchemaArgs {
                 other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown argument `{other}`. Valid arguments: title, draft"),
+                        format!("unknown argument `{other}`. Valid arguments: name, draft"),
                     ));
                 }
             }

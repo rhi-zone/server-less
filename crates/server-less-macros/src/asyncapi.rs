@@ -67,7 +67,7 @@ impl Parse for AsyncApiArgs {
             input.parse::<Token![=]>()?;
 
             match ident.to_string().as_str() {
-                "title" => {
+                "name" | "title" => {
                     let lit: syn::LitStr = input.parse()?;
                     args.title = Some(lit.value());
                 }
@@ -83,7 +83,7 @@ impl Parse for AsyncApiArgs {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`. Valid arguments: title, version, server"
+                            "unknown argument `{other}`. Valid arguments: name, version, server"
                         ),
                     ));
                 }
@@ -161,17 +161,12 @@ pub(crate) fn expand_asyncapi(
                     .unwrap_or_else(|_| "{}".to_string())
             }
 
-            /// Get the AsyncAPI spec as YAML string.
+            /// Get the AsyncAPI spec as a JSON string (JSON is a valid subset of YAML).
+            ///
+            /// Note: returns JSON-formatted output. To get idiomatic YAML formatting,
+            /// add `serde_yaml` to your project and call `serde_yaml::to_string(&Self::asyncapi_spec())`.
             pub fn asyncapi_yaml() -> String {
-                // Simple JSON to YAML-ish conversion for readability
                 Self::asyncapi_json()
-                    .replace("{", "")
-                    .replace("}", "")
-                    .replace("[", "")
-                    .replace("]", "")
-                    .replace("\":", ":")
-                    .replace("\",", "")
-                    .replace("\"", "")
             }
 
             /// Write the AsyncAPI spec to a file.

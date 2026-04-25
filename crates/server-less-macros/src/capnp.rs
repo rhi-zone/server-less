@@ -100,8 +100,22 @@ pub(crate) fn expand_capnp(args: CapnpArgs, impl_block: ItemImpl) -> syn::Result
     let struct_name_str = struct_name.to_string();
     let methods = extract_methods(&impl_block)?;
 
-    // Use provided ID or generate a placeholder
-    let schema_id = args.id.unwrap_or_else(|| "0x0000000000000000".to_string());
+    // Require a non-zero unique ID
+    let schema_id = match args.id {
+        Some(ref id) if id == "0x0000000000000000" || id == "0" => {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "#[capnp] requires a non-zero id: #[capnp(id = \"0xABCD1234ABCD1234\")] — generate one with: capnp id",
+            ));
+        }
+        Some(ref id) => id.clone(),
+        None => {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "#[capnp] requires an id: #[capnp(id = \"0xABCD1234ABCD1234\")] — generate one with: capnp id",
+            ));
+        }
+    };
 
     // Generate Cap'n Proto schema
     let interface_methods: Vec<String> = methods

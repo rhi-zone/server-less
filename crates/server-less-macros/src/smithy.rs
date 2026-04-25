@@ -332,7 +332,12 @@ fn rust_type_to_smithy(ty: &Option<syn::Type>) -> &'static str {
     } else if type_str.contains("bool") {
         "Boolean"
     } else if type_str.contains("Vec") {
-        "List"
+        // Vec<T> requires a named List shape in Smithy IDL. Bare `List` is not
+        // valid — a proper model needs a separate `list FooList { member: T }`
+        // shape definition. For now we emit `StringList` as a placeholder for
+        // Vec<String> / Vec<u8>, which covers the most common case. Complex
+        // element types require manual Smithy model authoring.
+        "StringList"
     } else {
         "Document"
     }

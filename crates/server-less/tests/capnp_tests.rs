@@ -120,11 +120,11 @@ fn test_capnp_doc_comments() {
     );
 }
 
-// Test default schema ID
+// Test that a non-zero ID is required
 #[derive(Clone)]
 struct SimpleService;
 
-#[capnp]
+#[capnp(id = "0xdeadbeefdeadbeef")]
 impl SimpleService {
     pub fn do_thing(&self) -> String {
         "done".to_string()
@@ -132,13 +132,13 @@ impl SimpleService {
 }
 
 #[test]
-fn test_capnp_default_id() {
+fn test_capnp_requires_id() {
     let schema = SimpleService::capnp_schema();
 
-    // Default ID should be placeholder
+    // Should use the provided ID
     assert!(
-        schema.contains("@0x0000000000000000"),
-        "Should have default placeholder ID"
+        schema.contains("@0xdeadbeefdeadbeef"),
+        "Should have provided schema ID"
     );
 }
 
@@ -146,7 +146,7 @@ fn test_capnp_default_id() {
 #[derive(Clone)]
 struct TypeService;
 
-#[capnp]
+#[capnp(id = "0x1234567890abcdef")]
 impl TypeService {
     pub fn get_int(&self) -> i32 {
         42
