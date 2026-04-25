@@ -829,6 +829,27 @@ fn generate_param_handling(
             body_extractor: ::server_less::axum::extract::Json<::server_less::serde_json::Value>
         });
 
+        // Collect known body field names for unknown-field warnings
+        let body_known_names: Vec<String> = body_params
+            .iter()
+            .map(|p| p.wire_name.clone().unwrap_or_else(|| p.name_str()))
+            .collect();
+        let body_known_strs: Vec<&str> = body_known_names.iter().map(|s| s.as_str()).collect();
+        let body_expected_str = body_known_strs.join(", ");
+        pre_stmts.push(quote! {
+            // Warn on unknown body fields (known at compile time)
+            if let ::std::option::Option::Some(obj) = body_extractor.0.as_object() {
+                for key in obj.keys() {
+                    if ![#(#body_known_strs),*].contains(&key.as_str()) {
+                        eprintln!(
+                            "[server-less] warning: unknown body field `{}` (expected: {})",
+                            key, #body_expected_str
+                        );
+                    }
+                }
+            }
+        });
+
         for param in &body_params {
             // Use wire_name if provided, otherwise use the parameter name
             let name_str = param
@@ -838,9 +859,23 @@ fn generate_param_handling(
             let ty = &param.ty;
             if param.is_optional {
                 let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
-                calls.push(quote! {
-                        body_extractor.0.get(#name_str).and_then(|v| ::server_less::serde_json::from_value::<#inner_ty>(v.clone()).ok())
-                    });
+                let var_ident = format_ident!("__sl_opt_{}", param.name_str());
+                pre_stmts.push(quote! {
+                    let #var_ident: ::std::option::Option<#inner_ty> = match body_extractor.0.get(#name_str) {
+                        ::std::option::Option::None => ::std::option::Option::None,
+                        ::std::option::Option::Some(v) => match ::server_less::serde_json::from_value::<#inner_ty>(v.clone()) {
+                            ::std::result::Result::Ok(val) => ::std::option::Option::Some(val),
+                            ::std::result::Result::Err(_) => {
+                                use ::server_less::axum::response::IntoResponse as _;
+                                return (
+                                    ::server_less::axum::http::StatusCode::BAD_REQUEST,
+                                    format!("Optional body field '{}' has invalid value", #name_str),
+                                ).into_response();
+                            }
+                        }
+                    };
+                });
+                calls.push(quote! { #var_ident });
             } else {
                 let var_ident = format_ident!("__sl_req_{}", param.name_str());
                 pre_stmts.push(quote! {
@@ -869,6 +904,25 @@ fn generate_param_handling(
             query_extractor: ::server_less::axum::extract::Query<::std::collections::HashMap<String, String>>
         });
 
+        // Collect known query param names for unknown-param warnings
+        let query_known_names: Vec<String> = query_params
+            .iter()
+            .map(|p| p.wire_name.clone().unwrap_or_else(|| p.name_str()))
+            .collect();
+        let query_known_strs: Vec<&str> = query_known_names.iter().map(|s| s.as_str()).collect();
+        let query_expected_str = query_known_strs.join(", ");
+        pre_stmts.push(quote! {
+            // Warn on unknown query params (known at compile time)
+            for key in query_extractor.0.keys() {
+                if ![#(#query_known_strs),*].contains(&key.as_str()) {
+                    eprintln!(
+                        "[server-less] warning: unknown query parameter `{}` (expected: {})",
+                        key, #query_expected_str
+                    );
+                }
+            }
+        });
+
         for param in &query_params {
             // Use wire_name if provided, otherwise use the parameter name
             let name_str = param
@@ -880,9 +934,23 @@ fn generate_param_handling(
             // Handle default values
             if param.is_optional {
                 let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
-                calls.push(quote! {
-                    query_extractor.0.get(#name_str).and_then(|v| v.parse::<#inner_ty>().ok())
+                let var_ident = format_ident!("__sl_opt_{}", param.name_str());
+                pre_stmts.push(quote! {
+                    let #var_ident: ::std::option::Option<#inner_ty> = match query_extractor.0.get(#name_str) {
+                        ::std::option::Option::None => ::std::option::Option::None,
+                        ::std::option::Option::Some(v) => match v.parse::<#inner_ty>() {
+                            ::std::result::Result::Ok(val) => ::std::option::Option::Some(val),
+                            ::std::result::Result::Err(_) => {
+                                use ::server_less::axum::response::IntoResponse as _;
+                                return (
+                                    ::server_less::axum::http::StatusCode::BAD_REQUEST,
+                                    format!("Optional query parameter '{}' has invalid value", #name_str),
+                                ).into_response();
+                            }
+                        }
+                    };
                 });
+                calls.push(quote! { #var_ident });
             } else if let Some(ref default_val) = param.default_value {
                 // Parse the default value at compile time
                 let default_expr: proc_macro2::TokenStream = default_val.parse().map_err(|_| {
@@ -926,6 +994,10 @@ fn generate_param_handling(
 
     // Generate header parameter extraction
     if !header_params.is_empty() {
+        // Note: we intentionally do NOT generate unknown-header warnings here.
+        // HTTP requests routinely carry many standard headers (Content-Type, Authorization,
+        // Accept, User-Agent, etc.) that are not method params. Warning on them would produce
+        // false positives on nearly every request, making the feature useless.
         extractions.push(quote! {
             headers: ::server_less::axum::http::HeaderMap
         });
@@ -940,11 +1012,23 @@ fn generate_param_handling(
 
             if param.is_optional {
                 let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
-                calls.push(quote! {
-                    headers.get(#name_str)
-                        .and_then(|v| v.to_str().ok())
-                        .and_then(|v| v.parse::<#inner_ty>().ok())
+                let var_ident = format_ident!("__sl_opt_{}", param.name_str());
+                pre_stmts.push(quote! {
+                    let #var_ident: ::std::option::Option<#inner_ty> = match headers.get(#name_str) {
+                        ::std::option::Option::None => ::std::option::Option::None,
+                        ::std::option::Option::Some(raw) => match raw.to_str().ok().and_then(|v| v.parse::<#inner_ty>().ok()) {
+                            ::std::option::Option::Some(val) => ::std::option::Option::Some(val),
+                            ::std::option::Option::None => {
+                                use ::server_less::axum::response::IntoResponse as _;
+                                return (
+                                    ::server_less::axum::http::StatusCode::BAD_REQUEST,
+                                    format!("Optional header '{}' has invalid value", #name_str),
+                                ).into_response();
+                            }
+                        }
+                    };
                 });
+                calls.push(quote! { #var_ident });
             } else {
                 let var_ident = format_ident!("__sl_req_{}", param.name_str());
                 pre_stmts.push(quote! {

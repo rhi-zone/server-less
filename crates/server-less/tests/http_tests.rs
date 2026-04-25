@@ -1643,3 +1643,275 @@ async fn test_trace_handler_returns_correct_response() {
         response.status()
     );
 }
+
+// ============================================================================
+// Optional param present-but-invalid → 400 tests
+// ============================================================================
+
+#[derive(Clone)]
+struct OptionalParamService;
+
+#[http(prefix = "/opt")]
+impl OptionalParamService {
+    /// List with optional page number
+    pub fn list_opt(&self, page: Option<u32>) -> Vec<String> {
+        vec![format!("page={}", page.unwrap_or(1))]
+    }
+}
+
+#[derive(Clone)]
+struct OptionalBodyService;
+
+#[http(prefix = "/opt-body")]
+impl OptionalBodyService {
+    /// Create with optional count
+    pub fn create_opt(&self, name: String, count: Option<u32>) -> String {
+        format!("{} x{}", name, count.unwrap_or(1))
+    }
+}
+
+/// Optional query param present with invalid type → 400 (not silent None).
+#[tokio::test]
+async fn test_optional_query_param_invalid_returns_400() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = OptionalParamService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/opt/opts?page=not-a-number")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Optional query param present-but-invalid should return 400; got: {}",
+        response.status()
+    );
+}
+
+/// Optional query param absent → None (200 OK).
+#[tokio::test]
+async fn test_optional_query_param_absent_returns_200() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = OptionalParamService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/opt/opts")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Optional query param absent should return 200; got: {}",
+        response.status()
+    );
+}
+
+/// Optional query param present with valid value → Some(value), 200 OK.
+#[tokio::test]
+async fn test_optional_query_param_valid_returns_200() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = OptionalParamService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/opt/opts?page=3")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Optional query param valid should return 200; got: {}",
+        response.status()
+    );
+}
+
+/// Optional body field present with invalid type → 400.
+#[tokio::test]
+async fn test_optional_body_field_invalid_returns_400() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = OptionalBodyService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/opt-body/opts")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"widget","count":"not-a-number"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Optional body field present-but-invalid should return 400; got: {}",
+        response.status()
+    );
+}
+
+/// Optional body field absent → None (200 OK).
+#[tokio::test]
+async fn test_optional_body_field_absent_returns_200() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = OptionalBodyService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/opt-body/opts")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"widget"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Optional body field absent should return 200; got: {}",
+        response.status()
+    );
+}
+
+/// Optional body field present with valid value → Some(value), 200 OK.
+#[tokio::test]
+async fn test_optional_body_field_valid_returns_200() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = OptionalBodyService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/opt-body/opts")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"widget","count":5}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Optional body field valid should return 200; got: {}",
+        response.status()
+    );
+}
+
+// ============================================================================
+// Unknown param warning tests
+// ============================================================================
+
+#[derive(Clone)]
+struct WarnService;
+
+#[http(prefix = "/warn")]
+impl WarnService {
+    /// Get with known query param
+    pub fn list_warn(&self, known: String) -> Vec<String> {
+        vec![known]
+    }
+
+    /// Post with known body field
+    pub fn create_warn(&self, known: String) -> String {
+        known
+    }
+}
+
+/// Unknown query param triggers a [server-less] warning to stderr.
+#[tokio::test]
+async fn test_unknown_query_param_logs_warning() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    // Capture stderr output during the request
+    // We can't easily capture eprintln! in tests, but we can verify the request
+    // succeeds (unknown params are warned, not rejected) and check the behavior
+    // by verifying 200 is returned (the unknown param is ignored at the handler level).
+    let response = WarnService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/warn/warns?known=hello&unknown_extra=foo")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Unknown param should NOT cause a 400; it should just warn and proceed.
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Unknown query param should warn (not reject); got: {}",
+        response.status()
+    );
+}
+
+/// Unknown body field triggers a [server-less] warning to stderr.
+#[tokio::test]
+async fn test_unknown_body_field_logs_warning() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    let response = WarnService
+        .http_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/warn/warns")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"known":"hello","unexpected_field":"bar"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Unknown field should NOT cause a 400; it should just warn and proceed.
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Unknown body field should warn (not reject); got: {}",
+        response.status()
+    );
+}
