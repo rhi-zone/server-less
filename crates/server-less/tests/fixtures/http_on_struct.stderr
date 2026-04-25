@@ -1,5 +1,11 @@
-error: expected `impl`
- --> tests/fixtures/http_on_struct.rs:5:1
+error: #[http] can only be applied to impl blocks.
+
+       Example:
+         #[http]
+         impl MyService { ... }
+ --> tests/fixtures/http_on_struct.rs:4:1
   |
-5 | struct MyService {
-  | ^^^^^^
+4 | #[http]
+  | ^^^^^^^
+  |
+  = note: this error originates in the attribute macro `http` (in Nightly builds, run with -Z macro-backtrace for more info)

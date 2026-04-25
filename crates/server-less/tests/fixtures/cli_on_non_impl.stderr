@@ -1,5 +1,11 @@
-error: expected `impl`
- --> tests/fixtures/cli_on_non_impl.rs:6:1
+error: #[cli] can only be applied to impl blocks.
+
+       Example:
+         #[cli]
+         impl MyService { ... }
+ --> tests/fixtures/cli_on_non_impl.rs:5:1
   |
-6 | fn my_function() -> String {
-  | ^^
+5 | #[cli]
+  | ^^^^^^
+  |
+  = note: this error originates in the attribute macro `cli` (in Nightly builds, run with -Z macro-backtrace for more info)
