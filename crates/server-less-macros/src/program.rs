@@ -40,7 +40,7 @@ pub(crate) struct ProgramArgs {
     /// Whether the config subcommand is enabled (default: true when config_ty is set).
     pub config_cmd: bool,
     /// Whether to prepend the program name to the description (forwarded to CliArgs).
-    pub name_prefix: Option<bool>,
+    pub description_prefix: Option<bool>,
 }
 
 impl Parse for ProgramArgs {
@@ -77,9 +77,9 @@ impl Parse for ProgramArgs {
                     args.config_ty = Some(path);
                     args.config_cmd = true; // enabled by default when config is set
                 }
-                "name_prefix" => {
+                "description_prefix" => {
                     let lit: syn::LitBool = input.parse()?;
-                    args.name_prefix = Some(lit.value());
+                    args.description_prefix = Some(lit.value());
                 }
                 "config_cmd" => {
                     // config_cmd = false | "custom-name"
@@ -101,8 +101,16 @@ impl Parse for ProgramArgs {
                              Example: #[program(description = \"My CLI tool\")]",
                         ));
                     }
+                    if other == "name_prefix" {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "unknown argument `name_prefix` — renamed to `description_prefix`\n\
+                             \n\
+                             Example: #[program(description_prefix = false)]",
+                        ));
+                    }
                     const VALID: &[&str] =
-                        &["name", "version", "description", "homepage", "markdown", "config", "config_cmd", "name_prefix"];
+                        &["name", "version", "description", "homepage", "markdown", "config", "config_cmd", "description_prefix"];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
                         .unwrap_or_default();
@@ -110,7 +118,7 @@ impl Parse for ProgramArgs {
                         ident.span(),
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
-                             Valid arguments: name, version, description, homepage, markdown, config, config_cmd, name_prefix"
+                             Valid arguments: name, version, description, homepage, markdown, config, config_cmd, description_prefix"
                         ),
                     ));
                 }
@@ -145,7 +153,7 @@ pub(crate) fn expand_program(args: ProgramArgs, mut impl_block: ItemImpl) -> syn
         no_async: false,
         config_ty,
         config_cmd_name: args.config_cmd_name,
-        name_prefix: args.name_prefix,
+        description_prefix: args.description_prefix,
     };
     let cli_tokens = cli::expand_cli(cli_args, impl_block.clone())?;
 

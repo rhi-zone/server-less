@@ -50,7 +50,11 @@ impl HttpMethod {
 #[derive(Default, Clone)]
 pub struct RouteOverride {
     pub method: Option<String>,
+    /// Span of the `#[route(method = "...")]` literal, for precise error reporting.
+    pub method_span: Option<proc_macro2::Span>,
     pub path: Option<String>,
+    /// Span of the `#[route(path = "...")]` literal, for precise error reporting.
+    pub path_span: Option<proc_macro2::Span>,
     pub skip: bool,
     pub hidden: bool,
     /// Tags for grouping operations in documentation
@@ -86,10 +90,12 @@ impl RouteOverride {
                     Ok(())
                 } else if meta.path.is_ident("method") {
                     let value: syn::LitStr = meta.value()?.parse()?;
+                    result.method_span = Some(value.span());
                     result.method = Some(value.value().to_uppercase());
                     Ok(())
                 } else if meta.path.is_ident("path") {
                     let value: syn::LitStr = meta.value()?.parse()?;
+                    result.path_span = Some(value.span());
                     result.path = Some(value.value());
                     Ok(())
                 } else if meta.path.is_ident("tags") {

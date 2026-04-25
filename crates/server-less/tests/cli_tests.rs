@@ -1809,7 +1809,7 @@ async fn test_async_output_schema_flag() {
     );
 }
 
-// --- name_prefix tests ---
+// --- description_prefix tests ---
 
 #[derive(Clone)]
 struct NamePrefixService;
@@ -1823,21 +1823,21 @@ impl NamePrefixService {
 #[derive(Clone)]
 struct NoPrefixService;
 
-#[cli(name = "my-tool", description = "Does useful things", name_prefix = false)]
+#[cli(name = "my-tool", description = "Does useful things", description_prefix = false)]
 impl NoPrefixService {
     /// A placeholder subcommand
     fn run(&self) {}
 }
 
 #[test]
-fn test_name_prefix_default() {
+fn test_description_prefix_default() {
     let cmd = NamePrefixService::cli_command();
     let about = cmd.get_about().map(|s| s.to_string()).unwrap_or_default();
     assert_eq!(about, "my-tool - Does useful things");
 }
 
 #[test]
-fn test_name_prefix_false() {
+fn test_description_prefix_false() {
     let cmd = NoPrefixService::cli_command();
     let about = cmd.get_about().map(|s| s.to_string()).unwrap_or_default();
     assert_eq!(about, "Does useful things");

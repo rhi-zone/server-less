@@ -144,6 +144,7 @@
 //! let app = service.http_router();
 //! ```
 
+use heck::ToSnakeCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
@@ -390,7 +391,23 @@ pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Resu
                 "PUT" => HttpMethod::Put,
                 "PATCH" => HttpMethod::Patch,
                 "DELETE" => HttpMethod::Delete,
-                _ => infer_http_method(&method.name_str()),
+                other => {
+                    let span = overrides.method_span.unwrap_or_else(|| method.name.span());
+                    const SUPPORTED: &[&str] = &["GET", "POST", "PUT", "PATCH", "DELETE"];
+                    let suggestion = crate::did_you_mean(other, SUPPORTED)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
+                    return Err(syn::Error::new(
+                        span,
+                        format!(
+                            "unknown HTTP method `{other}`{suggestion}\n\
+                             \n\
+                             Supported methods: GET, POST, PUT, PATCH, DELETE\n\
+                             \n\
+                             Hint: Use one of the supported verbs, e.g., #[route(method = \"POST\")]"
+                        ),
+                    ));
+                }
             }
         } else {
             infer_http_method(&method.name_str())
@@ -593,7 +610,7 @@ fn generate_handler(
     trace: bool,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
-    let struct_name_snake = struct_name.to_string().to_lowercase();
+    let struct_name_snake = struct_name.to_string().to_snake_case();
     let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
     let method_name_str = method_name.to_string();
 
@@ -1213,7 +1230,7 @@ fn generate_route(
     struct_name: &syn::Ident,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
-    let struct_name_snake = struct_name.to_string().to_lowercase();
+    let struct_name_snake = struct_name.to_string().to_snake_case();
     let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
 
     let http_method = if let Some(ref m) = overrides.method {
@@ -1223,14 +1240,31 @@ fn generate_route(
             "PUT" => HttpMethod::Put,
             "PATCH" => HttpMethod::Patch,
             "DELETE" => HttpMethod::Delete,
-            _ => infer_http_method(&method_name.to_string()),
+            other => {
+                // Unknown verbs are caught earlier in expand_http; this branch
+                // is unreachable in normal use but kept for defensive correctness.
+                let span = overrides.method_span.unwrap_or_else(|| method_name.span());
+                const SUPPORTED: &[&str] = &["GET", "POST", "PUT", "PATCH", "DELETE"];
+                let suggestion = crate::did_you_mean(other, SUPPORTED)
+                    .map(|s| format!(" — did you mean `{s}`?"))
+                    .unwrap_or_default();
+                return Err(syn::Error::new(
+                    span,
+                    format!(
+                        "unknown HTTP method `{other}`{suggestion}\n\
+                         \n\
+                         Supported methods: GET, POST, PUT, PATCH, DELETE"
+                    ),
+                ));
+            }
         }
     } else {
         infer_http_method(&method_name.to_string())
     };
 
     let path = if let Some(ref p) = overrides.path {
-        validate_http_path(p, method_name.span())?;
+        let span = overrides.path_span.unwrap_or_else(|| method_name.span());
+        validate_http_path(p, span)?;
         p.clone()
     } else {
         infer_path(&method_name.to_string(), &http_method, &method.params)
@@ -1267,12 +1301,16 @@ fn normalize_path_for_duplicate_check(path: &str) -> String {
         .join("/")
 }
 
-/// Validate HTTP path at compile time
-fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result<()> {
+/// Validate HTTP path at compile time.
+///
+/// `path_span` should be the span of the `#[route(path = "...")]` literal so
+/// that error diagnostics underline the problematic string rather than the
+/// method name.
+fn validate_http_path(path: &str, path_span: proc_macro2::Span) -> syn::Result<()> {
     // Check that path starts with /
     if !path.starts_with('/') {
         return Err(syn::Error::new(
-            method_span,
+            path_span,
             format!(
                 "HTTP path must start with '/'. Got: '{}'\n\
                  \n\
@@ -1285,7 +1323,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
     // Check for multiple consecutive slashes
     if path.contains("//") {
         return Err(syn::Error::new(
-            method_span,
+            path_span,
             format!(
                 "HTTP path contains consecutive slashes. Path: '{}'\n\
                  \n\
@@ -1298,7 +1336,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
     // Warn about trailing slashes (can cause routing issues)
     if path.len() > 1 && path.ends_with('/') {
         return Err(syn::Error::new(
-            method_span,
+            path_span,
             format!(
                 "HTTP path has trailing slash. Path: '{}'\n\
                  \n\
@@ -1325,7 +1363,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
             ""
         };
         return Err(syn::Error::new(
-            method_span,
+            path_span,
             format!(
                 "HTTP path contains invalid character '{}'. Path: '{}'{}",
                 ch, path, hint
@@ -1338,7 +1376,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
     let close_braces = path.matches('}').count();
     if open_braces != close_braces {
         return Err(syn::Error::new(
-            method_span,
+            path_span,
             format!(
                 "HTTP path has mismatched braces. Path: '{}'\n\
                  \n\
@@ -1358,7 +1396,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
             // Check for empty parameter name
             if param_name.is_empty() {
                 return Err(syn::Error::new(
-                    method_span,
+                    path_span,
                     format!(
                         "HTTP path has empty path parameter at segment {}. Path: '{}'\n\
                          \n\
@@ -1374,7 +1412,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
                 .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
             {
                 return Err(syn::Error::new(
-                    method_span,
+                    path_span,
                     format!(
                         "HTTP path parameter '{}' contains invalid characters. Path: '{}'\n\
                          \n\
@@ -1387,7 +1425,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
             // Check for duplicate parameter names
             if !param_names.insert(param_name.to_string()) {
                 return Err(syn::Error::new(
-                    method_span,
+                    path_span,
                     format!(
                         "HTTP path has duplicate parameter '{{{}}}'. Path: '{}'\n\
                          \n\
@@ -1400,7 +1438,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
         } else if part.contains('{') || part.contains('}') {
             // Malformed segment with partial braces
             return Err(syn::Error::new(
-                method_span,
+                path_span,
                 format!(
                     "HTTP path has malformed path parameter at segment {}. Path: '{}'\n\
                      \n\
