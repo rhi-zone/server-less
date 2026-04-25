@@ -859,6 +859,7 @@ fn generate_param_handling(
             let ty = &param.ty;
             if param.is_optional {
                 let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
+                let inner_ty_str = quote!(#inner_ty).to_string().replace(" ", "");
                 let var_ident = format_ident!("__sl_opt_{}", param.name_str());
                 pre_stmts.push(quote! {
                     let #var_ident: ::std::option::Option<#inner_ty> = match body_extractor.0.get(#name_str) {
@@ -869,7 +870,7 @@ fn generate_param_handling(
                                 use ::server_less::axum::response::IntoResponse as _;
                                 return (
                                     ::server_less::axum::http::StatusCode::BAD_REQUEST,
-                                    format!("Optional body field '{}' has invalid value", #name_str),
+                                    format!("Optional body field '{}' has invalid value (expected {})", #name_str, #inner_ty_str),
                                 ).into_response();
                             }
                         }
@@ -877,6 +878,7 @@ fn generate_param_handling(
                 });
                 calls.push(quote! { #var_ident });
             } else {
+                let ty_str = quote!(#ty).to_string().replace(" ", "");
                 let var_ident = format_ident!("__sl_req_{}", param.name_str());
                 pre_stmts.push(quote! {
                     let #var_ident: #ty = match body_extractor.0.get(#name_str)
@@ -887,7 +889,7 @@ fn generate_param_handling(
                             use ::server_less::axum::response::IntoResponse as _;
                             return (
                                 ::server_less::axum::http::StatusCode::BAD_REQUEST,
-                                format!("Request body field '{}' is required", #name_str),
+                                format!("Request body field '{}' is required (expected {})", #name_str, #ty_str),
                             ).into_response();
                         }
                     };
@@ -934,6 +936,7 @@ fn generate_param_handling(
             // Handle default values
             if param.is_optional {
                 let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
+                let inner_ty_str = quote!(#inner_ty).to_string().replace(" ", "");
                 let var_ident = format_ident!("__sl_opt_{}", param.name_str());
                 pre_stmts.push(quote! {
                     let #var_ident: ::std::option::Option<#inner_ty> = match query_extractor.0.get(#name_str) {
@@ -944,7 +947,7 @@ fn generate_param_handling(
                                 use ::server_less::axum::response::IntoResponse as _;
                                 return (
                                     ::server_less::axum::http::StatusCode::BAD_REQUEST,
-                                    format!("Optional query parameter '{}' has invalid value", #name_str),
+                                    format!("Optional query parameter '{}' has invalid value (expected {})", #name_str, #inner_ty_str),
                                 ).into_response();
                             }
                         }
@@ -971,6 +974,7 @@ fn generate_param_handling(
                         .unwrap_or(#default_expr)
                 });
             } else {
+                let ty_str = quote!(#ty).to_string().replace(" ", "");
                 let var_ident = format_ident!("__sl_req_{}", param.name_str());
                 pre_stmts.push(quote! {
                     let #var_ident: #ty = match query_extractor.0.get(#name_str)
@@ -981,7 +985,7 @@ fn generate_param_handling(
                             use ::server_less::axum::response::IntoResponse as _;
                             return (
                                 ::server_less::axum::http::StatusCode::BAD_REQUEST,
-                                format!("Query parameter '{}' is required", #name_str),
+                                format!("Query parameter '{}' is required (expected {})", #name_str, #ty_str),
                             ).into_response();
                         }
                     };
@@ -1012,6 +1016,7 @@ fn generate_param_handling(
 
             if param.is_optional {
                 let inner_ty = extract_option_inner(ty).unwrap_or_else(|| ty.clone());
+                let inner_ty_str = quote!(#inner_ty).to_string().replace(" ", "");
                 let var_ident = format_ident!("__sl_opt_{}", param.name_str());
                 pre_stmts.push(quote! {
                     let #var_ident: ::std::option::Option<#inner_ty> = match headers.get(#name_str) {
@@ -1022,7 +1027,7 @@ fn generate_param_handling(
                                 use ::server_less::axum::response::IntoResponse as _;
                                 return (
                                     ::server_less::axum::http::StatusCode::BAD_REQUEST,
-                                    format!("Optional header '{}' has invalid value", #name_str),
+                                    format!("Optional header '{}' has invalid value (expected {})", #name_str, #inner_ty_str),
                                 ).into_response();
                             }
                         }
@@ -1030,6 +1035,7 @@ fn generate_param_handling(
                 });
                 calls.push(quote! { #var_ident });
             } else {
+                let ty_str = quote!(#ty).to_string().replace(" ", "");
                 let var_ident = format_ident!("__sl_req_{}", param.name_str());
                 pre_stmts.push(quote! {
                     let #var_ident: #ty = match headers.get(#name_str)
@@ -1041,7 +1047,7 @@ fn generate_param_handling(
                             use ::server_less::axum::response::IntoResponse as _;
                             return (
                                 ::server_less::axum::http::StatusCode::BAD_REQUEST,
-                                format!("Header '{}' is required", #name_str),
+                                format!("Header '{}' is required (expected {})", #name_str, #ty_str),
                             ).into_response();
                         }
                     };

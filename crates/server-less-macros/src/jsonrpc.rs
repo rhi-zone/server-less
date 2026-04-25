@@ -671,6 +671,29 @@ fn generate_jsonrpc_param_extraction(param: &server_less_parse::ParamInfo) -> To
     let ty = &param.ty;
 
     if param.is_optional {
+        // Extract inner type from Option<T> for error message
+        let inner_ty: syn::Type = if let syn::Type::Path(ref type_path) = *ty {
+            if let Some(seg) = type_path.path.segments.last() {
+                if seg.ident == "Option" {
+                    if let syn::PathArguments::AngleBracketed(ref args) = seg.arguments {
+                        if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                            inner.clone()
+                        } else {
+                            ty.clone()
+                        }
+                    } else {
+                        ty.clone()
+                    }
+                } else {
+                    ty.clone()
+                }
+            } else {
+                ty.clone()
+            }
+        } else {
+            ty.clone()
+        };
+        let inner_ty_str = quote::quote!(#inner_ty).to_string().replace(" ", "");
         quote! {
             let #name: #ty = match args.get(#name_str) {
                 None => None,
@@ -678,18 +701,19 @@ fn generate_jsonrpc_param_extraction(param: &server_less_parse::ParamInfo) -> To
                 Some(__v) => match ::server_less::serde_json::from_value(__v.clone()) {
                     Ok(__val) => Some(__val),
                     Err(__e) => return Err((-32602i32, format!(
-                        "Optional parameter '{}' has invalid type: {}", #name_str, __e
+                        "Optional parameter '{}' has invalid type (expected {}): {}", #name_str, #inner_ty_str, __e
                     ))),
                 },
             };
         }
     } else {
+        let ty_str = quote::quote!(#ty).to_string().replace(" ", "");
         quote! {
             let __val = args.get(#name_str)
-                .ok_or_else(|| (-32602i32, format!("Missing required parameter: {}", #name_str)))?
+                .ok_or_else(|| (-32602i32, format!("Missing required parameter: {} (expected {})", #name_str, #ty_str)))?
                 .clone();
             let #name: #ty = ::server_less::serde_json::from_value::<#ty>(__val)
-                .map_err(|e| (-32602i32, format!("Invalid parameter {}: {}", #name_str, e)))?;
+                .map_err(|e| (-32602i32, format!("Invalid parameter {} (expected {}): {}", #name_str, #ty_str, e)))?;
         }
     }
 }
