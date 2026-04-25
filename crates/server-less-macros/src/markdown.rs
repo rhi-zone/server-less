@@ -71,7 +71,7 @@ impl Parse for MarkdownArgs {
             let ident: syn::Ident = input.parse()?;
 
             match ident.to_string().as_str() {
-                "title" => {
+                "name" | "title" => {
                     input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.title = Some(lit.value());
@@ -89,7 +89,7 @@ impl Parse for MarkdownArgs {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`{suggestion}. Valid arguments: title, types"
+                            "unknown argument `{other}`{suggestion}. Valid arguments: name, types"
                         ),
                     ));
                 }

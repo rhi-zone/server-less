@@ -67,7 +67,7 @@ impl Parse for OpenRpcArgs {
             input.parse::<Token![=]>()?;
 
             match ident.to_string().as_str() {
-                "title" => {
+                "name" | "title" => {
                     let lit: syn::LitStr = input.parse()?;
                     args.title = Some(lit.value());
                 }
@@ -83,7 +83,7 @@ impl Parse for OpenRpcArgs {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`{suggestion}. Valid arguments: title, version"
+                            "unknown argument `{other}`{suggestion}. Valid arguments: name, version"
                         ),
                     ));
                 }

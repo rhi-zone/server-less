@@ -285,9 +285,13 @@ fn rust_type_to_thrift(ty: &Option<syn::Type>) -> &'static str {
         "map<string, string>" // simplified
     } else if type_str.contains("HashSet") || type_str.contains("BTreeSet") {
         "set<string>" // simplified
-    } else if type_str.contains("Option") || type_str.contains("String") || type_str.contains("str")
-    {
-        "string" // simplified
+    } else if type_str.contains("Option") {
+        // Option<T>: extract inner type and map it. The `optional` keyword is
+        // emitted separately by generate_thrift_field via ParamInfo::is_optional.
+        let inner = extract_inner_type(&type_str);
+        rust_type_to_thrift_str(inner)
+    } else if type_str.contains("String") || type_str.contains("str") {
+        "string"
     } else if type_str.contains("bool") {
         "bool"
     } else if type_str.contains("i8") {
@@ -303,4 +307,39 @@ fn rust_type_to_thrift(ty: &Option<syn::Type>) -> &'static str {
     } else {
         "binary" // fallback
     }
+}
+
+/// Map a type string (without Option wrapper) to a Thrift type name.
+fn rust_type_to_thrift_str(type_str: &str) -> &'static str {
+    if type_str.contains("String") || type_str.contains("str") {
+        "string"
+    } else if type_str.contains("bool") {
+        "bool"
+    } else if type_str.contains("i8") {
+        "byte"
+    } else if type_str.contains("i16") {
+        "i16"
+    } else if type_str.contains("i32") {
+        "i32"
+    } else if type_str.contains("i64") {
+        "i64"
+    } else if type_str.contains("f64") {
+        "double"
+    } else if type_str.contains("Vec") {
+        "list<string>"
+    } else {
+        "binary"
+    }
+}
+
+/// Extract the inner type string from a generic wrapper like `Option < T >` or `Vec < T >`.
+fn extract_inner_type(type_str: &str) -> &str {
+    // Find the first '<' and last '>' and return the content between them, trimmed.
+    if let Some(start) = type_str.find('<') {
+        let rest = &type_str[start + 1..];
+        if let Some(end) = rest.rfind('>') {
+            return rest[..end].trim();
+        }
+    }
+    type_str
 }
