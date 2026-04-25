@@ -171,7 +171,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     let leaf_tool_definitions: Vec<_> = visible_leaf
         .iter()
         .map(|m| generate_tool_definition(&namespace_prefix, m, has_qualified))
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate dispatch match arms for ALL leaf methods (hidden methods remain callable)
     let leaf_dispatch_sync: Vec<_> = partitioned
@@ -342,7 +342,7 @@ fn generate_tool_definition(
     namespace_prefix: &str,
     method: &MethodInfo,
     has_qualified: bool,
-) -> TokenStream2 {
+) -> syn::Result<TokenStream2> {
     let base_name = method.wire_name_or(|n| n);
     let name = format!("{}{}", namespace_prefix, base_name);
     let description = method
@@ -352,12 +352,12 @@ fn generate_tool_definition(
 
     // Partition out Context parameters — they are injected, not user-visible inputs.
     let (_ctx_param, user_params) =
-        partition_context_params(&method.params, has_qualified).unwrap_or((None, method.params.iter().collect()));
+        partition_context_params(&method.params, has_qualified)?;
 
     // Generate parameter schema using shared utility (excluding Context params)
     let (properties, required_params) = server_less_rpc::generate_param_schema_for(&user_params);
 
-    quote! {
+    Ok(quote! {
         {
             let mut properties = ::server_less::serde_json::Map::new();
             #(
@@ -380,7 +380,7 @@ fn generate_tool_definition(
                 }
             })
         }
-    }
+    })
 }
 
 /// Generate a dispatch match arm for calling a method (sync version)
