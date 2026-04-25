@@ -77,8 +77,8 @@
 //!
 //! // Use it:
 //! let app = MyApp;
-//! let matches = MyApp::cli_app().get_matches();
-//! app.cli_run(&matches);
+//! let matches = MyApp::cli_command().get_matches();
+//! app.cli_run_with(&matches);
 //! ```
 //!
 //! # Command Line Usage
@@ -104,7 +104,7 @@ use crate::context::{
     generate_cli_context_extraction, has_qualified_context, partition_context_params,
 };
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 
 /// Arguments for the #[cli] attribute
 #[derive(Default)]
@@ -472,6 +472,9 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let no_sync = args.no_sync;
     let no_async = args.no_async;
 
+    for m in &methods {
+        validate_server_attrs(m)?;
+    }
     let partitioned = partition_methods(&methods, has_cli_skip);
 
     // Resolve method groups — consider all methods (leaf + mounts) for group discovery

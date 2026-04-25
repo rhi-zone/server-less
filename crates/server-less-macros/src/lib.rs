@@ -166,7 +166,7 @@ pub(crate) fn is_protocol_impl_emitter(impl_block: &ItemImpl, current: &str) -> 
     let current_pos = PROTOCOL_PRIORITY
         .iter()
         .position(|&p| p == current)
-        .unwrap_or(usize::MAX);
+        .expect("BUG: protocol not in PROTOCOL_PRIORITY — update the list when adding a new protocol");
     // Emit if no sibling with LOWER index (higher priority) is present.
     !impl_block.attrs.iter().any(|attr| {
         PROTOCOL_PRIORITY[..current_pos]
@@ -421,7 +421,6 @@ mod tool;
 ///
 /// # Generated Methods
 /// - `http_router() -> axum::Router` - Complete router with all endpoints
-/// - `http_routes() -> Vec<&'static str>` - List of route paths
 /// - `openapi_spec() -> serde_json::Value` - OpenAPI 3.0 specification (unless `openapi = false`)
 ///
 /// # OpenAPI Control
@@ -538,7 +537,7 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// #[cli(
 ///     name = "myapp",
 ///     version = "1.0.0",
-///     about = "My awesome application"
+///     description = "My awesome application"
 /// )]
 /// impl MyApp {
 ///     /// Create a new user (becomes: myapp create-user <NAME>)
@@ -550,8 +549,11 @@ pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 ///
 /// # Generated Methods
-/// - `cli_app() -> clap::Command` - Complete CLI application
-/// - `cli_run(&self, matches: &ArgMatches)` - Execute matched command
+/// - `cli_command() -> clap::Command` - Complete CLI application
+/// - `cli_run(&self) -> Result<(), ...>` - Execute CLI and handle result (sync entry point with tokio)
+/// - `cli_run_with(&self, matches: &ArgMatches) -> Result<(), ...>` - Execute a pre-parsed command
+/// - `cli_run_async(&self) -> impl Future<...>` - Runtime-agnostic async entry point
+/// - `cli_run_with_async(&self, matches: &ArgMatches) -> impl Future<...>` - Async with pre-parsed matches
 #[cfg(feature = "cli")]
 #[proc_macro_attribute]
 pub fn cli(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -709,7 +711,7 @@ pub fn mcp(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `ws_router() -> axum::Router` - Router with WebSocket endpoint
 /// - `ws_handle_message(msg) -> String` - Sync message handler
 /// - `ws_handle_message_async(msg) -> String` - Async message handler
-/// - `ws_methods() -> Vec<&'static str>` - List of available methods
+/// - `ws_methods() -> Vec<String>` - List of available methods
 #[cfg(feature = "ws")]
 #[proc_macro_attribute]
 pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -1535,9 +1537,6 @@ pub fn response(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This attribute is used on function parameters within `#[http]` impl blocks
 /// to customize parameter extraction and naming. It is a no-op on its own.
 ///
-/// **Note:** Requires nightly Rust with `#![feature(register_tool)]` and
-/// `#![register_tool(param)]` at the crate root.
-///
 /// # Supported Options
 ///
 /// - `name = "<wire_name>"` - Use a different name on the wire (e.g., `q` instead of `query`)
@@ -1557,9 +1556,6 @@ pub fn response(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```ignore
-/// #![feature(register_tool)]
-/// #![register_tool(param)]
-///
 /// #[http(prefix = "/api")]
 /// impl SearchService {
 ///     // Rename parameter: code uses `query`, API accepts `q`
@@ -1622,7 +1618,8 @@ pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Blessed preset: HTTP server with OpenAPI and serve.
 ///
-/// Combines `#[http]` + `#[serve(http)]` into a single attribute.
+/// Combines `#[http]` (with OpenAPI enabled by default) + `#[serve(http)]` into
+/// a single attribute.  OpenAPI generation can be toggled with `openapi = false`.
 ///
 /// # Example
 ///
@@ -1655,6 +1652,17 @@ pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `description` - App description for CLI help and OpenAPI info
 /// - `version` - Version string; `false` disables `--version` (default: `CARGO_PKG_VERSION`)
 /// - `homepage` - URL used in OpenAPI and OpenRPC info fields
+///
+/// # `#[server(skip)]` — Dual Role
+///
+/// When `#[server(skip)]` appears on an **impl block**, it is parsed as a preset
+/// option and disables serving (equivalent to `#[http]` without `#[serve]`).
+///
+/// When `#[server(skip)]` appears on a **method** inside another protocol impl
+/// block (e.g. inside `#[http]`), it acts as a per-method marker telling the
+/// enclosing macro to skip route generation for that method.  In this form,
+/// `#[server]` is passed through unchanged — the outer macro reads it directly
+/// from the item tokens.
 #[cfg(feature = "http")]
 #[proc_macro_attribute]
 pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -1789,7 +1797,7 @@ pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// - `name` - CLI application name
 /// - `version` - CLI version string
-/// - `about` - CLI description
+/// - `description` - CLI description
 /// - `markdown` - Toggle Markdown docs generation (default: true)
 #[cfg(feature = "cli")]
 #[proc_macro_attribute]

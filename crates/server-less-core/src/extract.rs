@@ -23,8 +23,8 @@ use tokio::sync::Mutex;
 /// impl UserService {
 ///     async fn create_user(&self, ctx: Context, name: String) -> Result<User> {
 ///         // Access request metadata
-///         let user_id = ctx.user_id()?;        // Authenticated user
-///         let request_id = ctx.request_id()?;  // Request trace ID
+///         let user_id = ctx.user_id();         // Authenticated user (Option<&str>)
+///         let request_id = ctx.request_id();   // Request trace ID (Option<&str>)
 ///         let auth = ctx.authorization();      // Authorization header
 ///
 ///         // Create user with context...
@@ -36,8 +36,8 @@ use tokio::sync::Mutex;
 ///
 /// Different protocols populate Context with relevant data:
 /// - **HTTP**: All headers via `header()`, request ID from `x-request-id`
+/// - **CLI**: Environment variables via `env()` — injected via `#[cli]`
 /// - **gRPC**: Metadata fields (not yet implemented)
-/// - **CLI**: Environment variables via `env()` (not yet implemented)
 /// - **MCP**: Conversation context (not yet implemented)
 ///
 /// # Name Collision

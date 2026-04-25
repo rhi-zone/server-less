@@ -18,7 +18,7 @@
 //!
 //! # Generated Methods
 //!
-//! - `ws_methods() -> Vec<&'static str>` - List of available methods
+//! - `ws_methods() -> Vec<String>` - List of available methods
 //! - `ws_handle_message(&self, message: &str) -> Result<String, String>` - Sync handler
 //! - `ws_handle_message_async(&self, message: &str).await` - Async handler
 //! - `ws_router(self) -> axum::Router` - Complete WebSocket server
@@ -153,7 +153,7 @@
 //! }
 //! ```
 
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, ParamInfo, extract_methods, get_impl_name, partition_methods};
@@ -334,6 +334,9 @@ pub(crate) fn expand_ws(args: WsArgs, impl_block: ItemImpl) -> syn::Result<Token
 
     let path = args.path.unwrap_or_else(|| "/ws".to_string());
 
+    for m in &methods {
+        validate_server_attrs(m)?;
+    }
     let partitioned = partition_methods(&methods, has_server_skip);
 
     // Separate hidden from visible leaf methods.

@@ -150,21 +150,14 @@ use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_me
 use syn::{GenericArgument, ItemImpl, PathArguments, Token, Type, parse::Parse};
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 
 // Import Context helpers
 use crate::context::{
     generate_http_context_extraction, has_qualified_context, partition_context_params,
 };
 
-// Re-export shared OpenAPI types for backward compatibility
-pub use crate::openapi_gen::{
-    HttpMethod, ResponseOverride, RouteOverride, infer_http_method,
-    infer_path,
-};
-
-// Type alias for backward compatibility
-pub type HttpMethodOverride = RouteOverride;
+use crate::openapi_gen::{HttpMethod, ResponseOverride, RouteOverride, infer_http_method, infer_path};
 
 /// Extract the inner type T from Option<T>
 fn extract_option_inner(ty: &Type) -> Option<Type> {
@@ -339,6 +332,9 @@ pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Resu
         None => quote! {},
     };
 
+    for m in &methods {
+        validate_server_attrs(m)?;
+    }
     let partitioned = partition_methods(&methods, has_server_skip);
 
     // Generate mount routes (static mounts only)
@@ -379,7 +375,7 @@ pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Resu
         std::collections::HashMap::new();
 
     for method in &partitioned.leaf {
-        let overrides = HttpMethodOverride::parse_from_attrs(&method.method.attrs)?;
+        let overrides = RouteOverride::parse_from_attrs(&method.method.attrs)?;
         let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
         if overrides.skip {
@@ -1213,7 +1209,7 @@ fn apply_response_overrides(
 fn generate_route(
     prefix: &str,
     method: &MethodInfo,
-    overrides: &HttpMethodOverride,
+    overrides: &RouteOverride,
     struct_name: &syn::Ident,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
@@ -1357,7 +1353,7 @@ fn validate_http_path(path: &str, method_span: proc_macro2::Span) -> syn::Result
     let mut param_names = std::collections::HashSet::new();
     for (idx, part) in path.split('/').enumerate() {
         if part.starts_with('{') && part.ends_with('}') {
-            let param_name = &part[1..part.len() - 1];
+            let param_name = part.trim_start_matches('{').trim_end_matches('}');
 
             // Check for empty parameter name
             if param_name.is_empty() {

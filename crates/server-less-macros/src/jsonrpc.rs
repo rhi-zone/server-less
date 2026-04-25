@@ -19,7 +19,7 @@
 //!
 //! # Generated Methods
 //!
-//! - `jsonrpc_methods() -> Vec<&'static str>` - List of available methods
+//! - `jsonrpc_methods() -> Vec<String>` - List of available methods
 //! - `jsonrpc_handle(&self, request: &str) -> String` - Handle request (sync)
 //! - `jsonrpc_handle_async(&self, request: &str).await` - Handle request (async)
 //! - `jsonrpc_router(self) -> axum::Router` - HTTP server at /rpc
@@ -55,7 +55,7 @@
 //! // {"jsonrpc": "2.0", "result": 8, "id": 1}
 //! ```
 
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use server_less_parse::{MethodInfo, extract_methods, get_impl_name, partition_methods};
@@ -116,6 +116,9 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, impl_block: ItemImpl) -> syn::Re
 
     let path = args.path.unwrap_or_else(|| "/rpc".to_string());
 
+    for m in &methods {
+        validate_server_attrs(m)?;
+    }
     let partitioned = partition_methods(&methods, has_server_skip);
 
     // Separate hidden from visible leaf methods.

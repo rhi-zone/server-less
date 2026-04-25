@@ -168,7 +168,6 @@ pub fn build_meta_attr(meta: &AppMeta) -> TokenStream2 {
 }
 
 /// Extract and remove `#[__app_meta(...)]` from an attribute list.
-#[allow(dead_code)] // used by consuming macros once wired up
 ///
 /// Called by consuming macros before they generate code.  Returns a default
 /// `AppMeta` if no `#[__app_meta]` attribute is present.

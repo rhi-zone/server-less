@@ -27,7 +27,7 @@ Each derive macro projects this into a protocol:
 | `GraphQL` | Schema + resolvers |
 | `Cli` | Command-line interface |
 | `Mcp` | MCP tools for LLMs |
-| `Client` | Type-safe client SDK |
+| `Client` _(planned)_ | Type-safe client SDK |
 | `OpenApi` | Spec from types + docs |
 
 ## Naming Conventions

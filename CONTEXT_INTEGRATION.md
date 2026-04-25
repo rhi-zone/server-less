@@ -1,5 +1,11 @@
 # Context Integration - Developer Guide
 
+> **Note:** The patterns described in this document are now fully implemented for HTTP and CLI.
+> WebSocket and CLI Context injection both work in the current codebase.
+> The code examples below that say "not yet implemented" are kept as integration guides for
+> future protocols (gRPC, MCP, etc.). See the source (`context.rs`, `http.rs`, `cli.rs`,
+> `ws.rs`) for the current working implementation.
+
 This document shows how the shared Context helpers make it easy to add Context injection to any protocol macro.
 
 ## Shared Helpers (`context.rs`)
@@ -82,7 +88,7 @@ pub fn generate_YOUR_PROTOCOL_context_extraction() -> (TokenStream2, TokenStream
 
 ## Example: WebSocket Integration
 
-Here's how to add Context to WebSocket (not yet implemented):
+WebSocket Context injection is fully implemented. The following shows the pattern used:
 
 ```rust
 // In ws.rs
@@ -118,7 +124,7 @@ fn generate_ws_handler(method: &MethodInfo, has_qualified: bool) -> syn::Result<
 
 ## Example: CLI Integration
 
-Here's how to add Context to CLI (not yet implemented):
+CLI Context injection is fully implemented. The following shows the pattern used:
 
 ```rust
 // In cli.rs

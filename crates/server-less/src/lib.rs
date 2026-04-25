@@ -41,7 +41,7 @@
 //!
 //! | Macro | Combines | Feature |
 //! |-------|----------|---------|
-//! | `#[server]` | `#[http]` + `#[serve(http)]` | `http` |
+//! | `#[server]` | `#[http]` (with OpenAPI) + `#[serve(http)]` | `http` |
 //! | `#[program]` | `#[cli]` + `#[markdown]` | `cli` |
 //! | `#[tool]` | `#[mcp]` + `#[jsonschema]` | `mcp` |
 //! | `#[rpc]` | `#[jsonrpc]` + `#[openrpc]` + `#[serve(jsonrpc)]` | `jsonrpc` |
@@ -51,7 +51,7 @@
 //! | Macro | Protocol | Generated Methods |
 //! |-------|----------|-------------------|
 //! | `#[http]` | HTTP/REST | `http_router()`, `openapi_spec()` |
-//! | `#[cli]` | Command Line | `cli_command()`, `cli_run()`, `cli_run_async()` |
+//! | `#[cli]` | Command Line | `cli_command()`, `cli_run()`, `cli_run_with()`, `cli_run_async()`, `cli_run_with_async()` |
 //! | `#[mcp]` | MCP | `mcp_tools()`, `mcp_call()`, `mcp_call_async()` |
 //! | `#[ws]` | WebSocket | `ws_router()`, `ws_handle_message()`, `ws_handle_message_async()` |
 //! | `#[jsonrpc]` | JSON-RPC 2.0 | `jsonrpc_router()`, `jsonrpc_methods()` |
@@ -230,7 +230,16 @@
 //! - `ws` - WebSocket macro (requires axum, futures)
 //! - `jsonrpc` - JSON-RPC 2.0 macro
 //! - `graphql` - GraphQL macro (requires async-graphql)
-//! - `grpc` - gRPC schema generation
+//! - `grpc` - gRPC `.proto` schema generation (no runtime deps)
+//! - `capnp` - Cap'n Proto `.capnp` schema generation (no runtime deps)
+//! - `thrift` - Apache Thrift `.thrift` IDL generation (no runtime deps)
+//! - `connect` - Connect RPC schema generation (no runtime deps)
+//! - `smithy` - AWS Smithy `.smithy` model generation (no runtime deps)
+//! - `openapi` - Standalone OpenAPI spec generation (no axum required)
+//! - `openrpc` - OpenRPC spec generation (no runtime deps)
+//! - `asyncapi` - AsyncAPI spec generation (no runtime deps)
+//! - `jsonschema` - JSON Schema generation (no runtime deps)
+//! - `markdown` - Markdown API docs generation (no runtime deps)
 //! - `config` - `#[derive(Config)]` for config loading (requires toml)
 //! - `full` - All features (default)
 
@@ -339,10 +348,11 @@ pub use server_less_macros::__app_meta;
 #[cfg(feature = "config")]
 pub use server_less_macros::Config;
 #[cfg(feature = "config")]
+#[doc(hidden)]
 pub use server_less_core::config::{Config as ConfigTrait, ConfigError, ConfigFieldMeta, ConfigSource};
 
 // Re-export deps for generated code — users shouldn't need to add these directly
-#[cfg(feature = "clap")]
+#[cfg(feature = "cli")]
 #[doc(hidden)]
 pub use clap;
 
@@ -350,18 +360,21 @@ pub use clap;
 #[doc(hidden)]
 pub use tokio;
 
-#[cfg(feature = "axum")]
+#[cfg(any(feature = "http", feature = "ws", feature = "jsonrpc", feature = "graphql"))]
 #[doc(hidden)]
 pub use axum;
 
 // Re-export futures for generated WebSocket code
 #[cfg(feature = "ws")]
+#[doc(hidden)]
 pub use futures;
 
 // Re-export async-graphql for generated GraphQL code
 #[cfg(feature = "graphql")]
+#[doc(hidden)]
 pub use async_graphql;
 #[cfg(feature = "graphql")]
+#[doc(hidden)]
 pub use async_graphql_axum;
 
 // Re-export core types

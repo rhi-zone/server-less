@@ -11,6 +11,16 @@
 //!     Unauthorized,
 //! }
 //! ```
+//!
+//! # Conflict with `thiserror`
+//!
+//! `ServerlessError` uses `#[error(...)]` as its per-variant attribute, which **conflicts
+//! with `thiserror`'s `#[error("...")]`** — both crates register an attribute with the
+//! same name.  If you add `#[derive(thiserror::Error)]` to the same enum, the compiler
+//! will see duplicate or mis-parsed `#[error]` attributes.
+//!
+//! **Recommendation:** remove `#[derive(thiserror::Error)]` when using `ServerlessError`.
+//! `ServerlessError` already derives `Display` and `Error` for you via the generated code.
 
 use proc_macro2::TokenStream;
 use quote::quote;

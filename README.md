@@ -1,6 +1,6 @@
 # server-less
 
-[![Tests](https://img.shields.io/badge/tests-466%20passing-brightgreen)](https://github.com/rhi-zone/server-less)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](https://github.com/rhi-zone/server-less)
 [![Rust](https://img.shields.io/badge/rust-2024%20edition-blue)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -117,7 +117,7 @@ Generate API documentation and contracts:
 | `#[serve]` | Compose multiple protocol routers | ✅ Working |
 | `#[route]` | Per-method attribute overrides | ✅ Working |
 
-**Total: 18 macros, 171 passing tests, 0 failures**
+**Total: 18 macros**
 
 ## Features
 
@@ -137,10 +137,10 @@ Generate API documentation and contracts:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-server-less = "0.2"
+server-less = "0.4"
 
 # Or select specific features
-server-less = { version = "0.2", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { version = "0.4", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ### Available Features
@@ -206,7 +206,7 @@ The generated code automatically wraps your stream in SSE format with proper eve
 - `#[server(skip)]`, `#[server(hidden)]`, `#[cli(default)]`
 - CLI output: Display default, `--json`, `--jq`, `--output-schema`
 - Iterator / SSE streaming return types
-- **466 passing tests**
+- Extensive test coverage
 
 ### Up Next
 - WebSocket server-push patterns
@@ -236,7 +236,7 @@ See [docs/design/](docs/design/) for detailed design documents.
 ```bash
 nix develop        # Enter dev shell (optional)
 cargo build        # Build all crates
-cargo test         # Run all tests (329 passing)
+cargo test         # Run all tests
 cargo clippy       # Lint checks
 cargo expand       # Inspect macro expansion
 ```

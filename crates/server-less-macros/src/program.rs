@@ -1,6 +1,16 @@
 //! Blessed `#[program]` preset macro.
 //!
 //! Expands to `#[cli]` + `#[markdown]` (if feature enabled).
+//!
+//! # `no_sync` / `no_async` are not forwarded
+//!
+//! The `#[cli(no_sync)]` and `#[cli(no_async)]` flags suppress the sync or async
+//! convenience entrypoints (`cli_run`, `cli_run_with`, `cli_run_async`,
+//! `cli_run_with_async`).  These flags are **not** available on `#[program]` —
+//! the preset always generates the full set of entrypoints.
+//!
+//! If you need to suppress one set of entrypoints, use `#[cli]` directly instead
+//! of `#[program]`.
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;

@@ -391,11 +391,23 @@ pub fn resolve_method_group(
 /// Parsed result of `#[param(...)]` attributes.
 #[derive(Debug, Clone, Default)]
 pub struct ParsedParamAttrs {
+    /// Override for the parameter's name on the wire (from `#[param(name = "...")]`).
+    /// When set, the API/CLI uses this name instead of the Rust identifier.
     pub wire_name: Option<String>,
+    /// Force a specific extraction location (from `#[param(query)]`, `#[param(path)]`, etc.).
+    /// When `None`, location is inferred from the HTTP method and parameter name.
     pub location: Option<ParamLocation>,
+    /// Literal default value (from `#[param(default = ...)]`).
+    /// Makes the parameter optional on the wire; the value is used when absent.
     pub default_value: Option<String>,
+    /// Single-character CLI short flag (from `#[param(short = 'x')]`).
+    /// When set, adds `-x` as an alias for the long flag in clap.
     pub short_flag: Option<char>,
+    /// Human-readable help text (from `#[param(help = "...")]`).
+    /// Shown in CLI `--help` output and OpenAPI parameter descriptions.
     pub help_text: Option<String>,
+    /// Marks the parameter as a CLI positional argument (from `#[param(positional)]`).
+    /// Positional parameters are ordered by declaration order and have no `--flag` form.
     pub positional: bool,
     /// Environment variable name (from `#[param(env = "VAR")]`). Used by `#[derive(Config)]`.
     pub env_var: Option<String>,
