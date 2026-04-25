@@ -157,6 +157,7 @@ impl Parse for GraphqlArgs {
 }
 
 pub(crate) fn expand_graphql(args: GraphqlArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     // args.name takes precedence over app_meta.name for GraphQL schema naming.
     let _effective_name = args.name.or(app_meta.name);

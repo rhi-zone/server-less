@@ -97,6 +97,7 @@ impl Parse for GrpcArgs {
 }
 
 pub(crate) fn expand_grpc(args: GrpcArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();

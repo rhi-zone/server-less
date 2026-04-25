@@ -131,6 +131,7 @@ fn strip_param_attrs(impl_block: &ItemImpl) -> ItemImpl {
 }
 
 pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
     let _struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
