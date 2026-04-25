@@ -672,7 +672,14 @@ fn is_query_method(name: &str) -> bool {
 fn generate_field_registrations(methods: &[&MethodInfo], has_qualified: bool) -> Vec<TokenStream2> {
     methods
         .iter()
-        .map(|m| generate_field_registration(m, has_qualified))
+        .map(|m| {
+            let field_code = generate_field_registration(m, has_qualified);
+            let cfg_attrs = &m.cfg_attrs;
+            quote! {
+                #(#cfg_attrs)*
+                { #field_code }
+            }
+        })
         .collect()
 }
 

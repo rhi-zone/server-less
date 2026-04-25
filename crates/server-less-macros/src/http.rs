@@ -475,11 +475,19 @@ pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Resu
         let method_debug = impl_debug || has_http_debug(method);
         // Per-method trace flag: method-level `#[http(trace = true)]` OR impl-level flag.
         let method_trace = impl_trace || has_http_trace(method);
-        let handler = generate_handler(&struct_name, self_ty, method, &response_overrides, has_qualified, method_debug, method_trace)?;
-        handlers.push(handler);
+        let cfg_attrs = &method.cfg_attrs;
+        let raw_handler = generate_handler(&struct_name, self_ty, method, &response_overrides, has_qualified, method_debug, method_trace)?;
+        handlers.push(quote! {
+            #(#cfg_attrs)*
+            #raw_handler
+        });
 
-        let route = generate_route(&prefix, method, &overrides, &struct_name)?;
-        routes.push(route);
+        let raw_route = generate_route(&prefix, method, &overrides, &struct_name)?;
+        // Emit as a rebinding statement so #[cfg] can be applied per-route.
+        routes.push(quote! {
+            #(#cfg_attrs)*
+            let router = router #raw_route;
+        });
 
         // Always collect for http_openapi_paths() (used by #[openapi] and #[serve])
         // Exclude from OpenAPI if hidden via #[route(hidden)] or #[server(hidden)]
@@ -568,10 +576,12 @@ pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Resu
                 use ::server_less::axum::routing::{get, post, put, patch, delete};
 
                 let state = self;
-                ::server_less::axum::Router::new()
-                    #(#routes)*
+                let router = ::server_less::axum::Router::new();
+                #(#routes)*
+                let router = router
                     #(#mount_routes)*
-                    .with_state(state)
+                    .with_state(state);
+                router
             }
 
             fn http_mount_openapi_paths() -> Vec<::server_less::OpenApiPath> {
@@ -588,10 +598,12 @@ pub(crate) fn expand_http(args: HttpArgs, mut impl_block: ItemImpl) -> syn::Resu
                 use ::server_less::axum::routing::{get, post, put, patch, delete};
 
                 let state = ::std::sync::Arc::new(self);
-                ::server_less::axum::Router::new()
-                    #(#routes)*
+                let router = ::server_less::axum::Router::new();
+                #(#routes)*
+                let router = router
                     #(#mount_routes)*
-                    .with_state(state)
+                    .with_state(state);
+                router
             }
 
             #openapi_paths_method

@@ -135,20 +135,49 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
     let dispatch_arms_async: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_dispatch_arm(m, has_qualified))
+        .map(|m| {
+            let arm = generate_dispatch_arm(m, has_qualified)?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
+        })
         .collect::<syn::Result<Vec<_>>>()?;
 
     let dispatch_arms_sync: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_sync_dispatch_arm(m, has_qualified))
+        .map(|m| {
+            let arm = generate_sync_dispatch_arm(m, has_qualified)?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
+        })
         .collect::<syn::Result<Vec<_>>>()?;
 
-    // method_names for jsonrpc_methods() and OpenRPC listing: visible only
-    let method_names: Vec<_> = visible_leaf
+    // method_names for jsonrpc_methods() and OpenRPC listing: visible only.
+    // Stored as plain strings for use in OpenAPI; also emitted as cfg-gated push statements.
+    let method_name_strings: Vec<String> = visible_leaf
         .iter()
         .map(|m| m.wire_name_or(|n| n))
         .collect();
+    // Statement-form for jsonrpc_methods() so #[cfg] guards individual names.
+    let method_name_stmts: Vec<_> = visible_leaf
+        .iter()
+        .map(|m| {
+            let name = m.wire_name_or(|n| n);
+            let cfg_attrs = &m.cfg_attrs;
+            quote! {
+                #(#cfg_attrs)*
+                names.push(#name.to_string());
+            }
+        })
+        .collect();
+    // Keep a plain slice for OpenAPI path generation (compile-time known list).
+    let method_names = &method_name_strings;
 
     // Build method documentation (visible methods only)
     let jsonrpc_method_doc_entries: Vec<String> = visible_leaf
@@ -374,7 +403,8 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
         impl #impl_generics #self_ty #where_clause {
             #[doc = #jsonrpc_methods_doc]
             pub fn jsonrpc_methods() -> Vec<String> {
-                let mut names: Vec<String> = vec![#(#method_names.to_string()),*];
+                let mut names: Vec<String> = Vec::new();
+                #(#method_name_stmts)*
                 #(#mount_method_names)*
                 names
             }

@@ -343,13 +343,27 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
     let dispatch_arms_sync: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_dispatch_arm_sync(m, has_qualified_ctx, has_qualified_sender))
+        .map(|m| {
+            let arm = generate_dispatch_arm_sync(m, has_qualified_ctx, has_qualified_sender)?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
+        })
         .collect::<syn::Result<Vec<_>>>()?;
 
     let dispatch_arms_async: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_dispatch_arm_async(m, has_qualified_ctx, has_qualified_sender))
+        .map(|m| {
+            let arm = generate_dispatch_arm_async(m, has_qualified_ctx, has_qualified_sender)?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
+        })
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Method names for visible leaf methods only
@@ -540,12 +554,17 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
         .filter_map(|m| {
             let injections =
                 build_mount_injections(&m.params, has_qualified_ctx, has_qualified_sender)?;
-            Some(server_less_rpc::generate_dispatch_arm_with_injections(
+            let arm = server_less_rpc::generate_dispatch_arm_with_injections(
                 m,
                 None,
                 AsyncHandling::Error,
                 &injections,
-            ))
+            );
+            let cfg_attrs = &m.cfg_attrs;
+            Some(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
         })
         .collect();
 
@@ -555,12 +574,17 @@ pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<T
         .filter_map(|m| {
             let injections =
                 build_mount_injections(&m.params, has_qualified_ctx, has_qualified_sender)?;
-            Some(server_less_rpc::generate_dispatch_arm_with_injections(
+            let arm = server_less_rpc::generate_dispatch_arm_with_injections(
                 m,
                 None,
                 AsyncHandling::Await,
                 &injections,
-            ))
+            );
+            let cfg_attrs = &m.cfg_attrs;
+            Some(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
         })
         .collect();
 

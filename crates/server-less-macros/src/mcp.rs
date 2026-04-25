@@ -167,29 +167,59 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         .filter(|m| !has_server_hidden(m))
         .collect();
 
-    // Generate tool definitions for visible leaf methods only
+    // Generate tool definitions for visible leaf methods only.
+    // Each entry is a statement so #[cfg] can guard individual tool insertions.
     let leaf_tool_definitions: Vec<_> = visible_leaf
         .iter()
-        .map(|m| generate_tool_definition(&namespace_prefix, m, has_qualified))
+        .map(|m| {
+            let def = generate_tool_definition(&namespace_prefix, m, has_qualified)?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                tools.push(#def);
+            })
+        })
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Generate dispatch match arms for ALL leaf methods (hidden methods remain callable)
     let leaf_dispatch_sync: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_dispatch_arm_sync(&namespace_prefix, m, has_qualified))
+        .map(|m| {
+            let arm = generate_dispatch_arm_sync(&namespace_prefix, m, has_qualified);
+            let cfg_attrs = &m.cfg_attrs;
+            quote! {
+                #(#cfg_attrs)*
+                #arm
+            }
+        })
         .collect();
 
     let leaf_dispatch_async: Vec<_> = partitioned
         .leaf
         .iter()
-        .map(|m| generate_dispatch_arm_async(&namespace_prefix, m, has_qualified))
+        .map(|m| {
+            let arm = generate_dispatch_arm_async(&namespace_prefix, m, has_qualified);
+            let cfg_attrs = &m.cfg_attrs;
+            quote! {
+                #(#cfg_attrs)*
+                #arm
+            }
+        })
         .collect();
 
-    // Tool names for visible leaf methods only
+    // Tool names for visible leaf methods only.
+    // Each entry is a statement so #[cfg] can guard individual name insertions.
     let leaf_tool_names: Vec<_> = visible_leaf
         .iter()
-        .map(|m| format!("{}{}", namespace_prefix, m.name))
+        .map(|m| {
+            let name = format!("{}{}", namespace_prefix, m.name);
+            let cfg_attrs = &m.cfg_attrs;
+            quote! {
+                #(#cfg_attrs)*
+                names.push(#name.to_string());
+            }
+        })
         .collect();
 
     // Generate mount point contributions
@@ -290,16 +320,16 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         impl #impl_generics #self_ty #where_clause {
             #[doc = #mcp_tools_doc]
             pub fn mcp_tools() -> Vec<::server_less::serde_json::Value> {
-                let mut tools = vec![
-                    #(#leaf_tool_definitions),*
-                ];
+                let mut tools = Vec::new();
+                #(#leaf_tool_definitions)*
                 #(#mount_tools)*
                 tools
             }
 
             /// Get tool/method names
             pub fn mcp_method_names() -> Vec<String> {
-                let mut names: Vec<String> = vec![#(#leaf_tool_names.to_string()),*];
+                let mut names: Vec<String> = Vec::new();
+                #(#leaf_tool_names)*
                 #(#mount_tool_names)*
                 names
             }

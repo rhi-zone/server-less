@@ -502,17 +502,24 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     // When groups exist, hide all leaf subcommands from clap's help — we render
     // them ourselves via `after_help` because clap doesn't support multiple
     // subcommand sections (clap-rs/clap#1553).
+    // Each entry is a `let cmd = cmd.subcommand(...)` statement so that
+    // #[cfg(...)] can be applied per-subcommand.
     let leaf_subcommands: Vec<_> = partitioned
         .leaf
         .iter()
         .map(|m| {
-            generate_leaf_subcommand(
+            let sub = generate_leaf_subcommand(
                 m,
                 has_qualified,
                 &global_flags,
                 has_defaults,
                 has_cli_hidden(m) || has_groups,
-            )
+            )?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                let __cmd = __cmd.subcommand(#sub);
+            })
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
@@ -701,14 +708,24 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .leaf
         .iter()
         .map(|m| {
-            generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, false)
+            let arm = generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, false)?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
         })
         .collect::<syn::Result<Vec<_>>>()?;
     let async_leaf_match_arms: Vec<_> = partitioned
         .leaf
         .iter()
         .map(|m| {
-            generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, true)
+            let arm = generate_leaf_match_arm(m, has_qualified, &global_flags, &defaults_fn_ident, false, true)?;
+            let cfg_attrs = &m.cfg_attrs;
+            Ok(quote! {
+                #(#cfg_attrs)*
+                #arm
+            })
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
@@ -948,17 +965,18 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
 
         impl #impl_generics ::server_less::CliSubcommand for #self_ty #where_clause {
             fn cli_command() -> ::server_less::clap::Command {
-                ::server_less::clap::Command::new(#app_name)
+                let mut __cmd = ::server_less::clap::Command::new(#app_name)
                     .version(#version_tokens)
                     .about(#about)
                     #(#global_flag_args)*
                     #format_flags
                     #grouped_after_help
                     #(.arg(#default_parent_args))*
-                    #(.subcommand(#leaf_subcommands))*
                     #(.subcommand(#static_mount_subcommands))*
                     #(.subcommand(#slug_mount_subcommands))*
-                    #config_subcommand_addition
+                    #config_subcommand_addition;
+                #(#leaf_subcommands)*
+                __cmd
             }
 
             fn cli_dispatch(&self, matches: &::server_less::clap::ArgMatches) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
