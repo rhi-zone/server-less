@@ -388,6 +388,68 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, impl_block: ItemImpl) -> syn::Re
         #maybe_impl
 
         impl #impl_generics #self_ty #where_clause {
+            /// Convert a `serde_json::Value` into an `async_graphql::Value` recursively.
+            ///
+            /// Hoisted out of the per-field loop (Fix 1) so it is defined exactly once
+            /// per generated `impl` block rather than once per method.
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            fn __graphql_json_to_value(json_val: ::serde_json::Value) -> ::async_graphql::Value {
+                match json_val {
+                    ::serde_json::Value::Null => ::async_graphql::Value::Null,
+                    ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
+                    ::serde_json::Value::Number(n) => {
+                        if let Some(i) = n.as_i64() {
+                            ::async_graphql::Value::Number((i as i32).into())
+                        } else if let Some(f) = n.as_f64() {
+                            match ::serde_json::to_value(f) {
+                                Ok(::serde_json::Value::Number(num)) => {
+                                    ::async_graphql::Value::Number(num.into())
+                                }
+                                _ => ::async_graphql::Value::String(f.to_string()),
+                            }
+                        } else {
+                            ::async_graphql::Value::Number(n.into())
+                        }
+                    }
+                    ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
+                    ::serde_json::Value::Array(arr) => {
+                        let values: Vec<_> = arr
+                            .into_iter()
+                            .map(Self::__graphql_json_to_value)
+                            .collect();
+                        ::async_graphql::Value::List(values)
+                    }
+                    ::serde_json::Value::Object(obj) => {
+                        let mut fields = ::async_graphql::indexmap::IndexMap::new();
+                        for (key, value) in obj {
+                            fields.insert(
+                                ::async_graphql::Name::new(key),
+                                Self::__graphql_json_to_value(value),
+                            );
+                        }
+                        ::async_graphql::Value::Object(fields)
+                    }
+                }
+            }
+
+            /// Convert any `Serialize + Debug` value into an `async_graphql::Value`.
+            ///
+            /// Hoisted out of the per-field loop (Fix 1) so it is defined exactly once
+            /// per generated `impl` block rather than once per method.
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            fn __graphql_to_value<T>(v: T) -> ::async_graphql::Value
+            where
+                T: ::serde::Serialize + ::std::fmt::Debug,
+            {
+                if let Ok(json_val) = ::serde_json::to_value(&v) {
+                    Self::__graphql_json_to_value(json_val)
+                } else {
+                    ::async_graphql::Value::String(format!("{:?}", v))
+                }
+            }
+
             /// Build the GraphQL dynamic schema
             pub fn graphql_schema(self) -> ::async_graphql::dynamic::Schema
             where
@@ -683,7 +745,7 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
                 match #method_call {
                     Ok(items) => {
                         let values: Vec<_> = items.into_iter()
-                            .map(|item| value_to_graphql(item))
+                            .map(|item| Self::__graphql_to_value(item))
                             .collect();
                         Ok(Some(::async_graphql::Value::List(values)))
                     }
@@ -693,7 +755,7 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
         } else {
             quote! {
                 match #method_call {
-                    Ok(value) => Ok(Some(value_to_graphql(value))),
+                    Ok(value) => Ok(Some(Self::__graphql_to_value(value))),
                     Err(e) => Err(::async_graphql::Error::new(format!("{}", e))),
                 }
             }
@@ -701,7 +763,7 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
     } else if ret.is_option {
         quote! {
             match #method_call {
-                Some(value) => Ok(Some(value_to_graphql(value))),
+                Some(value) => Ok(Some(Self::__graphql_to_value(value))),
                 None => Ok(None),
             }
         }
@@ -709,67 +771,21 @@ fn generate_field_registration(method: &MethodInfo, has_qualified: bool) -> Toke
         quote! {
             let items = #method_call;
             let values: Vec<_> = items.into_iter()
-                .map(|item| value_to_graphql(item))
+                .map(|item| Self::__graphql_to_value(item))
                 .collect();
             Ok(Some(::async_graphql::Value::List(values)))
         }
     } else {
         quote! {
             let result = #method_call;
-            Ok(Some(value_to_graphql(result)))
+            Ok(Some(Self::__graphql_to_value(result)))
         }
     };
 
+    // Note: the `json_to_graphql` / `value_to_graphql` helpers that were previously
+    // emitted here (once per method) have been hoisted to `__graphql_json_to_value` /
+    // `__graphql_to_value` on `Self`. Call sites now use `Self::__graphql_to_value`.
     quote! {
-        // Helper to recursively convert serde_json::Value to async_graphql::Value
-        fn json_to_graphql(json_val: ::serde_json::Value) -> ::async_graphql::Value {
-            match json_val {
-                ::serde_json::Value::Null => ::async_graphql::Value::Null,
-                ::serde_json::Value::Bool(b) => ::async_graphql::Value::Boolean(b),
-                ::serde_json::Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        ::async_graphql::Value::Number((i as i32).into())
-                    } else if let Some(f) = n.as_f64() {
-                        match ::serde_json::to_value(f) {
-                            Ok(::serde_json::Value::Number(num)) => {
-                                ::async_graphql::Value::Number(num.into())
-                            }
-                            _ => ::async_graphql::Value::String(f.to_string())
-                        }
-                    } else {
-                        ::async_graphql::Value::Number(n.into())
-                    }
-                }
-                ::serde_json::Value::String(s) => ::async_graphql::Value::String(s),
-                ::serde_json::Value::Array(arr) => {
-                    let values: Vec<_> = arr.into_iter()
-                        .map(json_to_graphql)
-                        .collect();
-                    ::async_graphql::Value::List(values)
-                }
-                ::serde_json::Value::Object(obj) => {
-                    let mut fields = ::async_graphql::indexmap::IndexMap::new();
-                    for (key, value) in obj {
-                        fields.insert(::async_graphql::Name::new(key), json_to_graphql(value));
-                    }
-                    ::async_graphql::Value::Object(fields)
-                }
-            }
-        }
-
-        fn value_to_graphql<T>(v: T) -> ::async_graphql::Value
-        where
-            T: ::serde::Serialize + std::fmt::Debug,
-        {
-            // Try to serialize to JSON value first
-            if let Ok(json_val) = ::serde_json::to_value(&v) {
-                json_to_graphql(json_val)
-            } else {
-                // Fallback to Debug formatting
-                ::async_graphql::Value::String(format!("{:?}", v))
-            }
-        }
-
         let field = Field::new(#field_name, #type_ref, move |ctx| {
             let service = service.clone();
             FieldFuture::new(async move {
@@ -814,7 +830,17 @@ fn infer_graphql_type_ref(ret: &server_less_parse::ReturnInfo) -> (TokenStream2,
         } else if type_str.contains("bool") {
             quote! { TypeRef::BOOLEAN }
         } else {
-            quote! { TypeRef::STRING }
+            // Unrecognised return type: fall back to the JSON scalar rather than
+            // silently using String (which produces a wrong schema). Custom structs
+            // that implement `Serialize` will serialize correctly through
+            // `__graphql_to_value`; the schema will describe the field as JSON.
+            //
+            // The "JSON" scalar is always registered by `collect_custom_scalars`.
+            //
+            // For a properly-typed schema, annotate the method with
+            // `#[route(response_type = "MyGraphQLType")]` and register the type via
+            // `#[graphql(inputs(MyGraphQLType))]`.
+            quote! { "JSON" }
         };
 
         if ret.is_option {
@@ -857,7 +883,9 @@ fn generate_resolver_arm(_struct_name: &syn::Ident, method: &MethodInfo) -> Toke
 
     quote! {
         #method_name_str => {
-            Ok(::async_graphql::Value::String("todo".to_string()))
+            // Dispatch is handled by FieldFuture closures registered in graphql_schema().
+            // This arm is dead code; reaching it indicates a code-generation bug.
+            unreachable!("BUG: resolver arm should not be called — dispatch is handled by FieldFuture")
         }
     }
 }
@@ -937,7 +965,8 @@ fn map_inner_type_to_graphql(inner: &str) -> &'static str {
     } else if inner.contains("bool") {
         "Boolean"
     } else {
-        "String" // Custom types default to String
+        // Unrecognised inner type: fall back to JSON scalar (always registered).
+        "JSON"
     }
 }
 
@@ -945,8 +974,15 @@ fn map_inner_type_to_graphql(inner: &str) -> &'static str {
 ///
 /// Returns a deduplicated list of scalar names that need to be registered
 /// with the dynamic schema builder.
+///
+/// "JSON" is always included because unrecognised return types fall back to it
+/// (see `infer_graphql_type_ref` and `map_inner_type_to_graphql`).
 fn collect_custom_scalars(methods: &[&MethodInfo]) -> Vec<String> {
     let mut scalars = std::collections::BTreeSet::new();
+
+    // Always register the JSON scalar — unrecognised struct/enum return types fall
+    // back to "JSON" rather than silently mapping to String.
+    scalars.insert("JSON".to_string());
 
     for method in methods {
         for param in &method.params {
