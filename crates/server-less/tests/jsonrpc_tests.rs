@@ -618,6 +618,63 @@ async fn test_jsonrpc_iterator_strings_serializes_to_array() {
 }
 
 // ============================================================================
+// Missing / Wrong-Type Parameter Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_jsonrpc_missing_required_param_returns_32602() {
+    let calc = Calculator;
+    // Call `add` but omit `b` — should yield Invalid Params (-32602)
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "add",
+        "params": {"a": 5},
+        "id": 10
+    });
+
+    let response = calc.jsonrpc_handle(request).await;
+
+    assert!(response["error"].is_object(), "expected an error object, got: {}", response);
+    assert_eq!(
+        response["error"]["code"],
+        -32602,
+        "missing required param must produce -32602, got: {}",
+        response["error"]["code"]
+    );
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("missing"),
+        "error message should mention 'missing', got: {}",
+        response["error"]["message"]
+    );
+}
+
+#[tokio::test]
+async fn test_jsonrpc_wrong_type_param_returns_32602() {
+    let calc = Calculator;
+    // `add` expects i32 for `a`; pass a string instead
+    let request = json!({
+        "jsonrpc": "2.0",
+        "method": "add",
+        "params": {"a": "not-a-number", "b": 3},
+        "id": 11
+    });
+
+    let response = calc.jsonrpc_handle(request).await;
+
+    assert!(response["error"].is_object(), "expected an error object, got: {}", response);
+    assert_eq!(
+        response["error"]["code"],
+        -32602,
+        "wrong-type param must produce -32602, got: {}",
+        response["error"]["code"]
+    );
+}
+
+// ============================================================================
 // Hidden Method Tests
 // ============================================================================
 
