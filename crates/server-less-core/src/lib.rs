@@ -363,7 +363,10 @@ pub struct ParamInfo {
     pub is_id: bool,
 }
 
-/// HTTP method inferred from function name
+/// Runtime HTTP method enum used in generated introspection code.
+///
+/// See also [`server_less_parse::HttpMethod`] for the compile-time equivalent used
+/// by proc macros during code generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpMethod {
     Get,
@@ -440,7 +443,12 @@ fn pluralize(word: &str) -> String {
     }
 }
 
-/// Infer URL path from method name
+/// Infer a REST path from a method name and HTTP method.
+///
+/// This is the runtime version used in generated introspection code. It does not
+/// have access to parameter information, so it cannot infer `/{id}` paths contextually.
+/// See `server_less_parse` (or `server_less_macros::openapi_gen`) for the richer
+/// compile-time version that uses parameter names to infer `/{id}` paths.
 pub fn infer_path(method_name: &str, http_method: HttpMethod) -> String {
     // Strip common prefixes to get the resource name
     let resource = method_name

@@ -158,7 +158,9 @@ use crate::context::{
     generate_http_context_extraction, has_qualified_context, partition_context_params,
 };
 
-use crate::openapi_gen::{HttpMethod, ResponseOverride, RouteOverride, infer_http_method, infer_path};
+use server_less_parse::HttpMethod;
+
+use crate::openapi_gen::{ResponseOverride, RouteOverride, infer_http_method, infer_path};
 
 /// Extract the inner type T from Option<T>
 fn extract_option_inner(ty: &Type) -> Option<Type> {

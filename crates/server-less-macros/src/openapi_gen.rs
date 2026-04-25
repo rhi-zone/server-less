@@ -8,43 +8,9 @@
 use heck::ToKebabCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use server_less_parse::{MethodInfo, ParamInfo, ParamLocation};
+use server_less_parse::{HttpMethod, MethodInfo, ParamInfo, ParamLocation};
 
 use crate::context::should_inject_context;
-
-/// HTTP method enum for OpenAPI generation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HttpMethod {
-    Get,
-    Post,
-    Put,
-    Patch,
-    Delete,
-}
-
-impl HttpMethod {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            HttpMethod::Get => "GET",
-            HttpMethod::Post => "POST",
-            HttpMethod::Put => "PUT",
-            HttpMethod::Patch => "PATCH",
-            HttpMethod::Delete => "DELETE",
-        }
-    }
-
-    /// Parse from string (case-insensitive)
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_uppercase().as_str() {
-            "GET" => Some(HttpMethod::Get),
-            "POST" => Some(HttpMethod::Post),
-            "PUT" => Some(HttpMethod::Put),
-            "PATCH" => Some(HttpMethod::Patch),
-            "DELETE" => Some(HttpMethod::Delete),
-            _ => None,
-        }
-    }
-}
 
 /// Per-method HTTP attribute overrides
 #[derive(Default, Clone)]
@@ -268,7 +234,10 @@ pub fn infer_http_method(name: &str) -> HttpMethod {
     }
 }
 
-/// Infer URL path from method name
+/// Infer a REST path from a method name, HTTP method, and parameter list.
+///
+/// Uses parameter names to contextually infer `/{id}` paths (e.g. `get_user(id: u32)` → `GET /users/{id}`).
+/// See also `server_less_core::infer_path` for the simpler runtime version used in generated code.
 pub fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamInfo]) -> String {
     let resource = method_name
         .strip_prefix("get_")

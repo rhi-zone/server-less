@@ -131,6 +131,43 @@ pub fn ident_str(ident: &Ident) -> String {
     s.strip_prefix("r#").map(str::to_string).unwrap_or(s)
 }
 
+/// Compile-time HTTP method enum used by proc macros during code generation.
+///
+/// See also [`server_less_core::HttpMethod`] for the runtime equivalent used
+/// in generated introspection code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+}
+
+impl HttpMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HttpMethod::Get => "GET",
+            HttpMethod::Post => "POST",
+            HttpMethod::Put => "PUT",
+            HttpMethod::Patch => "PATCH",
+            HttpMethod::Delete => "DELETE",
+        }
+    }
+
+    /// Parse from string (case-insensitive)
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_uppercase().as_str() {
+            "GET" => Some(HttpMethod::Get),
+            "POST" => Some(HttpMethod::Post),
+            "PUT" => Some(HttpMethod::Put),
+            "PATCH" => Some(HttpMethod::Patch),
+            "DELETE" => Some(HttpMethod::Delete),
+            _ => None,
+        }
+    }
+}
+
 /// Parameter location for HTTP requests
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParamLocation {
