@@ -51,7 +51,7 @@ async fn test_jsonrpc_handle_add() {
         "id": 1
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["result"], 8);
@@ -68,7 +68,7 @@ async fn test_jsonrpc_handle_subtract() {
         "id": 2
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
     assert_eq!(response["result"], 6);
 }
 
@@ -82,7 +82,7 @@ async fn test_jsonrpc_handle_string_params() {
         "id": 3
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
     assert_eq!(response["result"], "hello world");
 }
 
@@ -96,7 +96,7 @@ async fn test_jsonrpc_method_not_found() {
         "id": 4
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
     assert!(response["error"].is_object());
     assert!(
         response["error"]["message"]
@@ -116,7 +116,7 @@ async fn test_jsonrpc_invalid_version() {
         "id": 5
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
     assert!(response["error"].is_object());
     assert_eq!(response["error"]["code"], -32600);
 }
@@ -131,7 +131,7 @@ async fn test_jsonrpc_notification_no_response() {
         "params": {"a": 1, "b": 2}
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
     // Notifications return null (no response)
     assert!(response.is_null());
 }
@@ -144,7 +144,7 @@ async fn test_jsonrpc_batch_request() {
         {"jsonrpc": "2.0", "method": "multiply", "params": {"a": 3, "b": 4}, "id": 2}
     ]);
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
 
     assert!(response.is_array());
     let arr = response.as_array().unwrap();
@@ -161,7 +161,7 @@ async fn test_jsonrpc_batch_with_notifications() {
         {"jsonrpc": "2.0", "method": "multiply", "params": {"a": 3, "b": 4}}  // notification
     ]);
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
 
     // Only the non-notification gets a response
     assert!(response.is_array());
@@ -193,7 +193,7 @@ async fn test_jsonrpc_async_method() {
         "id": 1
     });
 
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
     assert_eq!(response["result"], "async works");
 }
 
@@ -319,7 +319,7 @@ async fn test_jsonrpc_static_mount_dispatch() {
 
     // Dispatch to leaf
     let response = app
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "ping",
             "params": {},
@@ -330,7 +330,7 @@ async fn test_jsonrpc_static_mount_dispatch() {
 
     // Dispatch to mounted child
     let response = app
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "math.add",
             "params": {"a": 10, "b": 5},
@@ -341,7 +341,7 @@ async fn test_jsonrpc_static_mount_dispatch() {
 
     // Dispatch to another mount
     let response = app
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "strings.upper",
             "params": {"s": "hello"},
@@ -359,7 +359,7 @@ async fn test_jsonrpc_static_mount_double() {
     };
 
     let response = app
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "math.double",
             "params": {"n": 21},
@@ -397,7 +397,7 @@ async fn test_jsonrpc_slug_mount_dispatch() {
     let app = JsonRpcSlugApp { math: MathTools };
 
     let response = app
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "calc.add",
             "params": {"id": "calc-1", "a": 3, "b": 4},
@@ -521,7 +521,7 @@ async fn test_jsonrpc_error_code_from_serverless_error() {
 
     // BadParams → jsonrpc_code -32602
     let response = svc
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "get_item",
             "params": {"id": -1},
@@ -537,7 +537,7 @@ async fn test_jsonrpc_error_code_from_serverless_error() {
 
     // Missing → jsonrpc_code derived from NotFound (-32002)
     let response = svc
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "get_item",
             "params": {"id": 0},
@@ -553,7 +553,7 @@ async fn test_jsonrpc_error_code_from_serverless_error() {
 
     // Successful call
     let response = svc
-        .jsonrpc_handle(json!({
+        .jsonrpc_handle_async(json!({
             "jsonrpc": "2.0",
             "method": "get_item",
             "params": {"id": 42},
@@ -593,7 +593,7 @@ async fn test_jsonrpc_iterator_serializes_to_array() {
         "id": 1
     });
 
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
@@ -611,7 +611,7 @@ async fn test_jsonrpc_iterator_strings_serializes_to_array() {
         "id": 2
     });
 
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
 
     assert!(response["result"].is_array(), "iterator result must be a JSON array");
     assert_eq!(response["result"], json!(["hello", "world"]));
@@ -632,7 +632,7 @@ async fn test_jsonrpc_missing_required_param_returns_32602() {
         "id": 10
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
 
     assert!(response["error"].is_object(), "expected an error object, got: {}", response);
     assert_eq!(
@@ -663,7 +663,7 @@ async fn test_jsonrpc_wrong_type_param_returns_32602() {
         "id": 11
     });
 
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
 
     assert!(response["error"].is_object(), "expected an error object, got: {}", response);
     assert_eq!(
@@ -707,7 +707,7 @@ async fn test_jsonrpc_optional_wrong_type_returns_32602() {
         "id": 20
     });
 
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
 
     assert!(
         response["error"].is_object(),
@@ -742,7 +742,7 @@ async fn test_jsonrpc_optional_absent_is_ok() {
         "id": 21
     });
 
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
     assert!(response["error"].is_null(), "absent optional should succeed, got: {}", response);
     assert!(response["result"].is_string(), "should return a string result, got: {}", response);
 }
@@ -761,7 +761,7 @@ async fn test_jsonrpc_unknown_param_does_not_break_dispatch() {
         "id": 22
     });
 
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
     assert!(
         response["error"].is_null(),
         "unknown param should not cause an error, got: {}",
@@ -784,7 +784,7 @@ async fn test_jsonrpc_unknown_extra_param_does_not_break_dispatch() {
         "id": 23
     });
 
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
     assert!(
         response["error"].is_null(),
         "unknown extra param should not cause an error, got: {}",
@@ -833,7 +833,7 @@ async fn test_jsonrpc_hidden_method_still_callable() {
         "params": {"value": 21},
         "id": 1
     });
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
     assert_eq!(response["result"], json!(42));
 }
 

@@ -39,7 +39,7 @@ async fn test_rpc_basic_handle() {
         "params": {"a": 2, "b": 3},
         "id": 1
     });
-    let response = calc.jsonrpc_handle(request).await;
+    let response = calc.jsonrpc_handle_async(request).await;
     assert_eq!(response["result"], 5);
 }
 

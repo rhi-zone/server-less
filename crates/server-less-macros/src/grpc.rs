@@ -22,7 +22,8 @@
 //!
 //! # Generated Methods
 //!
-//! - `proto_schema() -> &'static str` - Generated .proto schema
+//! - `grpc_schema() -> &'static str` - Generated .proto schema
+//! - `write_grpc(path)` - Write .proto schema to a file
 //! - `validate_schema() -> Result<(), SchemaValidationError>` - Validate if schema path provided
 //! - `assert_schema_matches()` - Panic if validation fails (for tests)
 //!
@@ -41,7 +42,7 @@
 //!     }
 //! }
 //!
-//! let schema = UserService::proto_schema();
+//! let schema = UserService::grpc_schema();
 //! ```
 
 use crate::app::extract_app_meta;
@@ -136,7 +137,7 @@ service {service_name} {{
         quote! {
             pub fn validate_schema() -> Result<(), ::server_less::SchemaValidationError> {
                 let expected = include_str!(#schema_path);
-                let generated = Self::proto_schema();
+                let generated = Self::grpc_schema();
                 fn normalize(s: &str) -> Vec<String> {
                     s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
                 }
@@ -182,11 +183,11 @@ service {service_name} {{
     Ok(quote! {
         #maybe_impl
         impl #impl_generics #self_ty #where_clause {
-            pub fn proto_schema() -> &'static str {
+            pub fn grpc_schema() -> &'static str {
                 #proto_schema
             }
-            pub fn write_proto(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
-                std::fs::write(path, Self::proto_schema())
+            pub fn write_grpc(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+                std::fs::write(path, Self::grpc_schema())
             }
             #validation_method
         }
@@ -286,6 +287,8 @@ fn rust_type_to_proto(ty: &Option<syn::Type>) -> &'static str {
     } else if type_str.contains("Vec") {
         "repeated string"
     } else {
+        // NOTE: unknown type mapping — if this type should map to a specific proto type,
+        // add it to rust_type_to_proto(). Defaulting to bytes.
         "bytes"
     }
 }

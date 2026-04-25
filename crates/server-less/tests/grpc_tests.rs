@@ -38,7 +38,7 @@ impl UserService {
 
 #[test]
 fn test_proto_schema_generated() {
-    let proto = UserService::proto_schema();
+    let proto = UserService::grpc_schema();
 
     // Check package
     assert!(proto.contains("package users.v1;"), "Should have package");
@@ -49,7 +49,7 @@ fn test_proto_schema_generated() {
 
 #[test]
 fn test_proto_rpc_methods() {
-    let proto = UserService::proto_schema();
+    let proto = UserService::grpc_schema();
 
     // Check RPC methods (CamelCase)
     assert!(proto.contains("rpc GetUser"), "Should have GetUser rpc");
@@ -70,7 +70,7 @@ fn test_proto_rpc_methods() {
 
 #[test]
 fn test_proto_messages() {
-    let proto = UserService::proto_schema();
+    let proto = UserService::grpc_schema();
 
     // Check request messages
     assert!(
@@ -95,7 +95,7 @@ fn test_proto_messages() {
 
 #[test]
 fn test_proto_fields() {
-    let proto = UserService::proto_schema();
+    let proto = UserService::grpc_schema();
 
     // CreateUser should have name and email fields
     assert!(
@@ -110,7 +110,7 @@ fn test_proto_fields() {
 
 #[test]
 fn test_proto_optional_fields() {
-    let proto = UserService::proto_schema();
+    let proto = UserService::grpc_schema();
 
     // UpdateUser should have optional email
     assert!(
@@ -121,7 +121,7 @@ fn test_proto_optional_fields() {
 
 #[test]
 fn test_proto_doc_comments() {
-    let proto = UserService::proto_schema();
+    let proto = UserService::grpc_schema();
 
     // Doc comments should be preserved
     assert!(
@@ -143,7 +143,7 @@ impl SimpleService {
 
 #[test]
 fn test_proto_default_package() {
-    let proto = SimpleService::proto_schema();
+    let proto = SimpleService::grpc_schema();
 
     // Default package should be snake_case struct name
     assert!(
@@ -176,7 +176,7 @@ impl TypeService {
 
 #[test]
 fn test_proto_return_types() {
-    let proto = TypeService::proto_schema();
+    let proto = TypeService::grpc_schema();
 
     // Check various proto types
     assert!(proto.contains("int32 result"), "Should map i32 to int32");
@@ -278,7 +278,7 @@ impl StreamingService {
 
 #[test]
 fn test_streaming_rpc_generates_stream_keyword() {
-    let proto = StreamingService::proto_schema();
+    let proto = StreamingService::grpc_schema();
 
     // Unary method should NOT have stream keyword
     assert!(
@@ -305,7 +305,7 @@ fn test_streaming_rpc_generates_stream_keyword() {
 
 #[test]
 fn test_streaming_response_message() {
-    let proto = StreamingService::proto_schema();
+    let proto = StreamingService::grpc_schema();
 
     // Streaming response should use the item type
     assert!(

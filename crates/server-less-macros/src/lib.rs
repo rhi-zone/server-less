@@ -762,7 +762,7 @@ pub fn ws(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// This generates:
 /// - `Calculator::jsonrpc_router()` returning an axum Router
-/// - `Calculator::jsonrpc_handle(request)` to handle JSON-RPC requests
+/// - `Calculator::jsonrpc_handle_async(request)` to handle JSON-RPC requests (async)
 /// - `Calculator::jsonrpc_methods()` listing available methods
 ///
 /// Supports JSON-RPC 2.0 features:
@@ -972,10 +972,10 @@ pub fn connect(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 ///
 /// // Get the proto schema
-/// let proto = UserService::proto_schema();
+/// let proto = UserService::grpc_schema();
 ///
 /// // Write to file for use with tonic-build
-/// UserService::write_proto("proto/users.proto")?;
+/// UserService::write_grpc("proto/users.proto")?;
 /// ```
 ///
 /// The generated schema can be used with tonic-build in your build.rs

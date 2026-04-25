@@ -20,8 +20,7 @@
 //! # Generated Methods
 //!
 //! - `jsonrpc_methods() -> Vec<String>` - List of available methods
-//! - `jsonrpc_handle(&self, request: &str) -> String` - Handle request (sync)
-//! - `jsonrpc_handle_async(&self, request: &str).await` - Handle request (async)
+//! - `jsonrpc_handle_async(&self, request: Value).await` - Handle request (async)
 //! - `jsonrpc_router(self) -> axum::Router` - HTTP server at /rpc
 //!
 //! # Example
@@ -293,7 +292,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
             },
             quote! { self.jsonrpc_dispatch(__ctx, method, params).await },
             quote! {
-                pub async fn jsonrpc_handle(
+                pub async fn jsonrpc_handle_async(
                     &self,
                     __ctx: ::server_less::Context,
                     request: ::server_less::serde_json::Value,
@@ -308,7 +307,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
             },
             quote! { self.jsonrpc_handle_single(__ctx.clone(), req.clone()).await },
             quote! { self.jsonrpc_handle_single(__ctx, request).await },
-            quote! { state.jsonrpc_handle(__ctx, request).await },
+            quote! { state.jsonrpc_handle_async(__ctx, request).await },
             quote! {},
         )
     } else {
@@ -322,7 +321,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
             },
             quote! { self.jsonrpc_dispatch(method, params).await },
             quote! {
-                pub async fn jsonrpc_handle(
+                pub async fn jsonrpc_handle_async(
                     &self,
                     request: ::server_less::serde_json::Value,
                 ) -> ::server_less::serde_json::Value
@@ -335,7 +334,7 @@ pub(crate) fn expand_jsonrpc(args: JsonRpcArgs, mut impl_block: ItemImpl) -> syn
             },
             quote! { self.jsonrpc_handle_single(req.clone()).await },
             quote! { self.jsonrpc_handle_single(request).await },
-            quote! { state.jsonrpc_handle(request).await },
+            quote! { state.jsonrpc_handle_async(request).await },
             quote! { let __ctx = ::server_less::Context::new(); },
         )
     };

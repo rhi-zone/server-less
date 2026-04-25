@@ -48,7 +48,7 @@
 //! # Generated Methods
 //!
 //! - `mcp_tools() -> Vec<serde_json::Value>` - Tool definitions for MCP
-//! - `mcp_tool_names() -> Vec<&'static str>` - List of tool names
+//! - `mcp_method_names() -> Vec<String>` - List of tool/method names
 //! - `mcp_call(&self, name: &str, args: Value) -> Result<Value, String>` - Execute tool
 //! - `mcp_call_async(&self, name: &str, args: Value).await` - Async execution
 //!
@@ -266,7 +266,7 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
             }
 
             fn mcp_namespace_tool_names() -> Vec<String> {
-                Self::mcp_tool_names()
+                Self::mcp_method_names()
             }
 
             fn mcp_namespace_call(
@@ -296,8 +296,8 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
                 tools
             }
 
-            /// Get tool names
-            pub fn mcp_tool_names() -> Vec<String> {
+            /// Get tool/method names
+            pub fn mcp_method_names() -> Vec<String> {
                 let mut names: Vec<String> = vec![#(#leaf_tool_names.to_string()),*];
                 #(#mount_tool_names)*
                 names

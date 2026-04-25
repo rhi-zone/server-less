@@ -66,8 +66,8 @@ fn test_mcp_tools_generated() {
 }
 
 #[test]
-fn test_mcp_tool_names() {
-    let names = TestService::mcp_tool_names();
+fn test_mcp_method_names() {
+    let names = TestService::mcp_method_names();
     assert_eq!(names.len(), 4);
     assert!(names.contains(&"test_list_items".to_string()));
 }
@@ -565,7 +565,7 @@ fn test_mcp_hidden_method_not_in_tool_list() {
 
 #[test]
 fn test_mcp_hidden_method_not_in_tool_names() {
-    let names = HiddenService::mcp_tool_names();
+    let names = HiddenService::mcp_method_names();
     assert!(names.contains(&"public_tool".to_string()));
     assert!(!names.contains(&"hidden_tool".to_string()));
 }

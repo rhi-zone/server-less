@@ -520,7 +520,7 @@ fn test_server_hidden_present_but_hidden_in_cli() {
 
 #[test]
 fn test_server_skip_excluded_from_mcp() {
-    let tool_names: Vec<_> = SkipMcp::mcp_tool_names().to_vec();
+    let tool_names: Vec<_> = SkipMcp::mcp_method_names().to_vec();
     assert!(tool_names.contains(&"visible".to_string()), "visible should be a tool");
     assert!(
         !tool_names.contains(&"internal".to_string()),
@@ -654,6 +654,6 @@ async fn test_stacked_cli_jsonrpc_compiles() {
         "params": {"value": "hello"},
         "id": 1
     });
-    let response = svc.jsonrpc_handle(request).await;
+    let response = svc.jsonrpc_handle_async(request).await;
     assert_eq!(response["result"], "hello");
 }
