@@ -280,6 +280,7 @@ Rules of thumb:
 - Codebase-wide analysis (architecture, patterns, cross-file survey) → always subagent
 - Mechanical work across many files (applying the same change everywhere) → parallel subagents
 - Single targeted lookup (one file, one symbol) → inline is fine
+- **Code changes beyond a trivial single-file edit → worktree agent.** Read the files, write the prompt with exact file paths and what to change, then delegate. Do not implement non-trivial changes inline.
 
 ## Commit Convention
 
