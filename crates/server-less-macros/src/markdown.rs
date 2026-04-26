@@ -43,7 +43,7 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::ToTitleCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -108,13 +108,20 @@ pub(crate) fn expand_markdown(
     args: MarkdownArgs,
     mut impl_block: ItemImpl,
 ) -> syn::Result<TokenStream2> {
+    // L3: reject generic impl blocks (consistent with all other protocol macros).
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let generics_clone = impl_block.generics.clone();
     let (impl_generics, _ty_generics, where_clause) = generics_clone.split_for_impl();
     let self_ty = impl_block.self_ty.clone();
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    // M2: validate #[server(...)] attrs on every method before skip/hidden filtering.
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();

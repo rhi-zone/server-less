@@ -311,6 +311,8 @@ impl Parse for WsArgs {
 
 pub(crate) fn expand_ws(args: WsArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     crate::reject_generic_impl(&impl_block)?;
+    // L7: app_meta is extracted to consume the __app_meta attr (preventing it from leaking
+    // to downstream macros), but ws doesn't produce named artifacts that use it.
     let _app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();

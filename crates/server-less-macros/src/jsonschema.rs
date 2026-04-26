@@ -42,7 +42,7 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -106,12 +106,19 @@ pub(crate) fn expand_jsonschema(
     args: JsonSchemaArgs,
     mut impl_block: ItemImpl,
 ) -> syn::Result<TokenStream2> {
+    // L3: reject generic impl blocks (consistent with all other protocol macros).
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    // M2: validate #[server(...)] attrs on every method before skip/hidden filtering.
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();
@@ -264,10 +271,11 @@ fn get_type_schema_ty(ty: &syn::Type) -> String {
     if let Some(ok) = unwrap_result_ok_type(ty) {
         return get_type_schema_ty(ok);
     }
-    // Option<T> → nullable schema
+    // M15: Option<T> → {"anyOf": [{"type": "null"}, <inner_schema>]}
+    // Bare `null` is not valid JSON Schema; use {"type": "null"} instead.
     if let Some(inner) = unwrap_option_type(ty) {
         let inner_schema = get_type_schema_ty(inner);
-        return format!(r#"{{"anyOf": [null, {}]}}"#, inner_schema);
+        return format!(r#"{{"anyOf": [{{"type": "null"}}, {}]}}"#, inner_schema);
     }
     // Vec<T> → {"type": "array", "items": <inner_schema>}
     if let Some(inner) = unwrap_vec_type(ty) {
