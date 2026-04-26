@@ -160,7 +160,9 @@ pub(crate) fn expand_graphql(args: GraphqlArgs, mut impl_block: ItemImpl) -> syn
     crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     // args.name takes precedence over app_meta.name for GraphQL schema naming.
-    let _effective_name = args.name.or(app_meta.name);
+    // TODO: wire effective_name into the GraphQL schema name (used where struct name is currently hardcoded).
+    let effective_name = args.name.or(app_meta.name);
+    let _ = effective_name; // not yet wired in
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
@@ -730,10 +732,10 @@ fn generate_field_registration(method: &MethodInfo) -> TokenStream2 {
         }
     }).collect();
 
-    // Build arg list for method call: inject Context::default() where needed, pass others by name.
+    // Build arg list for method call: inject Context::new() where needed, pass others by name.
     let param_names: Vec<_> = method.params.iter().map(|p| {
         if should_inject_context(&p.ty, &method.params) {
-            quote! { ::server_less::Context::default() }
+            quote! { ::server_less::Context::new() }
         } else {
             let name = &p.name;
             quote! { #name }

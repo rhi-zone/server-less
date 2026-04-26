@@ -14,6 +14,9 @@ use syn::Type;
 /// - `server_less::Context`
 /// - `::server_less::Context`
 /// - `crate::server_less::Context`
+///
+/// Note: detection is done by crate name (`server_less`). If the crate is re-exported
+/// or aliased under a different name in Cargo.toml, Context injection will silently fail.
 pub fn is_qualified_context(ty: &Type) -> bool {
     if let Type::Path(type_path) = ty {
         let path = &type_path.path;

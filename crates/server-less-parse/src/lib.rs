@@ -147,6 +147,7 @@ pub enum HttpMethod {
 }
 
 impl HttpMethod {
+    /// Returns the HTTP method as an uppercase string slice (e.g. `"GET"`, `"POST"`).
     pub fn as_str(&self) -> &'static str {
         match self {
             HttpMethod::Get => "GET",
@@ -158,7 +159,7 @@ impl HttpMethod {
     }
 
     /// Parse from string (case-insensitive)
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
             "GET" => Some(HttpMethod::Get),
             "POST" => Some(HttpMethod::Post),
@@ -959,11 +960,10 @@ pub fn unwrap_option_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         let seg = type_path.path.segments.last()?;
         if seg.ident != "Option" { return None; }
-        if let PathArguments::AngleBracketed(args) = &seg.arguments {
-            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+        if let PathArguments::AngleBracketed(args) = &seg.arguments
+            && let Some(GenericArgument::Type(inner)) = args.args.first() {
                 return Some(inner);
             }
-        }
     }
     None
 }
@@ -973,11 +973,10 @@ pub fn unwrap_vec_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         let seg = type_path.path.segments.last()?;
         if seg.ident != "Vec" { return None; }
-        if let PathArguments::AngleBracketed(args) = &seg.arguments {
-            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+        if let PathArguments::AngleBracketed(args) = &seg.arguments
+            && let Some(GenericArgument::Type(inner)) = args.args.first() {
                 return Some(inner);
             }
-        }
     }
     None
 }
@@ -987,11 +986,10 @@ pub fn unwrap_result_ok_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         let seg = type_path.path.segments.last()?;
         if seg.ident != "Result" { return None; }
-        if let PathArguments::AngleBracketed(args) = &seg.arguments {
-            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+        if let PathArguments::AngleBracketed(args) = &seg.arguments
+            && let Some(GenericArgument::Type(inner)) = args.args.first() {
                 return Some(inner);
             }
-        }
     }
     None
 }

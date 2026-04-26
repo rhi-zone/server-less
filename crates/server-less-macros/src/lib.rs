@@ -155,7 +155,9 @@ pub(crate) fn reject_generic_impl(impl_block: &syn::ItemImpl) -> syn::Result<()>
         return Err(syn::Error::new(
             span,
             "server-less macros do not yet support generic impl blocks — \
-             remove the type parameters or implement the trait manually",
+             remove the type parameters or implement the trait manually; \
+             hint: consider using a concrete type, \
+             e.g. `impl MyService<ConcreteType> { ... }`",
         ));
     }
     Ok(())
@@ -1591,10 +1593,10 @@ pub fn response(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - Parameters with `name` are documented with their wire names
 /// - Parameters with `default` are marked as not required
 /// - Location overrides are reflected in OpenAPI specs
-#[cfg(feature = "http")]
+#[cfg(any(feature = "http", feature = "cli", feature = "mcp"))]
 #[proc_macro_attribute]
 pub fn param(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    // Pass through unchanged - the #[http] macro parses these attributes
+    // Pass through unchanged - the #[http]/[cli]/[mcp] macros parse these attributes
     item
 }
 

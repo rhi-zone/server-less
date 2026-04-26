@@ -261,6 +261,7 @@ impl<T> SchemaValueParser<T>
 where
     T: schemars::JsonSchema + std::str::FromStr + Clone + Send + Sync + 'static,
 {
+    /// Creates a new `SchemaValueParser`, extracting allowed enum variants if available.
     pub fn new() -> Self {
         let variants = extract_enum_variants::<T>().map(|strings| {
             let leaked: Vec<&'static str> = strings
@@ -412,6 +413,7 @@ impl HttpMethod {
         }
     }
 
+    /// Returns the HTTP method as an uppercase string slice (e.g. `"GET"`, `"POST"`).
     pub fn as_str(&self) -> &'static str {
         match self {
             HttpMethod::Get => "GET",

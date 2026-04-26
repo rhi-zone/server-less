@@ -454,6 +454,8 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let methods = extract_methods(&impl_block)?;
 
 
+    // NOTE: to_kebab_case() may produce unexpected forms for acronym-heavy names
+    // (e.g. `HTTPServer` → `h-t-t-p-server`). Use `name = "..."` in `#[cli]` or `#[app]` to override.
     let app_name = args
         .name
         .unwrap_or_else(|| struct_name.to_string().to_kebab_case());
@@ -1191,6 +1193,18 @@ fn type_to_json_schema_ty(ty: &syn::Type) -> TokenStream2 {
                 "f32" | "f64" => quote! { ::server_less::serde_json::json!({"type": "number"}) },
                 "bool" => quote! { ::server_less::serde_json::json!({"type": "boolean"}) },
                 "Vec" => {
+                    // Recurse into Vec<T> — items schema mirrors the inner type
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(GenericArgument::Type(inner)) = args.args.first()
+                    {
+                        let items_schema = type_to_json_schema_ty(inner);
+                        return quote! {
+                            {
+                                let __items = #items_schema;
+                                ::server_less::serde_json::json!({"type": "array", "items": __items})
+                            }
+                        };
+                    }
                     quote! { ::server_less::serde_json::json!({"type": "array", "items": {}}) }
                 }
                 "HashMap" | "BTreeMap" | "IndexMap" => {
@@ -1547,8 +1561,9 @@ fn generate_leaf_match_arm(
                     .and_then(|v| ::server_less::serde_json::from_value(v.clone()).ok());
             });
         } else if p.is_vec {
+            let elem_ty = p.vec_inner.as_ref().unwrap_or(ty);
             json_extractions.push(quote! {
-                let #name: Vec<String> = __json_obj.get(#name_str)
+                let #name: Vec<#elem_ty> = __json_obj.get(#name_str)
                     .map(|v| ::server_less::serde_json::from_value(v.clone()))
                     .transpose()
                     .map_err(|e| format!("Invalid value for '{}': {}", #name_str, e))?
