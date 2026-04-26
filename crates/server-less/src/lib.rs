@@ -50,11 +50,11 @@
 //!
 //! | Macro | Protocol | Generated Methods |
 //! |-------|----------|-------------------|
-//! | `#[http]` | HTTP/REST | `http_router()`, `http_openapi_spec()` |
+//! | `#[http]` | HTTP/REST | `http_router()`, `http_openapi_spec()`, `http_openapi_paths()` |
 //! | `#[cli]` | Command Line | `cli_command()`, `cli_run()`, `cli_run_with()`, `cli_run_async()`, `cli_run_with_async()` |
-//! | `#[mcp]` | MCP | `mcp_tools()`, `mcp_call()`, `mcp_call_async()` |
-//! | `#[ws]` | WebSocket | `ws_router()`, `ws_handle_message()`, `ws_handle_message_async()` |
-//! | `#[jsonrpc]` | JSON-RPC 2.0 | `jsonrpc_router()`, `jsonrpc_methods()` |
+//! | `#[mcp]` | MCP | `mcp_tools()`, `mcp_call()`, `mcp_call_async()`, `mcp_method_names()` |
+//! | `#[ws]` | WebSocket | `ws_router()`, `ws_handle_message()`, `ws_handle_message_async()`, `ws_methods()` |
+//! | `#[jsonrpc]` | JSON-RPC 2.0 | `jsonrpc_router()`, `jsonrpc_methods()`, `jsonrpc_handle_async()` |
 //! | `#[graphql]` | GraphQL | async-graphql integration |
 //! | `#[grpc]` | gRPC | `.proto` schema generation |
 //!
@@ -259,6 +259,9 @@ pub use server_less_macros::route;
 #[cfg(feature = "http")]
 pub use server_less_macros::response;
 
+#[cfg(any(feature = "http", feature = "cli", feature = "mcp"))]
+pub use server_less_macros::param;
+
 #[cfg(feature = "http")]
 pub use server_less_macros::serve;
 
@@ -348,7 +351,6 @@ pub use server_less_macros::__app_meta;
 #[cfg(feature = "config")]
 pub use server_less_macros::Config;
 #[cfg(feature = "config")]
-#[doc(hidden)]
 pub use server_less_core::config::{ConfigLoad, ConfigError, ConfigFieldMeta, ConfigSource};
 
 // Re-export deps for generated code — users shouldn't need to add these directly
