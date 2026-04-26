@@ -66,13 +66,11 @@ use syn::{ItemImpl, Token, parse::Parse};
 #[derive(Default)]
 pub(crate) struct McpArgs {
     /// Tool namespace/prefix
-    namespace: Option<String>,
-}
-
-impl McpArgs {
-    pub(crate) fn with_namespace(namespace: Option<String>) -> Self {
-        Self { namespace }
-    }
+    pub(crate) namespace: Option<String>,
+    /// App name (from `#[app]` or inline; used as namespace fallback)
+    pub name: Option<String>,
+    /// App description (from `#[app]` or inline)
+    pub description: Option<String>,
 }
 
 impl Parse for McpArgs {
@@ -130,7 +128,12 @@ fn strip_param_attrs(impl_block: &ItemImpl) -> ItemImpl {
     block
 }
 
-pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_mcp(args: McpArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    // Extract #[__app_meta] from attrs and use as fallback for unset fields.
+    let app_meta = crate::app::extract_app_meta(&mut impl_block.attrs);
+    let app_name = args.name.or(app_meta.name);
+    let _app_description = args.description.or(app_meta.description);
+
     crate::reject_generic_impl(&impl_block)?;
     let _struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
@@ -143,7 +146,8 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
         quote! {}
     };
 
-    let namespace = args.namespace.unwrap_or_default();
+    // Use explicit namespace first; fall back to app_meta.name (from #[app]) as namespace.
+    let namespace = args.namespace.or(app_name).unwrap_or_default();
     let namespace_prefix = if namespace.is_empty() {
         String::new()
     } else {
@@ -364,6 +368,35 @@ pub(crate) fn expand_mcp(args: McpArgs, impl_block: ItemImpl) -> syn::Result<Tok
     })
 }
 
+/// Generate MCP parameter schema entries, respecting `#[param(name = "...")]` wire-name overrides.
+///
+/// Unlike `server_less_rpc::generate_param_schema_for`, this uses the wire name (from
+/// `#[param(name)]`) as the JSON key when present, falling back to the Rust identifier name.
+fn generate_mcp_param_schema(
+    params: &[&server_less_parse::ParamInfo],
+) -> (Vec<proc_macro2::TokenStream>, Vec<String>) {
+    let properties: Vec<_> = params
+        .iter()
+        .map(|p| {
+            let param_name = p.wire_name.clone().unwrap_or_else(|| p.name_str());
+            let param_type = server_less_rpc::infer_json_type(&p.ty);
+            let description = p
+                .help_text
+                .clone()
+                .unwrap_or_else(|| format!("Parameter: {}", param_name));
+            quote! { (#param_name, #param_type, #description) }
+        })
+        .collect();
+
+    let required: Vec<_> = params
+        .iter()
+        .filter(|p| !p.is_optional)
+        .map(|p| p.wire_name.clone().unwrap_or_else(|| p.name_str()))
+        .collect();
+
+    (properties, required)
+}
+
 /// Generate an MCP tool definition (JSON schema)
 fn generate_tool_definition(
     namespace_prefix: &str,
@@ -380,8 +413,8 @@ fn generate_tool_definition(
     let (_ctx_param, user_params) =
         partition_context_params(&method.params)?;
 
-    // Generate parameter schema using shared utility (excluding Context params)
-    let (properties, required_params) = server_less_rpc::generate_param_schema_for(&user_params);
+    // Generate parameter schema, honoring #[param(name = "...")] wire-name override.
+    let (properties, required_params) = generate_mcp_param_schema(&user_params);
 
     Ok(quote! {
         {

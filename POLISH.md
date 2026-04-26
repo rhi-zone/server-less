@@ -1,20 +1,23 @@
 # Polish State
 
 Created: bf18ee2a0e903fc4054b38b354405fbcd7263bd9
-Last run: 2026-04-25
+Last run: 2026-04-26
 Applied through: dac266d
-Round: 2
+Round: 3
 Project type: Rust proc-macro library (6 crates)
 
 ## Lenses
-- adversarial
-- api-clarity
-- doc-coverage
-- error-surface
-- naming-consistency
-- legacy-debt
+- adversarial _(round 1)_
+- api-clarity _(round 1)_
+- doc-coverage _(rounds 1, 3)_
+- error-surface _(round 1)_
+- naming-consistency _(round 1)_
+- legacy-debt _(round 1)_
 - completeness _(round 2)_
 - cross-macro behavioral consistency _(round 2)_
+- api-gaps _(round 3)_
+- consistency _(round 3)_
+- overfit _(round 3)_
 
 ## Scope
 Full codebase (`crates/`, `docs/`, `README.md`, `CONTEXT_*.md`)
@@ -87,9 +90,9 @@ Full codebase (`crates/`, `docs/`, `README.md`, `CONTEXT_*.md`)
 - [DEFERRED] `crates/server-less-macros/src/http.rs` / `error.rs` — Unknown HTTP status codes (e.g. `code = 418`) silently map to `Internal`/500. Decision: reject at compile time, return 400 at runtime, or document the fallback? _(M8)_
 - [DEFERRED] `crates/server-less-macros/src/http.rs` — `openapi_spec()` (per-impl) vs `combined_openapi_spec()` (serve-level) confusingly named. Decision: what should the two names be? _(M17)_
 - [DEFERRED] `crates/server-less-macros/src/context.rs` — Context qualified/bare detection is impl-wide; one method with qualified form silently disables injection for others. Decision: change behavior (per-method scope) or document the footgun? _(M22)_
-- [DEFERRED] `crates/server-less-core/src/lib.rs:245` — `SchemaValueParser::variants` populated and leaked but `possible_values()` never implemented — leaked memory serves no purpose. Decision: implement `possible_values()` or remove the field? _(M27)_
+- [APPLIED] `crates/server-less-core/src/lib.rs:245` — `SchemaValueParser::variants` populated and leaked but `possible_values()` never implemented — leaked memory serves no purpose. Decision: implement `possible_values()` or remove the field? _(M27)_
 - [DEFERRED] `CONTEXT_SUMMARY.md` — Written in "work just completed" style that agents misread as current design. Decision: add stale header, update, or delete? _(M32)_
-- [DEFERRED] `crates/server-less-core/src/error.rs:7` — `FailedPrecondition` is gRPC vocabulary for 422. Decision: rename to `UnprocessableEntity` or keep gRPC vocab with a doc note? _(L5)_
+- [APPLIED] `crates/server-less-core/src/error.rs:7` — `FailedPrecondition` is gRPC vocabulary for 422. Renamed to `UnprocessableEntity` in commit `3d4549e`. _(L5)_
 
 ## Findings — Round 2
 
@@ -129,3 +132,69 @@ Full codebase (`crates/`, `docs/`, `README.md`, `CONTEXT_*.md`)
 ### DEFERRED — pending design decisions
 
 - [DEFERRED] `crates/server-less-macros/src/markdown.rs` — Should `server_less::Context` params be excluded from generated Markdown docs, or documented with a note? Decision: depends on whether a doc reader should see Context as an implementation detail or a visible concept. _(R2-M2 for markdown)_
+
+## Findings — Round 3
+
+### HIGH severity
+
+- [APPROVED] `crates/server-less/src/lib.rs` — `#[param]` re-exported only under `#[cfg(feature = "http")]`; cli/mcp-only users get "undefined macro". Fix: re-export under `any(feature = "http", feature = "cli", feature = "mcp")`. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/mcp.rs` — `expand_mcp` never calls `extract_app_meta`; `#[app(name, description, version)]` silently ignored for MCP. Fix: add `extract_app_meta` call. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/grpc.rs:301–321`, `capnp.rs:307–342`, `smithy.rs:357–381` — Type mappers use `type_str.contains("i32")` substring matching; user types like `MyI32Wrapper` silently map to wrong wire type. Fix: compare on final path-segment ident. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/http.rs:836–845` — Multiple path params each generate their own `Path<T>` extractor; axum requires a single `Path<(T1,T2,...)>` tuple. Non-first params silently bind the wrong segment. Fix: collect path params and emit a single tuple extractor. _(severity: high)_
+- [APPROVED] `crates/server-less-macros/src/openapi.rs:236` — `#[server(skip)]` / `#[server(hidden)]` silently ignored in `#[openapi]` standalone mode; only `#[route(skip/hidden)]` checked. Fix: add `has_server_skip` / `has_server_hidden` to filter condition. _(severity: high)_
+- [APPROVED] `docs/design/error-mapping.md:94` — `FailedPrecondition` still in HTTP→ErrorCode table; renamed to `UnprocessableEntity` in commit `3d4549e`. Fix: update. _(severity: high)_
+- [APPROVED] `docs/design/iteration-log.md:551,552,566,569,648`, `docs/tutorials/multi-protocol.md:361` — Stale references to `proto_schema()` / `write_proto()` (now `grpc_schema()` / `write_grpc()`). Fix: update all. _(severity: high)_
+- [APPROVED] `POLISH.md:90,92` — M27 says `possible_values()` "never implemented" (it is, at `server-less-core/src/lib.rs:315`); L5 still `[DEFERRED]` (rename was applied in `3d4549e`). Fix: mark both `[APPLIED]`. _(severity: high)_
+
+### MEDIUM severity
+
+- [APPROVED] `crates/server-less-macros/src/openapi.rs:170,218` — `expand_openapi` never calls `extract_app_meta`; also hardcodes `.version("0.1.0")` instead of `env!("CARGO_PKG_VERSION")`. Fix: call `extract_app_meta`; use `CARGO_PKG_VERSION` as default. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/grpc.rs:111` et al. — `validate_server_attrs` not called in any of the 9 schema-generator macros (grpc, openrpc, jsonschema, asyncapi, capnp, thrift, smithy, connect, markdown); typos silently accepted. Fix: add call before skip/hidden filter. _(severity: medium)_
+- [APPROVED⚠️] `crates/server-less-macros/src/grpc.rs:232` et al. — `partition_context_params` not called in schema-generator macros; `Context` appears as a proto/schema field. Marked `[APPLIED]` in Round 2 — verify completeness before reapplying. _(severity: medium)_
+- [APPROVED⚠️] `crates/server-less-macros/src/grpc.rs` et al. — `#[cfg(...)]` attrs on methods not propagated in schema-generator macros. Marked `[APPLIED]` in Round 2 — verify completeness before reapplying. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/tool.rs` — `#[tool]` preset does not call `extract_app_meta`; `#[app]` silently ignored. Fix: add call. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/rpc_preset.rs` — `#[rpc]` preset missing `name`, `description`, `version`, `homepage` shorthand; `#[server]` supports all four. Fix: add to `RpcArgs`. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/http.rs:113` — Module doc says `http_routes()` is generated; no such method is emitted. Fix: implement it or remove from doc. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/openrpc.rs:200` — `generate_param_spec` ignores `help_text`; `#[param(help)]` has no effect on OpenRPC parameter descriptions. Fix: include in `description` field. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/openrpc.rs:115–119` — `expand_openrpc` discards `description` and `homepage` from `app_meta`; design doc lists both as consumers. Fix: add to `OpenRpcArgs` and generated spec `info`. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/thrift.rs:108` — `_app_meta` discarded entirely; `#[grpc]` uses `name` as service name fallback. Fix: use `app_meta.name` in Thrift service name. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/openrpc.rs:229`, `asyncapi.rs:294`, `jsonschema.rs:271` — `Option<T>` generates `{"anyOf": [null, ...]}` — bare `null` is invalid JSON Schema; correct form is `{"anyOf": [{"type": "null"}, ...]}`. Fix: replace `null` literal. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/openapi_gen.rs:279` — `infer_path` hardcodes `/{id}` regardless of actual parameter names. Fix: use actual param names in path template. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/openapi_gen.rs:232–235` — Unrecognized method name prefixes silently default to `POST` with no diagnostic. Fix: emit a `compile_note!` or proc-macro note when defaulting. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/thrift.rs:300,308` — `type_str.contains("Vec<u8>")` (no spaces) never matches `quote!` output; `contains("HashMap")` falsely matches `HashMapWrapper`. Fix: use AST-based checks. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/lib.rs:150–162` — Generic impl hard-rejected; error message doesn't suggest concrete-type workaround. Fix: improve message. _(severity: medium)_
+- [APPROVED] `crates/server-less-macros/src/grpc.rs:153–168`, `thrift.rs:163–176`, `capnp.rs:176–192` — Schema validation uses unordered line-set comparison; reordering proto fields passes silently. Fix: document limitation prominently in the generated comment. _(severity: medium)_
+- [APPROVED] `crates/server-less/src/lib.rs:53–57` — Prelude table missing: `http_openapi_paths()`, `mcp_method_names()`, `ws_methods()`, `jsonrpc_handle_async()`. Fix: add all four. _(severity: medium)_
+- [APPROVED] `crates/server-less/src/lib.rs:351–352` — `ConfigLoad`, `ConfigError`, `ConfigFieldMeta`, `ConfigSource` all `#[doc(hidden)]` but used in module-level doc examples. Fix: un-hide. _(severity: medium)_
+- [APPROVED] `docs/design/open-questions.md:5–13` — "Default Action on Subcommand Groups" marked Resolved but sits above the `## Resolved Questions` heading. Fix: move to resolved section. _(severity: medium)_
+
+### LOW severity
+
+- [APPROVED] `crates/server-less-macros/src/rpc_preset.rs:47`, `tool.rs:41` — Unknown-arg errors have no `did_you_mean`; all other macros include it. Fix: add. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/openapi.rs:93` — Unknown-arg error has no `did_you_mean`. Fix: add. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/markdown.rs:107`, `openrpc.rs:104`, `asyncapi.rs:110`, `jsonschema.rs:105`, `openapi.rs:170` — Five macros don't call `reject_generic_impl`; generic `impl<T>` silently proceeds. Fix: add call. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/mcp.rs:443`, `graphql.rs:736` — Injected Context uses `Context::default()`; all ws/jsonrpc sites use `Context::new()`. Fix: standardise on `Context::new()`. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/http.rs:215`, `server.rs:51` — `HttpArgs`/`ServerArgs` require `=` for the `openapi` key (`#[http(openapi)]` fails to parse); `ServeArgs` makes `=` optional. Fix: align to `ServeArgs` pattern or document. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/graphql.rs:163` — `_effective_name` computed from `args.name.or(app_meta.name)` but stored in dead `_`-prefixed local; `app_meta.version`/`description`/`homepage` unconsumed. Fix: wire name into schema or add explaining comment. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/ws.rs:314`, `jsonrpc.rs:110` — `_app_meta` extracted and discarded with no comment; `#[app]` silently does nothing for these macros. Fix: add explaining comment. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/mcp.rs` — `#[param(name = "...")]` wire-rename silently ignored for MCP tool parameter naming. Fix: apply `param.name` override when building tool schema. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/asyncapi.rs` — `generate_param_property` ignores `help_text`; AsyncAPI parameter descriptions always empty. Fix: include as `description`. _(severity: low)_
+- [APPROVED] `docs/design/param-attributes.md:100` — "Multiple positional arguments not yet implemented" caveat is stale; `cli.rs:663–666` already tracks `pos_idx`. Fix: remove caveat. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/http.rs:622–623` — `to_snake_case()` on struct name for handler idents; structs differing only in separator style produce name collisions. Fix: document as known constraint. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/cli.rs:459` — `to_kebab_case()` for default app name produces `h-t-t-p-server` for `HTTPServer` with no warning. Fix: document that `name = "..."` is the escape hatch. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/cli.rs:1194` — `Vec<T>` in `type_to_json_schema_ty` emits `items: {}` — inner type discarded. Fix: recurse into `T`. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/cli.rs:1549–1556` — `--params-json` Vec deserialization always uses `Vec<String>` regardless of actual element type. Fix: use actual element type. _(severity: low)_
+- [APPROVED] `crates/server-less-macros/src/context.rs:27` — Qualified Context detection hardcodes `"server_less"`; fails silently if crate is aliased. Fix: document limitation. _(severity: low)_
+- [APPROVED] `crates/server-less-core/src/lib.rs:264,415`, `crates/server-less-parse/src/lib.rs:150` — `SchemaValueParser::new()` and `HttpMethod::as_str()` (both crates) are undocumented `pub fn`. Fix: add `///` one-liners. _(severity: low)_
+- [APPROVED] `README.md:161–165` — Examples section lists only 5 of 13 example files. Fix: expand or add note linking to `examples/`. _(severity: low)_
+
+### DEFERRED — pending design decisions
+
+- [DEFERRED] `crates/server-less-macros/src/jsonrpc.rs` — `#[jsonrpc]` has no sync `jsonrpc_handle()`; `#[ws]` has both sync and async variants. Intentional or gap? _(R3-M7)_
+- [DEFERRED] `crates/server-less-macros/src/connect.rs` — `#[connect]` missing `schema = "path"` arg and `validate_schema()` / `assert_schema_matches()` methods present on `#[grpc]`. Feature scope decision. _(R3-M8)_
+- [DEFERRED] `crates/server-less-macros/src/jsonschema.rs` — `json_schema()` naming breaks `{proto}_spec()` convention; rename to `jsonschema_spec()` would be a breaking change. _(R3-M9)_
+- [DEFERRED] `docs/design/app-metadata.md:69` — `#[cli(no_version)]` documented but not implemented. Implement now or keep as planned? _(R3-M14)_
+- [DEFERRED] `crates/server-less-macros/src/openapi_gen.rs:261–265` — Naive pluralization produces `/classs`, `/processs` etc. Fix requires non-trivial logic or inflector dep; `#[route(path)]` is the reliable override. _(R3-M16)_
+- [DEFERRED] `crates/server-less-parse/src/lib.rs:1069–1072` — `is_id_param` triggers on `android_id`, `void_id` etc. making them positional/path params. Narrowing is a behavior change with breaking potential. _(R3-M19)_
+- [DEFERRED] `docs/design/app-metadata.md:141` — `#[server(homepage = false)]` suppression mechanism not implemented. Design decision. _(R3-L10)_
+- [DEFERRED] `openrpc.rs:132`, `asyncapi.rs:131`, `jsonschema.rs:123` — `unwrap_or_default()` silently returns empty on parse failure. Marked `[APPLIED]` in Round 2 — verify whether apply was complete. _(R3-L12)_
