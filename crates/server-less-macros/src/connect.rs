@@ -39,7 +39,8 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::context::partition_context_params;
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -100,7 +101,11 @@ pub(crate) fn expand_connect(args: ConnectArgs, mut impl_block: ItemImpl) -> syn
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();
@@ -196,9 +201,10 @@ fn generate_proto_messages(method: &MethodInfo) -> Vec<String> {
     let request_name = format!("{}Request", method_name);
     let response_name = format!("{}Response", method_name);
 
+    // Filter out server_less::Context params — they are runtime-injected, not schema fields.
+    let (_, schema_params) = partition_context_params(&method.params).unwrap_or((None, method.params.iter().collect()));
     // Generate request message
-    let request_fields: Vec<String> = method
-        .params
+    let request_fields: Vec<String> = schema_params
         .iter()
         .enumerate()
         .map(|(i, p)| generate_proto_field(p, i + 1))
@@ -264,24 +270,22 @@ fn rust_type_to_proto(ty: &Option<syn::Type>) -> String {
 }
 
 fn rust_type_to_proto_scalar(ty: &syn::Type) -> &'static str {
-    let type_str = quote!(#ty).to_string();
-    if type_str.contains("String") || type_str.contains("str") {
-        "string"
-    } else if type_str.contains("i32") {
-        "int32"
-    } else if type_str.contains("i64") {
-        "int64"
-    } else if type_str.contains("u32") {
-        "uint32"
-    } else if type_str.contains("u64") {
-        "uint64"
-    } else if type_str.contains("f32") {
-        "float"
-    } else if type_str.contains("f64") {
-        "double"
-    } else if type_str.contains("bool") {
-        "bool"
+    // Use exact path-segment matching to avoid false positives on user-defined wrapper types
+    // (e.g. `MyI32Wrapper` must not match `i32`, `MyString` must not match `String`).
+    let ident = if let syn::Type::Path(tp) = ty {
+        tp.path.segments.last().map(|s| s.ident.to_string())
     } else {
-        "bytes"
+        None
+    };
+    match ident.as_deref() {
+        Some("String") | Some("str") => "string",
+        Some("i32") => "int32",
+        Some("i64") => "int64",
+        Some("u32") => "uint32",
+        Some("u64") => "uint64",
+        Some("f32") => "float",
+        Some("f64") => "double",
+        Some("bool") => "bool",
+        _ => "bytes",
     }
 }
