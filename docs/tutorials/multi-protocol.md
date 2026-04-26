@@ -358,7 +358,7 @@ Generate schemas for all protocols:
 use server_less::grpc;
 #[grpc(package = "tasks.v1")]
 impl TaskService { /* ... */ }
-let proto = TaskService::proto_schema();
+let proto = TaskService::grpc_schema();
 
 // OpenAPI
 let openapi = TaskService::openapi_spec();

@@ -97,8 +97,6 @@ pub fn copy(
 
 The function signature is the source of truth. No redundant annotations needed.
 
-> **Note:** Multiple positional arguments on a single command (like the `copy` example above) are not yet implemented — the positional index is currently hardcoded to 1. The design is settled, but the codegen needs updating to assign sequential indices. For now, only one positional argument per command works correctly.
-
 ## The `is_id` Heuristic
 
 Parameters named `id`, `user_id`, `post_id`, etc. (ending in `_id` or named `id`)

@@ -548,8 +548,8 @@ Since tonic is compile-time focused (unlike async-graphql's dynamic API), we gen
 
 **Features:**
 - `#[grpc]` or `#[grpc(package = "my.package")]`
-- Generates `proto_schema() -> &'static str`
-- Generates `write_proto(path)` helper
+- Generates `grpc_schema() -> &'static str`
+- Generates `write_grpc(path)` helper
 - Maps Rust types to protobuf (string, int32, bool, etc.)
 - Optional parameters become `optional` fields
 - Doc comments preserved in schema
@@ -563,10 +563,10 @@ impl UserService {
 }
 
 // Get proto schema
-let proto = UserService::proto_schema();
+let proto = UserService::grpc_schema();
 
 // Write to file
-UserService::write_proto("proto/users.proto")?;
+UserService::write_grpc("proto/users.proto")?;
 ```
 
 **Generated proto:**
@@ -645,7 +645,7 @@ fn api_contract_stable() {
 
 **Workflow:**
 1. Start impl-first: `#[grpc]` generates .proto
-2. Write proto to file: `Service::write_proto("proto/service.proto")?`
+2. Write proto to file: `Service::write_grpc("proto/service.proto")?`
 3. Lock it down: add `schema = "proto/service.proto"`
 4. Now changes to impl that break the schema will fail validation
 

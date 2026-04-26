@@ -2,16 +2,6 @@
 
 Design questions that need real use cases to drive decisions.
 
-### Default Action on Subcommand Groups
-
-**Resolved: `#[cli(default)]` attribute.**
-
-`#[cli(default)]` marks a method as the action to run when no subcommand is given, at any level (root command or subcommand group). The marked method is both a normal subcommand and the fallback — `app status` and `app` are equivalent.
-
-- **Flag scoping:** flags pass through to the default action via hidden parent-level args; `app --flag` equals `app status --flag`.
-- **Hidden default:** `#[cli(default, hidden)]` makes the fallback work without `status` appearing in `--help`.
-- **Peer subcommands:** unaffected — other subcommands continue to work normally.
-
 ## Bidirectional Streaming
 
 What does a bidirectional streaming method look like?
@@ -184,6 +174,16 @@ How should users test code that uses server-less derives?
 ---
 
 ## Resolved Questions
+
+### Default Action on Subcommand Groups
+
+**Resolved: `#[cli(default)]` attribute.**
+
+`#[cli(default)]` marks a method as the action to run when no subcommand is given, at any level (root command or subcommand group). The marked method is both a normal subcommand and the fallback — `app status` and `app` are equivalent.
+
+- **Flag scoping:** flags pass through to the default action via hidden parent-level args; `app --flag` equals `app status --flag`.
+- **Hidden default:** `#[cli(default, hidden)]` makes the fallback work without `status` appearing in `--help`.
+- **Peer subcommands:** unaffected — other subcommands continue to work normally.
 
 ### Error Type Unification
 

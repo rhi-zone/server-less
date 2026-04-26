@@ -160,9 +160,18 @@ Check out [examples/](crates/server-less/examples/) for working code:
 
 - **[http_service.rs](crates/server-less/examples/http_service.rs)** - REST API with Axum + OpenAPI
 - **[cli_service.rs](crates/server-less/examples/cli_service.rs)** - CLI application with Clap
+- **[cli_advanced.rs](crates/server-less/examples/cli_advanced.rs)** - Advanced CLI features
 - **[user_service.rs](crates/server-less/examples/user_service.rs)** - Multi-protocol (HTTP + CLI + MCP + WS)
 - **[ws_service.rs](crates/server-less/examples/ws_service.rs)** - WebSocket JSON-RPC server
 - **[streaming_service.rs](crates/server-less/examples/streaming_service.rs)** - SSE streaming over HTTP
+- **[error_handling.rs](crates/server-less/examples/error_handling.rs)** - Error types with `ServerlessError`
+- **[mount_service.rs](crates/server-less/examples/mount_service.rs)** - Nested subcommand groups via mount points
+- **[openapi_composition.rs](crates/server-less/examples/openapi_composition.rs)** - Composing OpenAPI specs across services
+- **[param_service.rs](crates/server-less/examples/param_service.rs)** - Parameter annotations (`#[param]`)
+- **[server_preset.rs](crates/server-less/examples/server_preset.rs)** - `#[server]` blessed preset
+- **[rpc_preset.rs](crates/server-less/examples/rpc_preset.rs)** - `#[rpc]` blessed preset
+- **[tool_preset.rs](crates/server-less/examples/tool_preset.rs)** - `#[tool]` blessed preset (MCP)
+- **[program_preset.rs](crates/server-less/examples/program_preset.rs)** - `#[program]` blessed preset (CLI)
 
 ## Server-Sent Events (SSE) Streaming
 

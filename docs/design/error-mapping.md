@@ -91,7 +91,7 @@ Named codes (`NotFound`, `Forbidden`, etc.) are the `ErrorCode` variants. Numeri
 | 403 | `Forbidden` |
 | 404 | `NotFound` |
 | 409 | `Conflict` |
-| 422 | `FailedPrecondition` |
+| 422 | `UnprocessableEntity` |
 | 429 | `RateLimited` |
 | 500 | `Internal` |
 | 501 | `NotImplemented` |
