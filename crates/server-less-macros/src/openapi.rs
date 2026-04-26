@@ -68,6 +68,7 @@ use server_less_parse::{MethodInfo, extract_groups, extract_methods, get_impl_na
 use syn::{ItemImpl, Token, parse::Parse};
 
 use crate::openapi_gen::{ResponseOverride, RouteOverride, generate_openapi_spec};
+use crate::server_attrs::{has_server_hidden, has_server_skip};
 
 /// Arguments for the #[openapi] attribute
 #[derive(Default)]
@@ -90,10 +91,14 @@ impl Parse for OpenApiArgs {
                     args.prefix = Some(lit.value());
                 }
                 other => {
+                    const VALID_ARGS: &[&str] = &["prefix"];
+                    let suggestion = crate::did_you_mean(other, VALID_ARGS)
+                        .map(|s| format!(" — did you mean `{s}`?"))
+                        .unwrap_or_default();
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown argument `{other}`\n\
+                            "unknown argument `{other}`{suggestion}\n\
                              Valid arguments: prefix\n\
                              Example: #[openapi(prefix = \"/api/v1\")]"
                         ),
@@ -167,7 +172,9 @@ impl DetectedProtocols {
     }
 }
 
-pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_openapi(args: OpenApiArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
+    let app_meta = crate::app::extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let generics_clone = impl_block.generics.clone();
     let (impl_generics, _ty_generics, where_clause) = generics_clone.split_for_impl();
@@ -202,6 +209,12 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
             detected_list.join(", ")
         );
 
+        let openapi_title = app_meta.name.unwrap_or_else(|| struct_name_str.clone());
+        let openapi_version = match app_meta.version.into_explicit() {
+            Some(v) => quote! { #v },
+            None => quote! { ::std::env!("CARGO_PKG_VERSION") },
+        };
+
         // In protocol-aware mode, #[openapi] is always the outermost attribute (placed
         // first in source).  It must re-emit the impl block unconditionally so that the
         // sibling protocol macros (#[http], #[jsonrpc], etc.) can process it afterward.
@@ -214,8 +227,8 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
                 #[doc = #openapi_doc]
                 pub fn openapi_spec() -> ::server_less::serde_json::Value {
                     ::server_less::OpenApiBuilder::new()
-                        .title(#struct_name_str)
-                        .version("0.1.0")
+                        .title(#openapi_title)
+                        .version(#openapi_version)
                         #merges
                         .build()
                 }
@@ -233,7 +246,7 @@ pub(crate) fn expand_openapi(args: OpenApiArgs, impl_block: ItemImpl) -> syn::Re
             let mut overrides = RouteOverride::parse_from_attrs(&method.method.attrs)?;
             let response_overrides = ResponseOverride::parse_from_attrs(&method.method.attrs)?;
 
-            if overrides.skip || overrides.hidden {
+            if overrides.skip || overrides.hidden || has_server_skip(method) || has_server_hidden(method) {
                 continue;
             }
 
