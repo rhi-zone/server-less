@@ -41,43 +41,56 @@ impl Parse for ServerArgs {
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
-            input.parse::<Token![=]>()?;
 
             match ident.to_string().as_str() {
                 "prefix" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.prefix = Some(lit.value());
                 }
                 "openapi" => {
-                    let lit: syn::LitBool = input.parse()?;
-                    args.openapi = Some(lit.value());
+                    if input.peek(Token![=]) {
+                        input.parse::<Token![=]>()?;
+                        let lit: syn::LitBool = input.parse()?;
+                        args.openapi = Some(lit.value());
+                    } else {
+                        // Bare `openapi` means enable
+                        args.openapi = Some(true);
+                    }
                 }
                 "health" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.health = Some(lit.value());
                 }
                 "name" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.name = Some(lit.value());
                 }
                 "description" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.description = Some(lit.value());
                 }
                 "version" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.version = Some(lit.value());
                 }
                 "homepage" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.homepage = Some(lit.value());
                 }
                 "config" => {
+                    input.parse::<Token![=]>()?;
                     let path: Path = input.parse()?;
                     args.config_ty = Some(path);
                     args.config_cmd = true;
                 }
                 "config_cmd" => {
+                    input.parse::<Token![=]>()?;
                     if input.peek(syn::LitBool) {
                         let lit: syn::LitBool = input.parse()?;
                         args.config_cmd = lit.value();

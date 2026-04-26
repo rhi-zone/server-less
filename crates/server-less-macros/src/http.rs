@@ -111,7 +111,8 @@
 //! # Generated Methods
 //!
 //! - `http_router() -> axum::Router` - Complete router with all endpoints
-//! - `http_routes() -> Vec<&'static str>` - List of route paths
+//! - `http_openapi_paths() -> Vec<OpenApiPath>` - OpenAPI path fragments for composition
+//! - `http_openapi_spec() -> serde_json::Value` - Full OpenAPI 3.0 spec (unless `openapi = false`)
 //!
 //! # Example
 //!
@@ -205,38 +206,50 @@ impl Parse for HttpArgs {
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
-            input.parse::<Token![=]>()?;
 
             match ident.to_string().as_str() {
                 "prefix" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.prefix = Some(lit.value());
                 }
                 "openapi" => {
-                    let lit: syn::LitBool = input.parse()?;
-                    args.openapi = Some(lit.value());
+                    if input.peek(Token![=]) {
+                        input.parse::<Token![=]>()?;
+                        let lit: syn::LitBool = input.parse()?;
+                        args.openapi = Some(lit.value());
+                    } else {
+                        // Bare `openapi` means enable
+                        args.openapi = Some(true);
+                    }
                 }
                 "debug" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitBool = input.parse()?;
                     args.debug = lit.value();
                 }
                 "trace" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitBool = input.parse()?;
                     args.trace = lit.value();
                 }
                 "name" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.name = Some(lit.value());
                 }
                 "description" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.description = Some(lit.value());
                 }
                 "version" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.version = Some(lit.value());
                 }
                 "homepage" => {
+                    input.parse::<Token![=]>()?;
                     let lit: syn::LitStr = input.parse()?;
                     args.homepage = Some(lit.value());
                 }
@@ -619,6 +632,8 @@ fn generate_handler(
     trace: bool,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
+    // NOTE: to_snake_case can produce collisions for structs that differ only in
+    // separator style (e.g. `UserService` and `User_Service` both → `user_service`).
     let struct_name_snake = struct_name.to_string().to_snake_case();
     let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
     let method_name_str = method_name.to_string();
@@ -832,14 +847,36 @@ fn generate_param_handling(
         }
     }
 
-    // Generate path parameter extraction
-    if !path_params.is_empty() {
-        for param in &path_params {
-            let ty = &param.ty;
-            extractions.push(quote! {
-                path_extractor: ::server_less::axum::extract::Path<#ty>
-            });
-            calls.push(quote! { path_extractor.0 });
+    // Generate path parameter extraction.
+    // Axum only allows a single `Path` extractor per handler. For a single path
+    // param we use `Path<T>` directly; for multiple we use a `Path<(T1, T2, ...)>`
+    // tuple extractor and destructure it in the handler body.
+    if path_params.len() == 1 {
+        let param = &path_params[0];
+        let ty = &param.ty;
+        let var_ident = format_ident!("__sl_path_{}", param.name_str());
+        extractions.push(quote! {
+            #var_ident: ::server_less::axum::extract::Path<#ty>
+        });
+        calls.push(quote! { #var_ident.0 });
+        param_names.push(Some(param.name_str()));
+    } else if path_params.len() > 1 {
+        let types: Vec<_> = path_params.iter().map(|p| &p.ty).collect();
+        extractions.push(quote! {
+            __sl_path_tuple: ::server_less::axum::extract::Path<(#(#types),*)>
+        });
+        // Destructure the tuple into individual bindings so they can be referenced
+        // by name in the method call below.
+        let var_idents: Vec<_> = path_params
+            .iter()
+            .map(|p| format_ident!("__sl_path_{}", p.name_str()))
+            .collect();
+        let indices: Vec<syn::Index> = (0..path_params.len()).map(syn::Index::from).collect();
+        pre_stmts.push(quote! {
+            #(let #var_idents = __sl_path_tuple.0.#indices;)*
+        });
+        for (param, var) in path_params.iter().zip(var_idents.iter()) {
+            calls.push(quote! { #var });
             param_names.push(Some(param.name_str()));
         }
     }
@@ -1238,6 +1275,8 @@ fn generate_route(
     struct_name: &syn::Ident,
 ) -> syn::Result<TokenStream2> {
     let method_name = &method.name;
+    // NOTE: to_snake_case can produce collisions for structs that differ only in
+    // separator style (e.g. `UserService` and `User_Service` both → `user_service`).
     let struct_name_snake = struct_name.to_string().to_snake_case();
     let handler_name = format_ident!("__server_less_http_{}_{}", struct_name_snake, method_name);
 

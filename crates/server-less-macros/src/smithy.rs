@@ -41,7 +41,8 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::context::partition_context_params;
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::{ToPascalCase, ToSnakeCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -108,7 +109,11 @@ pub(crate) fn expand_smithy(args: SmithyArgs, mut impl_block: ItemImpl) -> syn::
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();
@@ -183,6 +188,14 @@ service {service_name} {{
             /// Validate that the generated schema matches the expected schema file.
             ///
             /// Returns Ok(()) if schemas match, Err with details if they differ.
+            ///
+            /// # Limitation: field-presence only, not field order
+            ///
+            /// This check verifies line-by-line presence in both directions.  It does **not**
+            /// verify shape or member ordering.  Smithy is largely order-insensitive in
+            /// semantics, but tool generators may be sensitive to member ordering in structures.
+            /// Users are responsible for maintaining member ordering stability across schema
+            /// versions if their code generators require it.
             pub fn validate_schema() -> ::std::result::Result<(), ::server_less::SchemaValidationError> {
                 let expected = include_str!(#path);
                 let generated = Self::smithy_schema();
@@ -290,8 +303,10 @@ fn generate_structures(method: &MethodInfo) -> Vec<String> {
     let input_name = format!("{}Input", op_name);
     let output_name = format!("{}Output", op_name);
 
+    // Filter out server_less::Context params — they are runtime-injected, not schema fields.
+    let (_, schema_params) = partition_context_params(&method.params).unwrap_or((None, method.params.iter().collect()));
     // Generate input structure
-    let input_fields: Vec<String> = method.params.iter().map(generate_field).collect();
+    let input_fields: Vec<String> = schema_params.iter().map(|p| generate_field(p)).collect();
 
     let input_struct = if input_fields.is_empty() {
         format!("structure {} {{}}", input_name)
@@ -354,39 +369,30 @@ fn rust_type_to_smithy_ty(ty: &syn::Type) -> String {
     if let Some(inner) = unwrap_option_type(ty) {
         return rust_type_to_smithy_ty(inner);
     }
-    let type_str = quote!(#ty).to_string();
-    if type_str.contains("String") || type_str.contains("str") {
-        "String".to_string()
-    } else if type_str.contains("i8") {
-        "Byte".to_string()
-    } else if type_str.contains("i16") {
-        "Short".to_string()
-    } else if type_str.contains("i32") {
-        "Integer".to_string()
-    } else if type_str.contains("i64") {
-        "Long".to_string()
-    } else if type_str.contains("u8") {
-        "Byte".to_string()
-    } else if type_str.contains("u16") {
-        "Short".to_string()
-    } else if type_str.contains("u32") {
-        "Integer".to_string()
-    } else if type_str.contains("u64") {
-        "Long".to_string()
-    } else if type_str.contains("f32") {
-        "Float".to_string()
-    } else if type_str.contains("f64") {
-        "Double".to_string()
-    } else if type_str.contains("bool") {
-        "Boolean".to_string()
-    } else if unwrap_vec_type(ty).is_some() {
-        // Vec<T> requires a named List shape in Smithy IDL. Bare `List` is not
-        // valid — a proper model needs a separate `list FooList { member: T }`
-        // shape definition. For now we emit `StringList` as a placeholder for
-        // Vec<String> / Vec<u8>, which covers the most common case. Complex
-        // element types require manual Smithy model authoring.
-        "StringList".to_string()
+    // Vec<T> requires a named List shape in Smithy IDL. Bare `List` is not
+    // valid — a proper model needs a separate `list FooList { member: T }`
+    // shape definition. For now we emit `StringList` as a placeholder for
+    // Vec<String> / Vec<u8>, which covers the most common case. Complex
+    // element types require manual Smithy model authoring.
+    if unwrap_vec_type(ty).is_some() {
+        return "StringList".to_string();
+    }
+    // Use exact path-segment matching to avoid false positives on user-defined wrapper types
+    // (e.g. `MyI32Wrapper` must not match `i32`, `MyString` must not match `String`).
+    let ident = if let syn::Type::Path(tp) = ty {
+        tp.path.segments.last().map(|s| s.ident.to_string())
     } else {
-        "Document".to_string()
+        None
+    };
+    match ident.as_deref() {
+        Some("String") | Some("str") => "String".to_string(),
+        Some("i8") | Some("u8") => "Byte".to_string(),
+        Some("i16") | Some("u16") => "Short".to_string(),
+        Some("i32") | Some("u32") => "Integer".to_string(),
+        Some("i64") | Some("u64") => "Long".to_string(),
+        Some("f32") => "Float".to_string(),
+        Some("f64") => "Double".to_string(),
+        Some("bool") => "Boolean".to_string(),
+        _ => "Document".to_string(),
     }
 }

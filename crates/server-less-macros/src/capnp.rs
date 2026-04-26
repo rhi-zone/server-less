@@ -44,7 +44,8 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::context::partition_context_params;
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -111,7 +112,11 @@ pub(crate) fn expand_capnp(args: CapnpArgs, mut impl_block: ItemImpl) -> syn::Re
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();
@@ -161,6 +166,14 @@ interface {interface_name} {{
     let validation_method = if let Some(schema_path) = &args.schema {
         quote! {
             /// Validate that the generated schema matches the expected schema.
+            ///
+            /// # Limitation: field-presence only, not field order
+            ///
+            /// This check verifies line-by-line presence in both directions.  It does **not**
+            /// verify field ordinal positions.  In Cap'n Proto, field ordinals (`@0`, `@1`, ...)
+            /// determine the wire encoding: reordering fields (changing their ordinals) breaks
+            /// binary compatibility with existing clients even though this validation passes.
+            /// Users are responsible for maintaining ordinal stability across schema versions.
             pub fn validate_schema() -> Result<(), ::server_less::SchemaValidationError> {
                 let expected = include_str!(#schema_path);
                 let generated = Self::capnp_schema();
@@ -256,9 +269,10 @@ fn generate_capnp_structs(method: &MethodInfo) -> Vec<String> {
     let params_name = format!("{}Params", method_upper);
     let result_name = format!("{}Result", method_upper);
 
+    // Filter out server_less::Context params — they are runtime-injected, not schema fields.
+    let (_, schema_params) = partition_context_params(&method.params).unwrap_or((None, method.params.iter().collect()));
     // Generate params struct
-    let param_fields: Vec<String> = method
-        .params
+    let param_fields: Vec<String> = schema_params
         .iter()
         .enumerate()
         .map(|(i, p)| generate_capnp_field(p, i))
@@ -303,41 +317,42 @@ fn rust_type_to_capnp_ty(ty: &syn::Type) -> String {
     if let Some(inner) = unwrap_option_type(ty) {
         return rust_type_to_capnp_ty(inner);
     }
-    let type_str = quote!(#ty).to_string();
-    // Vec<u8> → Data
-    if type_str.contains("Vec < u8 >") || type_str.contains("Vec<u8>") || type_str.contains("[u8]")
+    // Vec<u8> → Data (check inner element before the generic Vec<T> path)
+    if let Some(inner) = unwrap_vec_type(ty) {
+        if let syn::Type::Path(tp) = inner
+            && tp.path.segments.last().map(|s| s.ident == "u8").unwrap_or(false)
+        {
+            return "Data".to_string();
+        }
+        return format!("List({})", rust_type_to_capnp_ty(inner));
+    }
+    // [u8] slice → Data
+    if let syn::Type::Slice(ts) = ty
+        && let syn::Type::Path(tp) = &*ts.elem
+        && tp.path.segments.last().map(|s| s.ident == "u8").unwrap_or(false)
     {
         return "Data".to_string();
     }
-    // Vec<T> → List(inner)
-    if let Some(inner) = unwrap_vec_type(ty) {
-        return format!("List({})", rust_type_to_capnp_ty(inner));
-    }
-    if type_str.contains("String") || type_str.contains("str") {
-        "Text".to_string()
-    } else if type_str.contains("i8") {
-        "Int8".to_string()
-    } else if type_str.contains("i16") {
-        "Int16".to_string()
-    } else if type_str.contains("i32") {
-        "Int32".to_string()
-    } else if type_str.contains("i64") {
-        "Int64".to_string()
-    } else if type_str.contains("u8") {
-        "UInt8".to_string()
-    } else if type_str.contains("u16") {
-        "UInt16".to_string()
-    } else if type_str.contains("u32") {
-        "UInt32".to_string()
-    } else if type_str.contains("u64") {
-        "UInt64".to_string()
-    } else if type_str.contains("f32") {
-        "Float32".to_string()
-    } else if type_str.contains("f64") {
-        "Float64".to_string()
-    } else if type_str.contains("bool") {
-        "Bool".to_string()
+    // Use exact path-segment matching to avoid false positives on user-defined wrapper types
+    // (e.g. `MyI32Wrapper` must not match `i32`, `MyString` must not match `String`).
+    let ident = if let syn::Type::Path(tp) = ty {
+        tp.path.segments.last().map(|s| s.ident.to_string())
     } else {
-        "Data".to_string() // fallback to bytes
+        None
+    };
+    match ident.as_deref() {
+        Some("String") | Some("str") => "Text".to_string(),
+        Some("i8") => "Int8".to_string(),
+        Some("i16") => "Int16".to_string(),
+        Some("i32") => "Int32".to_string(),
+        Some("i64") => "Int64".to_string(),
+        Some("u8") => "UInt8".to_string(),
+        Some("u16") => "UInt16".to_string(),
+        Some("u32") => "UInt32".to_string(),
+        Some("u64") => "UInt64".to_string(),
+        Some("f32") => "Float32".to_string(),
+        Some("f64") => "Float64".to_string(),
+        Some("bool") => "Bool".to_string(),
+        _ => "Data".to_string(), // fallback to bytes
     }
 }

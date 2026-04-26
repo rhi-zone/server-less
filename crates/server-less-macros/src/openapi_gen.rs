@@ -211,7 +211,19 @@ fn split_doc_comment(docs: &Option<String>, fallback: &str) -> (String, Option<S
     }
 }
 
-/// Infer HTTP method from function name prefix
+/// Infer HTTP method from function name prefix.
+///
+/// Recognized prefixes:
+/// - `get_`, `fetch_`, `read_`, `list_`, `find_`, `search_` → GET
+/// - `create_`, `add_`, `new_` → POST
+/// - `update_`, `set_` → PUT
+/// - `patch_`, `modify_` → PATCH
+/// - `delete_`, `remove_` → DELETE
+///
+/// **Fallback:** any name that does not match the above prefixes silently defaults to POST.
+/// For example, `execute_payment` or `run_job` will become `POST /execute-payments`.
+/// Use `#[route(method = "POST")]` (or another verb) to silence this and make the intent
+/// explicit, or rename the method to start with one of the recognized prefixes.
 pub fn infer_http_method(name: &str) -> HttpMethod {
     if name.starts_with("get_")
         || name.starts_with("fetch_")
@@ -230,6 +242,8 @@ pub fn infer_http_method(name: &str) -> HttpMethod {
     } else if name.starts_with("delete_") || name.starts_with("remove_") {
         HttpMethod::Delete
     } else {
+        // NOTE: Unrecognized prefix — falls back to POST. Users writing `execute_payment`
+        // or `run_job` will silently get `POST`. Use `#[route(method = "...")]` to be explicit.
         HttpMethod::Post
     }
 }
@@ -264,7 +278,10 @@ pub fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamIn
         format!("{}s", resource_kebab)
     };
 
-    let has_id = params.iter().any(|p| p.is_id);
+    // Find the first path-like parameter: one explicitly placed in Path, or an id-like param.
+    let id_param = params.iter().find(|p| {
+        matches!(p.location.as_ref(), Some(ParamLocation::Path)) || p.is_id
+    });
 
     match http_method {
         HttpMethod::Post => format!("/{}", path_resource),
@@ -275,8 +292,13 @@ pub fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamIn
         {
             format!("/{}", path_resource)
         }
-        HttpMethod::Get | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Delete if has_id => {
-            format!("/{}/{{id}}", path_resource)
+        HttpMethod::Get | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Delete
+            if id_param.is_some() =>
+        {
+            // Use the actual parameter name instead of hardcoding `id`.
+            let p = id_param.unwrap();
+            let param_name = p.wire_name.clone().unwrap_or_else(|| p.name_str());
+            format!("/{}/{{{}}}", path_resource, param_name)
         }
         _ => format!("/{}", path_resource),
     }
@@ -295,7 +317,7 @@ pub fn generate_openapi_paths(
         let method_name = method.name_str();
 
         let http_method = if let Some(ref m) = overrides.method {
-            HttpMethod::from_str(m).unwrap_or_else(|| infer_http_method(&method_name))
+            HttpMethod::parse(m).unwrap_or_else(|| infer_http_method(&method_name))
         } else {
             infer_http_method(&method_name)
         };
@@ -492,7 +514,7 @@ pub fn generate_openapi_spec(
         let method_name = method.name_str();
 
         let http_method = if let Some(ref m) = overrides.method {
-            HttpMethod::from_str(m).unwrap_or_else(|| infer_http_method(&method_name))
+            HttpMethod::parse(m).unwrap_or_else(|| infer_http_method(&method_name))
         } else {
             infer_http_method(&method_name)
         };

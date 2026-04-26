@@ -41,7 +41,7 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -111,12 +111,19 @@ pub(crate) fn expand_asyncapi(
     args: AsyncApiArgs,
     mut impl_block: ItemImpl,
 ) -> syn::Result<TokenStream2> {
+    // L3: reject generic impl blocks (consistent with all other protocol macros).
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    // M2: validate #[server(...)] attrs on every method before skip/hidden filtering.
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();
@@ -272,7 +279,19 @@ fn generate_message_spec(method: &MethodInfo) -> String {
 fn generate_param_property(param: &ParamInfo) -> String {
     let name = param.name_str().to_lower_camel_case();
     let schema = get_json_schema(&Some(param.ty.clone()));
-    format!(r#""{}": {}"#, name, schema)
+    // L9: include help_text as the "description" property in the AsyncAPI schema.
+    if let Some(help) = param.help_text.as_deref() {
+        let escaped = help.replace('"', "\\\"");
+        // Inject description into the schema object: strip trailing `}` and append field.
+        let schema_with_desc = format!(
+            r#"{}, "description": "{}"}}"#,
+            &schema[..schema.len() - 1],
+            escaped
+        );
+        format!(r#""{}": {}"#, name, schema_with_desc)
+    } else {
+        format!(r#""{}": {}"#, name, schema)
+    }
 }
 
 /// Get JSON Schema for a type
@@ -289,10 +308,11 @@ fn get_json_schema_ty(ty: &syn::Type) -> String {
     if let Some(ok) = unwrap_result_ok_type(ty) {
         return get_json_schema_ty(ok);
     }
-    // Option<T> → nullable schema
+    // M15: Option<T> → {"anyOf": [{"type": "null"}, <inner_schema>]}
+    // Bare `null` is not valid JSON Schema; use {"type": "null"} instead.
     if let Some(inner) = unwrap_option_type(ty) {
         let inner_schema = get_json_schema_ty(inner);
-        return format!(r#"{{"anyOf": [null, {}]}}"#, inner_schema);
+        return format!(r#"{{"anyOf": [{{"type": "null"}}, {}]}}"#, inner_schema);
     }
     // Vec<T> → {"type": "array", "items": <inner_schema>}
     if let Some(inner) = unwrap_vec_type(ty) {

@@ -43,7 +43,8 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::context::partition_context_params;
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -105,18 +106,23 @@ impl Parse for ThriftArgs {
 
 pub(crate) fn expand_thrift(args: ThriftArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
     crate::reject_generic_impl(&impl_block)?;
-    let _app_meta = extract_app_meta(&mut impl_block.attrs);
+    let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();
 
     let namespace = args
         .namespace
+        .or_else(|| app_meta.name.map(|n| n.to_snake_case()))
         .unwrap_or_else(|| struct_name_str.to_snake_case());
 
     // Generate Thrift schema
@@ -147,6 +153,14 @@ service {service_name} {{
     let validation_method = if let Some(schema_path) = &args.schema {
         quote! {
             /// Validate that the generated schema matches the expected schema.
+            ///
+            /// # Limitation: field-presence only, not field order
+            ///
+            /// This check verifies line-by-line presence in both directions.  It does **not**
+            /// verify field ID order.  In Thrift, field IDs determine the wire encoding:
+            /// reordering fields (changing their assigned IDs) breaks binary compatibility
+            /// with existing clients even though this validation passes.  Users are responsible
+            /// for maintaining field-ID stability across schema versions.
             pub fn validate_schema() -> Result<(), ::server_less::SchemaValidationError> {
                 let expected = include_str!(#schema_path);
                 let generated = Self::thrift_schema();
@@ -250,9 +264,10 @@ fn generate_thrift_structs(method: &MethodInfo) -> Vec<String> {
     let method_upper = method.name_str().to_upper_camel_case();
     let args_name = format!("{}Args", method_upper);
 
+    // Filter out server_less::Context params — they are runtime-injected, not schema fields.
+    let (_, schema_params) = partition_context_params(&method.params).unwrap_or((None, method.params.iter().collect()));
     // Generate args struct
-    let arg_fields: Vec<String> = method
-        .params
+    let arg_fields: Vec<String> = schema_params
         .iter()
         .enumerate()
         .map(|(i, p)| generate_thrift_field(p, i + 1))
@@ -295,35 +310,40 @@ fn rust_type_to_thrift_ty(ty: &syn::Type) -> String {
     if let Some(inner) = unwrap_option_type(ty) {
         return rust_type_to_thrift_ty(inner);
     }
-    // Vec<u8> → binary
-    let type_str = quote!(#ty).to_string();
-    if type_str.contains("Vec < u8 >") || type_str.contains("Vec<u8>") || type_str.contains("[u8]")
+    // Vec<u8> → binary (check inner element before the generic Vec<T> path).
+    // Note: quote!(Vec<u8>).to_string() emits "Vec < u8 >" with spaces; use AST inspection instead.
+    if let Some(inner) = unwrap_vec_type(ty) {
+        if let syn::Type::Path(tp) = inner
+            && tp.path.segments.last().map(|s| s.ident == "u8").unwrap_or(false)
+        {
+            return "binary".to_string();
+        }
+        return format!("list<{}>", rust_type_to_thrift_ty(inner));
+    }
+    // [u8] slice → binary
+    if let syn::Type::Slice(ts) = ty
+        && let syn::Type::Path(tp) = &*ts.elem
+        && tp.path.segments.last().map(|s| s.ident == "u8").unwrap_or(false)
     {
         return "binary".to_string();
     }
-    // Vec<T> → list<inner>
-    if let Some(inner) = unwrap_vec_type(ty) {
-        return format!("list<{}>", rust_type_to_thrift_ty(inner));
-    }
-    if type_str.contains("HashMap") || type_str.contains("BTreeMap") {
-        "map<string, string>".to_string() // simplified
-    } else if type_str.contains("HashSet") || type_str.contains("BTreeSet") {
-        "set<string>".to_string() // simplified
-    } else if type_str.contains("String") || type_str.contains("str") {
-        "string".to_string()
-    } else if type_str.contains("bool") {
-        "bool".to_string()
-    } else if type_str.contains("i8") {
-        "byte".to_string()
-    } else if type_str.contains("i16") {
-        "i16".to_string()
-    } else if type_str.contains("i32") {
-        "i32".to_string()
-    } else if type_str.contains("i64") {
-        "i64".to_string()
-    } else if type_str.contains("f64") {
-        "double".to_string()
+    // Use exact path-segment matching to avoid false positives on user-defined wrapper types
+    // (e.g. `HashMapWrapper` must not match `HashMap`, `MyI32` must not match `i32`).
+    let ident = if let syn::Type::Path(tp) = ty {
+        tp.path.segments.last().map(|s| s.ident.to_string())
     } else {
-        "binary".to_string() // fallback
+        None
+    };
+    match ident.as_deref() {
+        Some("HashMap") | Some("BTreeMap") => "map<string, string>".to_string(), // simplified
+        Some("HashSet") | Some("BTreeSet") => "set<string>".to_string(),          // simplified
+        Some("String") | Some("str") => "string".to_string(),
+        Some("bool") => "bool".to_string(),
+        Some("i8") => "byte".to_string(),
+        Some("i16") => "i16".to_string(),
+        Some("i32") => "i32".to_string(),
+        Some("i64") => "i64".to_string(),
+        Some("f64") => "double".to_string(),
+        _ => "binary".to_string(), // fallback
     }
 }

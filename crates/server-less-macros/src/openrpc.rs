@@ -41,7 +41,7 @@
 //! ```
 
 use crate::app::extract_app_meta;
-use crate::server_attrs::{has_server_hidden, has_server_skip};
+use crate::server_attrs::{has_server_hidden, has_server_skip, validate_server_attrs};
 use heck::ToLowerCamelCase;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -102,12 +102,17 @@ impl Parse for OpenRpcArgs {
 }
 
 pub(crate) fn expand_openrpc(args: OpenRpcArgs, mut impl_block: ItemImpl) -> syn::Result<TokenStream2> {
+    crate::reject_generic_impl(&impl_block)?;
     let app_meta = extract_app_meta(&mut impl_block.attrs);
     let struct_name = get_impl_name(&impl_block)?;
     let (impl_generics, _ty_generics, where_clause) = impl_block.generics.split_for_impl();
     let self_ty = &impl_block.self_ty;
     let struct_name_str = struct_name.to_string();
-    let methods: Vec<_> = extract_methods(&impl_block)?
+    let all_methods = extract_methods(&impl_block)?;
+    for m in &all_methods {
+        validate_server_attrs(m)?;
+    }
+    let methods: Vec<_> = all_methods
         .into_iter()
         .filter(|m| !has_server_skip(m) && !has_server_hidden(m))
         .collect();
@@ -120,11 +125,32 @@ pub(crate) fn expand_openrpc(args: OpenRpcArgs, mut impl_block: ItemImpl) -> syn
         .version
         .or_else(|| app_meta.version.into_explicit())
         .unwrap_or_else(|| "1.0.0".to_string());
+    // M12: capture description and homepage for the OpenRPC info block.
+    let description = app_meta.description;
+    let homepage = app_meta.homepage;
 
     // Generate method specs
     let method_specs: Vec<String> = methods.iter().map(generate_method_spec).collect();
 
     let methods_json = method_specs.join(",\n");
+
+    // M12: build optional info fields for description and homepage.
+    let description_field = match &description {
+        Some(desc) => quote! {
+            if let Some(__obj) = __info.as_object_mut() {
+                __obj.insert("description".to_string(), ::server_less::serde_json::json!(#desc));
+            }
+        },
+        None => quote! {},
+    };
+    let homepage_field = match &homepage {
+        Some(url) => quote! {
+            if let Some(__obj) = __info.as_object_mut() {
+                __obj.insert("contact".to_string(), ::server_less::serde_json::json!({"url": #url}));
+            }
+        },
+        None => quote! {},
+    };
 
     // Only emit the impl block if no higher-priority protocol sibling is present.
     let maybe_impl = if crate::is_protocol_impl_emitter(&impl_block, "openrpc") {
@@ -139,12 +165,15 @@ pub(crate) fn expand_openrpc(args: OpenRpcArgs, mut impl_block: ItemImpl) -> syn
         impl #impl_generics #self_ty #where_clause {
             /// Get the OpenRPC specification for this service.
             pub fn openrpc_spec() -> ::server_less::serde_json::Value {
+                let mut __info = ::server_less::serde_json::json!({
+                    "title": #title,
+                    "version": #version
+                });
+                #description_field
+                #homepage_field
                 ::server_less::serde_json::json!({
                     "openrpc": "1.0.0",
-                    "info": {
-                        "title": #title,
-                        "version": #version
-                    },
+                    "info": __info,
                     "methods": Self::openrpc_methods()
                 })
             }
@@ -198,16 +227,23 @@ fn generate_method_spec(method: &MethodInfo) -> String {
 /// Generate parameter specification
 fn generate_param_spec(param: &ParamInfo) -> String {
     let name = param.name_str().to_lower_camel_case();
+    // M11: include help_text as the "description" field in the param spec.
+    let description = param
+        .help_text
+        .as_deref()
+        .unwrap_or("")
+        .replace('"', "\\\"");
     let schema = get_json_schema(&Some(param.ty.clone()));
     let required = !param.is_optional;
 
     format!(
         r#"{{
             "name": "{}",
+            "description": "{}",
             "required": {},
             "schema": {}
         }}"#,
-        name, required, schema
+        name, description, required, schema
     )
 }
 
@@ -225,11 +261,11 @@ fn get_json_schema_ty(ty: &syn::Type) -> String {
     if let Some(ok) = unwrap_result_ok_type(ty) {
         return get_json_schema_ty(ok);
     }
-    // Option<T> → {"type": ["null", <inner_schema_type>]}
+    // M15: Option<T> → {"anyOf": [{"type": "null"}, <inner_schema>]}
+    // Bare `null` is not valid JSON Schema; use {"type": "null"} instead.
     if let Some(inner) = unwrap_option_type(ty) {
         let inner_schema = get_json_schema_ty(inner);
-        // Extract the type value from the inner schema to compose a nullable schema
-        return format!(r#"{{"anyOf": [null, {}]}}"#, inner_schema);
+        return format!(r#"{{"anyOf": [{{"type": "null"}}, {}]}}"#, inner_schema);
     }
     // Vec<T> → {"type": "array", "items": <inner_schema>}
     if let Some(inner) = unwrap_vec_type(ty) {
