@@ -212,7 +212,7 @@ The generated code automatically wraps your stream in SSE format with proper eve
 - Mount points for nested subcommand/route composition
 - `#[route]` / `#[response]` HTTP overrides
 - `#[param(positional)]`, `#[param(short)]`, `#[param(query)]`
-- `#[server(skip)]`, `#[server(hidden)]`, `#[cli(default)]`
+- `#[server(skip)]`, `#[server(hidden)]`, `#[cli(default)]`, `#[cli(hidden)]`, `#[cli(name)]`, `#[cli(display_with)]`
 - CLI output: Display default, `--json`, `--jq`, `--output-schema`
 - Iterator / SSE streaming return types
 - Extensive test coverage

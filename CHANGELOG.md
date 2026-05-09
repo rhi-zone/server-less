@@ -6,7 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-_No changes yet._
+### Changed
+
+- **Reverted overly-aggressive `#[cli(default)]` suppression.** The previous commit
+  removed ALL `#[cli(default)]` methods from the named subcommand list, which broke
+  cases like `normalize analyze health` where the default method should still be
+  accessible by name. `#[cli(default)]` now registers the method as both the default
+  action AND a named subcommand — the same behavior as before the suppression commit.
+  To hide the default action from `--help` while keeping it accessible, combine with
+  `#[cli(hidden)]`: `#[cli(default, hidden)]`.
+
+### Added
+
+- **`docs/design/cli-attributes.md`**: Reference for all `#[cli]` method-level
+  attributes: `default`, `hidden`, `skip`, `helper`, `name`, `display_with` — with
+  patterns for default actions, hiding duplicate subcommand names, and combining
+  attributes.
 
 ## [0.4.0] - 2026-03-09
 

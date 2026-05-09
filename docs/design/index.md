@@ -18,6 +18,7 @@ Architecture decisions and design philosophy for server-less.
 
 ## Feature-Specific
 
+- [CLI Attributes](./cli-attributes.md) — Method-level `#[cli(...)]` attributes: `default`, `hidden`, `skip`, `helper`, `name`, `display_with`
 - [CLI Output Formatting](./cli-output-formatting.md) — Display default, `--json`/`--jq`/`--output-schema`
 - [Route & Response Attributes](./route-response-attrs.md) — `#[route]` and `#[response]` HTTP overrides
 - [Mount Points](./mount-points.md) — Nested subcommand composition via `&T` return types
