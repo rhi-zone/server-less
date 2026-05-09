@@ -1110,9 +1110,14 @@ fn test_cli_default_runs_when_no_subcommand() {
 }
 
 #[test]
-fn test_cli_default_subcommand_still_works_explicitly() {
-    let app = DefaultApp;
-    assert!(app.cli_run_with(["default-app", "status"]).is_ok());
+fn test_cli_default_subcommand_not_registered_as_named() {
+    // A method marked #[cli(default)] is NOT registered as a named subcommand.
+    let cmd = DefaultApp::cli_command();
+    let status_sub = cmd.get_subcommands().find(|c| c.get_name() == "status");
+    assert!(
+        status_sub.is_none(),
+        "default method 'status' should not appear as a named subcommand"
+    );
 }
 
 #[test]
@@ -1128,22 +1133,28 @@ fn test_cli_default_flag_passed_without_subcommand() {
 }
 
 #[test]
-fn test_cli_default_flag_passed_with_explicit_subcommand() {
-    let app = DefaultWithArgs;
+fn test_cli_default_not_registered_as_named_subcommand() {
+    // A method marked #[cli(default)] is NOT registered as a named subcommand.
+    let cmd = DefaultWithArgs::cli_command();
+    let run_sub = cmd.get_subcommands().find(|c| c.get_name() == "run");
     assert!(
-        app.cli_run_with(["default-args-app", "run", "--verbose"])
-            .is_ok()
+        run_sub.is_none(),
+        "default method 'run' should not appear as a named subcommand"
     );
 }
 
 #[test]
-fn test_cli_default_hidden_not_in_help() {
+fn test_cli_default_not_registered_as_subcommand() {
+    // A method marked #[cli(default)] is never registered as a named subcommand,
+    // even when combined with #[cli(hidden)].
     let cmd = DefaultHidden::cli_command();
     let run_cmd = cmd
         .get_subcommands()
-        .find(|c| c.get_name() == "run")
-        .unwrap();
-    assert!(run_cmd.is_hide_set());
+        .find(|c| c.get_name() == "run");
+    assert!(
+        run_cmd.is_none(),
+        "default method 'run' should not be registered as a subcommand at all"
+    );
 }
 
 #[test]

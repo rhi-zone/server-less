@@ -15,7 +15,10 @@
 //! - `#[cli(skip)]` — Exclude a method from becoming a subcommand
 //! - `#[cli(helper)]` — Self-documenting alias for `skip` (for display formatters, internal logic)
 //! - `#[cli(hidden)]` — Include the subcommand but hide it from `--help`
-//! - `#[cli(default)]` — Make this the default action when no subcommand is given
+//! - `#[cli(default)]` — Make this the default action when no subcommand is given.
+//!   The method is NOT registered as a named subcommand — it only runs when the user
+//!   invokes the service with no subcommand. Its parameters are hoisted to the parent
+//!   command's argument list.
 //! - `#[cli(display_with = "fn_name")]` — Use a custom function for text output formatting.
 //!   The function is called as `self.fn_name(&return_value)` and can live in any impl block
 //!   on the same type (not just the `#[cli]` block). Only affects text output; `--json`/`--jq`
@@ -507,6 +510,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let leaf_subcommands: Vec<_> = partitioned
         .leaf
         .iter()
+        .filter(|m| !has_cli_default(m))
         .map(|m| {
             let sub = generate_leaf_subcommand(
                 m,
@@ -527,10 +531,10 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         #[allow(clippy::type_complexity)]
         let mut sections: Vec<(Option<String>, Vec<(String, String)>)> = Vec::new();
 
-        // Ungrouped leaf methods first
+        // Ungrouped leaf methods first (excluding default methods and hidden methods)
         let mut ungrouped = Vec::new();
         for m in &partitioned.leaf {
-            if has_cli_hidden(m) {
+            if has_cli_hidden(m) || has_cli_default(m) {
                 continue;
             }
             if resolve_method_group(m, &group_registry)?.is_none() {
@@ -568,7 +572,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 .chain(partitioned.static_mounts.iter())
                 .chain(partitioned.slug_mounts.iter())
             {
-                if has_cli_hidden(m) {
+                if has_cli_hidden(m) || has_cli_default(m) {
                     continue;
                 }
                 if resolve_method_group(m, &group_registry)?.as_deref() == Some(group.as_str()) {
@@ -631,7 +635,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .collect::<syn::Result<Vec<_>>>()?;
 
     // Find the default action (if any) — the method marked #[cli(default)].
-    // It still appears as a normal subcommand AND runs when no subcommand is given.
+    // It does NOT appear as a named subcommand; it only runs when no subcommand is given.
     // Emit a compile error if more than one method is marked as default.
     let mut default_methods = partitioned.leaf.iter().filter(|m| has_cli_default(m));
     let default_method = default_methods.next();
@@ -700,10 +704,12 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         None
     };
 
-    // Generate match arms for leaf methods
+    // Generate match arms for leaf methods.
+    // Default methods are excluded here — they are only invoked via the `None` arm.
     let leaf_match_arms: Vec<_> = partitioned
         .leaf
         .iter()
+        .filter(|m| !has_cli_default(m))
         .map(|m| {
             let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, false)?;
             let cfg_attrs = &m.cfg_attrs;
@@ -716,6 +722,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let async_leaf_match_arms: Vec<_> = partitioned
         .leaf
         .iter()
+        .filter(|m| !has_cli_default(m))
         .map(|m| {
             let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, true)?;
             let cfg_attrs = &m.cfg_attrs;
@@ -750,11 +757,11 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .map(|m| generate_slug_mount_arm_async(m))
         .collect::<syn::Result<Vec<_>>>()?;
 
-    // Build subcommand documentation
+    // Build subcommand documentation (excludes default methods — they are not named subcommands)
     let subcommand_docs: Vec<String> = partitioned
         .leaf
         .iter()
-        .filter(|m| !has_cli_hidden(m))
+        .filter(|m| !has_cli_hidden(m) && !has_cli_default(m))
         .map(|m| {
             let name = cli_name(m);
             match &m.docs {

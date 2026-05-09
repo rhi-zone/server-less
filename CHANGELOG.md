@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-_No changes yet._
+### Fixed
+
+- **`#[cli(default)]` no longer registers a named subcommand**: A method marked `#[cli(default)]`
+  is now the default action only — it is not registered as a named subcommand and cannot be
+  invoked as `<service> <method-name>`. Its parameters are still hoisted to the parent command's
+  argument list (so `<service> --flag` works). Previously, `#[cli(default)]` registered the method
+  as BOTH the default action AND a named subcommand, causing duplicate entries in `--help`.
 
 ## [0.4.0] - 2026-03-09
 
