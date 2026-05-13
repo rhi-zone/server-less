@@ -248,6 +248,22 @@ server-less = { version = "0.1", default-features = false, features = ["http", "
 
 **Separate niche from shared.** Don't bloat shared config with feature-specific data. Use separate files for specialized data.
 
+## Worktree Hygiene
+
+After each merge session, clean up:
+```bash
+git worktree remove --force .claude/worktrees/agent-XXXX
+git branch | grep worktree | xargs git branch -D
+git worktree prune
+```
+Bash CWD can silently drift into a worktree — `cd /home/me/git/rhizone/server-less` before git ops and check `pwd` on "already used by worktree" errors.
+
+## jq Filtering
+
+Use `jaq-core 3.0.0-beta` / `jaq-std 3.0.0-beta` / `jaq-json 2.0.0-beta` (with `serde` feature, not `serde_json`) — no external binary. See `cli_format_output` in `crates/server-less-core/src/lib.rs`.
+
+v3 API: `Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]))`, run via `filter.id.run(...)`, convert `serde_json::Value` → `Val` via `serde_json::from_value()`. No `RcIter`.
+
 ## Workflow
 
 **Batch cargo commands** to minimize round-trips:
