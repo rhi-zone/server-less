@@ -288,14 +288,18 @@ After editing multiple files, run the full check once — not after each edit. F
 
 ## Context Management
 
-**Use subagents to protect the main context window.** For broad exploration or mechanical multi-file work, delegate to an Explore or general-purpose subagent rather than running searches inline. The subagent returns a distilled summary; raw tool output stays out of the main context.
+**All exploration runs in subagents.** Any tool call whose purpose is "find out what's here" — grep, find, broad reads, surveys, audits — goes in a subagent. Raw exploratory output in the main context is active context poisoning: it lingers in cache, shapes downstream reasoning, and can't be unsent. The subagent returns a distilled summary; the noise stays in the subagent.
 
-Rules of thumb:
-- Research tasks (investigating a question, surveying patterns) → subagent; don't pollute main context with exploratory noise
-- Searching >5 files or running >3 rounds of grep/read → use a subagent
+Inline tool use in the main context is reserved for:
+- Reading a known file at a known path
+- Edits/writes you're committing to
+- A single targeted lookup whose result you'll act on immediately
+
+If you find yourself running a second grep to refine the first, you should have spawned a subagent.
+
+Additional rules:
 - Codebase-wide analysis (architecture, patterns, cross-file survey) → always subagent
 - Mechanical work across many files (applying the same change everywhere) → parallel subagents
-- Single targeted lookup (one file, one symbol) → inline is fine
 - **Code changes beyond a trivial single-file edit → worktree agent.** Read the files, write the prompt with exact file paths and what to change, then delegate. Do not implement non-trivial changes inline.
 
 ## Commit Convention
@@ -315,7 +319,6 @@ Scope is optional but recommended for multi-crate repos.
 ## Negative Constraints
 
 Do not:
-- Use Claude Code's auto-memory system (`~/.claude/projects/.*./memory/`) — it is unversioned, invisible to the user, and can't be diffed or backed up. Write behavioral changes directly to CLAUDE.md instead
 - Announce actions ("I will now...") - just do them
 - Leave work uncommitted
 - Use interactive git commands (`git add -p`, `git add -i`, `git rebase -i`) — these block on stdin and hang in non-interactive shells; stage files by name instead
