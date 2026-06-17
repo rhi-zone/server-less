@@ -1,0 +1,238 @@
+# CLI Manual Projection
+
+A whole-tree reference projection for `#[cli]`: one invocation that emits the
+entire command surface as a single document — the tool's "manual".
+
+## Decision
+
+Add a global flag to the `#[cli]` projection that emits the **entire command
+tree** as one reference document, rather than a single leaf's surface. The flag
+selects *content* (the whole tree); the existing global format flags
+(`--json` / `--jsonl` / `--jq`) select *shape*. The aggregate contains each
+node's input schema, output schema, and description as elements. The flag —
+along with the existing `--input-schema` / `--output-schema` meta-surfaces — is
+toggleable globally and optionally per-command.
+
+The flag's **name** (`--manual` vs `--manpage`), its **default output format**,
+and the **exact toggle syntax** are left open below.
+
+## Context
+
+Every meta-surface in the `#[cli]` projection today is strictly **per-leaf**.
+`--input-schema` and `--output-schema` are global clap flags, but each leaf only
+ever emits *its own* schema — they are generated exclusively inside
+`generate_leaf_match_arm` and are never attached to mount-point (container)
+arms (see [schema-flag-wiring.md](../artifacts/normalize-cli-docs/schema-flag-wiring.md),
+"What is built"). There is no whole-tree aggregation: no single invocation that
+dumps the entire command surface as one document.
+
+This bites real tools. normalize exposes **~150 named commands at depth 3** via
+nested `#[cli]` services
+(see [cli-surface.md](../artifacts/normalize-cli-docs/cli-surface.md) §2). A
+deeply-nested CLI of that size is not greppable from the shell: there is "no
+`normalize help --all` or `normalize --help-all` that prints the entire tree in
+one call" and "no single `--output-schema` at root level that dumps all command
+schemas" (cli-surface.md §3, "What does NOT exist").
+
+The `#[markdown]` / `#[program]` preset *does* generate a `markdown_docs()`
+method — but it is a **Rust method, not a CLI surface**. It is Rust-callable
+only and is not wired to any flag or subcommand. normalize uses bare `#[cli]`
+(not `#[program]`), so `markdown_docs()` is not even available on its service
+(cli-surface.md §3). A user at the shell therefore cannot grep the docs of the
+tool they are holding. This gap was hit live while working on normalize.
+
+So the user-facing need is concrete: **"let me grep the whole tool's surface
+from the shell, in a shape I can pipe."** The default-`Display` /
+`--json` / `--jq` content×format convention already established in
+[CLI Output Formatting](cli-output-formatting.md) gives us the shape axis for
+free. What is missing is a *content* selector for "the whole tree."
+
+## Design
+
+### A content flag, orthogonal to format
+
+The new flag selects **content** — the whole command tree — and composes with
+the **format** flags server-less already ships
+([CLI Output Formatting](cli-output-formatting.md)):
+
+| Invocation | Result |
+|---|---|
+| `tool --manual` | Whole tree, human-readable rendering |
+| `tool --manual --json` | Whole tree as one structured doc keyed by command path; jaq-queryable |
+| `tool --manual --jsonl` | Whole tree, one JSON line per node |
+| `tool --manual --jq '...'` | Whole tree, inline jaq query applied |
+
+This is the same content×format split the projection already uses everywhere
+else: a content selector says *what* to emit, the format flags say *what shape*.
+The manual flag invents no new format concept — it reuses `--json` / `--jsonl` /
+`--jq` verbatim. (`--manual` is shown as the working name; see
+[Open Questions](#open-questions).)
+
+### The aggregate is keyed by command path
+
+Under `--json`, the document is keyed by command path, each node carrying its
+input schema, output schema, and description:
+
+```jsonc
+{
+  "view list":        { "description": "...", "input_schema": { ... }, "output_schema": { ... } },
+  "view chunk":       { "description": "...", "input_schema": { ... }, "output_schema": { ... } },
+  "edit history list":{ "description": "...", "input_schema": { ... }, "output_schema": { ... } },
+  // ... every leaf in the tree
+}
+```
+
+This shape is exactly what makes the surface greppable:
+
+```bash
+tool --manual --jq 'keys[] | select(startswith("edit"))'    # every command under `edit`
+tool --manual --jq '."view list".input_schema'              # one leaf's input schema
+tool --manual --jq 'to_entries[] | select(.value.description | test("rename"))'
+```
+
+Each node's schema appears in the aggregate as **one element**. This is the
+crux of why position-overloading was rejected (below): a leaf's own schema is a
+*member* of the manual, never in competition with it. `tool view list
+--output-schema` still means "that leaf's output schema"; `tool --manual` means
+"every leaf's surface, the manual containing them." The two never overlap.
+
+### Default format (open, with a lean)
+
+What `tool --manual` produces with no format flag is left **open** (see
+[Open Questions](#open-questions)). The lean is **human-readable / markdown**:
+a bare `--manual` should be readable prose (a rendered reference page), not a
+wall of JSON — consistent with the projection defaulting to `Display` rather
+than JSON ([CLI Output Formatting](cli-output-formatting.md)). Structure is then
+one flag away (`--manual --json`). This keeps the zero-argument case friendly
+while leaving the machine path trivially reachable.
+
+### Toggling the meta-surfaces
+
+The manual flag and the existing `--input-schema` / `--output-schema` flags are
+**meta-surfaces** the projection injects automatically. They must be
+**disable-able** — globally, and optionally per-command. Today these flags are
+hardcoded always-on in the `format_flags` block with **no toggle and no
+reserved-name collision guard**
+(see [schema-flag-wiring.md](../artifacts/normalize-cli-docs/schema-flag-wiring.md)).
+A tool that has a legitimate `--manual` method parameter, or that does not want
+to expose schemas at all, currently has no recourse.
+
+The toggle model should align with the projection's existing
+progressive-disclosure idiom — the same `x = false` shape as
+`#[server(openapi = false)]`
+(see [Blessed Presets](blessed-presets.md), "Toggles Bridge the Tiers"). The
+**exact syntax is open** (see [Open Questions](#open-questions)); a shape
+consistent with that idiom, *for illustration only*:
+
+```rust
+// Global: drop the manual surface entirely
+#[cli(name = "tool", manual = false)]
+impl MyService { ... }
+
+// Global: drop the per-leaf schema flags too
+#[cli(name = "tool", input_schema = false, output_schema = false)]
+impl MyService { ... }
+
+// Per-command: hide one leaf from the aggregated manual
+impl MyService {
+    #[cli(manual = false)]
+    pub fn internal_method(&self) -> Report { ... }
+}
+```
+
+The principle, not the spelling, is what this doc fixes: meta-surfaces are
+**configurable**, default-on, and follow the `= false` toggle convention. The
+spelling is deferred to implementation.
+
+## Alternatives Considered
+
+### A blessed `docs` / `man` subcommand auto-injected into every CLI
+
+Inject a `tool docs` (or `tool man`) subcommand into every `#[cli]` that prints
+the whole-tree reference.
+
+**Rejected: namespace-stomp.** A reserved subcommand permanently claims a name
+in *every* downstream CLI's command namespace. It collides with any user method
+that happens to be named `docs` / `man`, and — once shipped — it cannot be
+removed without a breaking change to every tool that depends on it. The
+projection's job is to surface the *user's* methods as commands; silently
+seizing a name for our own purposes inverts that. A global flag carries the same
+capability without consuming a command name. (The collision risk is not
+hypothetical: schema-flag-wiring.md notes there is currently **no
+reserved-name collision guard** at all — adding a *subcommand* would make the
+gap worse, not better.)
+
+### Position-overloading the existing `--output-schema`
+
+Make `--output-schema`'s meaning depend on its position in the tree: at the
+**root** it emits the aggregate whole-tree schema; at a **leaf** it emits that
+command's return-type schema.
+
+**Rejected on two grounds.**
+
+1. **It poisons the mental model regardless of collisions.** A flag whose
+   meaning depends on *where* it appears is a flag the user can never reason
+   about locally: "`--output-schema` means this command's schema, except at the
+   root where it means every command's schema." Even with no colliding node in
+   the tree, the rule is "X here, Y there" — exactly the kind of positional
+   special-case the projection avoids. The clean rule —
+   **`--output-schema` means *this command* at any position; the manual is a
+   separate flag** — falls directly out of rejecting the overload.
+
+2. **It collides concretely with `#[cli(default)]`.** When a default leaf is
+   set, `tool --output-schema` (no subcommand) *already* means "the default
+   leaf's output schema." schema-flag-wiring.md identifies this as "the one
+   ambiguity to resolve": overloading would force `--output-schema` at the root
+   to mean *either* the default leaf's schema (current behavior) *or* the
+   aggregate — and it cannot mean both. A separate manual flag dissolves the
+   ambiguity: the default leaf keeps `--output-schema`, the manual gets its own
+   flag, and the aggregate simply *contains* the default leaf's schema as one
+   node.
+
+Rejecting the overload is also what makes the **toggle requirement** clean: with
+`--output-schema` meaning one thing everywhere and the manual being a distinct
+flag, each meta-surface has a single, independently-toggleable identity. There
+is nothing positional to special-case in the disable path.
+
+## Open Questions
+
+These are deliberately left unresolved — recorded so they are not silently
+decided by implementation:
+
+- **(a) Flag name: `--manual` vs `--manpage`.** `--manual` is broader and makes
+  no promise about format or length. `--manpage` evokes `man(1)` — familiar and
+  evocative — but connotes a *single page*, which sits awkwardly against a
+  ~150-command tree and against the `--json` aggregate shape. No pick made.
+
+- **(b) Default output format** of a bare `--manual` (no format flag). Lean:
+  human-readable / markdown, with structure one flag away (`--manual --json`).
+  Recorded as a lean, not a decision.
+
+- **(c) Exact toggle / disable syntax** for the meta-surfaces. The doc fixes the
+  *principle* (default-on, `= false`, global and optionally per-command,
+  matching `#[server(openapi = false)]`); the precise attribute spelling is
+  deferred.
+
+- **(d) The pre-existing no-collision-guard gap.** There is currently no
+  reserved-name guard for any injected flag
+  (schema-flag-wiring.md). Each new global flag the projection adds — `--manual`
+  included — makes this more load-bearing: a user method or parameter named
+  `manual` would silently collide. Reconciling the manual flag with a general
+  reserved-name strategy is left open and grows in importance as the global-flag
+  set grows.
+
+## See Also
+
+- [CLI Output Formatting](cli-output-formatting.md) — the content×format
+  convention this reuses; `--json` / `--jsonl` / `--jq`, `--input-schema` /
+  `--output-schema`
+- [Blessed Presets](blessed-presets.md) — the `#[server](x = false)` toggle
+  idiom the disable model follows
+- [Mount Points](mount-points.md) — the leaf-vs-container partition the aggregate
+  walks
+- [cli-surface.md](../artifacts/normalize-cli-docs/cli-surface.md) — normalize's
+  ~150-command tree and the "what does NOT exist" gap (no whole-tree dump,
+  `markdown_docs()` is Rust-only)
+- [schema-flag-wiring.md](../artifacts/normalize-cli-docs/schema-flag-wiring.md)
+  — meta-surfaces are leaf-only, always-on, with no toggle and no collision
+  guard; the `--output-schema` / `#[cli(default)]` ambiguity
