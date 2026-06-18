@@ -1,8 +1,12 @@
-error: Duplicate route: GET /users/{id} is already defined by method 'get_user'
+error: Duplicate route: GET /users/{user_id} is structurally identical to /users/{id} defined by method 'get_user'
+
+       Note: These paths have the same structure (different parameter names don't matter):
+       - Method 'get_user': /users/{id}
+       - Method 'fetch_user': /users/{user_id}
 
        Hint: You can either:
-       1. Use #[route(skip)] to exclude this method from HTTP routing
-       2. Use #[route(path = "/custom")] to use a different path
+       1. Use #[route(skip)] to exclude one method from HTTP routing
+       2. Use #[route(path = "/custom")] to use a completely different path
        3. Use #[route(method = "PATCH")] to use a different HTTP method
   --> tests/fixtures/duplicate_route.rs:12:9
    |
