@@ -298,6 +298,18 @@ pub fn infer_path(method_name: &str, http_method: &HttpMethod, params: &[ParamIn
             // Use the actual parameter name instead of hardcoding `id`.
             let p = id_param.unwrap();
             let param_name = p.wire_name.clone().unwrap_or_else(|| p.name_str());
+            // A leading underscore is Rust's "unused binding" marker, not part of the
+            // semantic name. Strip it so `_id` and `id` map to the same `{id}` segment —
+            // otherwise two methods on the same resource path (e.g. GET `{id}` and
+            // DELETE `{_id}`) register conflicting matchit patterns. wire_name (explicit)
+            // is taken verbatim.
+            let param_name = match p.wire_name {
+                Some(_) => param_name,
+                None => param_name
+                    .strip_prefix('_')
+                    .map(str::to_string)
+                    .unwrap_or(param_name),
+            };
             format!("/{}/{{{}}}", path_resource, param_name)
         }
         _ => format!("/{}", path_resource),

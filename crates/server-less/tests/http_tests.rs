@@ -351,8 +351,8 @@ fn test_openapi_path_parameters() {
     let spec = SchemaService::http_openapi_spec();
     let paths = spec.get("paths").unwrap();
 
-    // get_item should have path parameter
-    let get_path = paths.get("/api/items/{id}").unwrap();
+    // get_item should have path parameter (named after the actual param: item_id)
+    let get_path = paths.get("/api/items/{item_id}").unwrap();
     let get_op = get_path.get("get").unwrap();
     let params = get_op.get("parameters").unwrap().as_array().unwrap();
 
@@ -394,7 +394,7 @@ fn test_openapi_error_responses() {
     let paths = spec.get("paths").unwrap();
 
     // update_item returns Result, should have error responses
-    let update_path = paths.get("/api/items/{id}").unwrap();
+    let update_path = paths.get("/api/items/{item_id}").unwrap();
     let put_op = update_path.get("put").unwrap();
     let responses = put_op.get("responses").unwrap().as_object().unwrap();
 
