@@ -310,9 +310,11 @@ the offending parameter, matching the repo's helpful-errors-with-spans value.
 - **What is checked.** Each leaf and slug-mount regular parameter's kebab flag name,
   at arg-registration time. User-declared `global` flags are out of scope — declaring
   one is an explicit opt-in to shadowing.
-- **The diagnostic** names the colliding flag and points at the fix: rename via
-  `#[param(rename = "...")]` / `wire_name`, or disable the meta-surface that reserves
-  the name.
+- **The diagnostic** names the colliding flag and points at the fix: rename the Rust
+  parameter, or disable the meta-surface that reserves the name (e.g.
+  `#[cli(manual = false)]`). It does *not* suggest `#[param(name = "...")]`: the CLI
+  flag is derived from the parameter identifier, not the wire name, so a wire-name
+  override would not move the flag off the collision.
 
 *Rejected — warning.* clap panics at runtime on duplicate arg ids; a warning lets a
 broken binary ship. The whole point of compile-time projection is to turn that

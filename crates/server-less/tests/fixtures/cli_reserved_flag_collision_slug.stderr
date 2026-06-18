@@ -1,7 +1,7 @@
 error: parameter `manual` collides with the injected `--manual` global flag — the --manual reference surface (disable with #[cli(manual = false)])
 
        Each #[cli] command receives built-in global flags; a parameter whose flag name matches one would make clap panic at runtime. Rename the Rust parameter, or disable the conflicting meta-surface (e.g. #[cli(manual = false)]).
- --> tests/fixtures/cli_reserved_flag_collision.rs:9:22
-  |
-9 |     fn render(&self, manual: String) {
-  |                      ^^^^^^
+  --> tests/fixtures/cli_reserved_flag_collision_slug.rs:15:21
+   |
+15 |     fn items(&self, manual: String) -> &Child {
+   |                     ^^^^^^

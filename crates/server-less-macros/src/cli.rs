@@ -385,49 +385,69 @@ fn check_reserved_flag_collisions(
     partitioned: &server_less_parse::PartitionedMethods,
     meta: MetaFlags,
 ) -> syn::Result<()> {
-    // (flag-name, human description of what reserves it)
-    let mut reserved: Vec<(&str, &str)> = vec![
-        ("json", "the --json output format"),
-        ("jsonl", "the --jsonl output format"),
-        ("jq", "the --jq output filter"),
-        ("params-json", "the --params-json bulk input flag"),
-    ];
-    if meta.manual {
-        reserved.push((
-            "manual",
-            "the --manual reference surface (disable with #[cli(manual = false)])",
-        ));
-    }
-    if meta.input_schema {
-        reserved.push((
-            "input-schema",
-            "the --input-schema surface (disable with #[cli(input_schema = false)])",
-        ));
-    }
-    if meta.output_schema {
-        reserved.push((
-            "output-schema",
-            "the --output-schema surface (disable with #[cli(output_schema = false)])",
-        ));
-    }
+    // Build the reserved set for a command whose meta-surfaces are governed by
+    // `surfaces`. (flag-name, "what reserves it"). The four always-on format flags
+    // are unconditional; the three meta-surfaces are reserved only while enabled.
+    let reserved_for = |surfaces: MetaFlags| -> Vec<(&'static str, &'static str)> {
+        let mut r: Vec<(&str, &str)> = vec![
+            ("json", "the --json output format"),
+            ("jsonl", "the --jsonl output format"),
+            ("jq", "the --jq output filter"),
+            ("params-json", "the --params-json bulk input flag"),
+        ];
+        if surfaces.manual {
+            r.push((
+                "manual",
+                "the --manual reference surface (disable with #[cli(manual = false)])",
+            ));
+        }
+        if surfaces.input_schema {
+            r.push((
+                "input-schema",
+                "the --input-schema surface (disable with #[cli(input_schema = false)])",
+            ));
+        }
+        if surfaces.output_schema {
+            r.push((
+                "output-schema",
+                "the --output-schema surface (disable with #[cli(output_schema = false)])",
+            ));
+        }
+        r
+    };
 
-    for m in partitioned.leaf.iter().chain(partitioned.slug_mounts.iter()) {
-        let (_, regular) = partition_context_params(&m.params)?;
-        for p in &regular {
-            let kebab = p.name_str().to_kebab_case();
-            if let Some((flag, what)) = reserved.iter().find(|(name, _)| *name == kebab) {
-                return Err(syn::Error::new(
-                    p.name.span(),
-                    format!(
-                        "parameter `{param}` collides with the injected `--{flag}` global flag — {what}\n\
-                         \n\
-                         Each #[cli] command receives built-in global flags; a parameter whose \
-                         flag name matches one would make clap panic at runtime. Rename the \
-                         parameter (e.g. with `#[param(rename = \"...\")]`), or disable the \
-                         conflicting meta-surface.",
-                        param = p.name_str(),
-                    ),
-                ));
+    // Leaf params register on *this* command, so they collide with this command's
+    // injected flags — governed by `meta`. Slug-mount params register on the *child*
+    // command (the mount's own `#[cli]`), whose meta-surfaces default on and are not
+    // visible here; reserve all three conservatively so we never miss a collision the
+    // child would hit at clap-build time.
+    let all_on = MetaFlags { manual: true, input_schema: true, output_schema: true };
+    let leaf_reserved = reserved_for(meta);
+    let slug_reserved = reserved_for(all_on);
+
+    let groups = [
+        (&partitioned.leaf, &leaf_reserved),
+        (&partitioned.slug_mounts, &slug_reserved),
+    ];
+    for (methods, reserved) in groups {
+        for m in methods.iter() {
+            let (_, regular) = partition_context_params(&m.params)?;
+            for p in &regular {
+                let kebab = p.name_str().to_kebab_case();
+                if let Some((flag, what)) = reserved.iter().find(|(name, _)| *name == kebab) {
+                    return Err(syn::Error::new(
+                        p.name.span(),
+                        format!(
+                            "parameter `{param}` collides with the injected `--{flag}` global flag — {what}\n\
+                             \n\
+                             Each #[cli] command receives built-in global flags; a parameter whose \
+                             flag name matches one would make clap panic at runtime. Rename the Rust \
+                             parameter, or disable the conflicting meta-surface (e.g. \
+                             #[cli(manual = false)]).",
+                            param = p.name_str(),
+                        ),
+                    ));
+                }
             }
         }
     }
@@ -2234,11 +2254,11 @@ fn generate_slug_mount_manual_node(method: &MethodInfo) -> syn::Result<TokenStre
     };
     let (about, _) = split_docs(&method.docs);
     let desc_base = if about.is_empty() {
-        "subcommand group (per-slug); invoke with a slug value and --manual for its subtree"
+        "command group, selected by an <id> argument; run with an id value and --manual to see its subcommands"
             .to_string()
     } else {
         format!(
-            "{about} — subcommand group (per-slug); invoke with a slug value and --manual for its subtree"
+            "{about} — command group, selected by an <id> argument; run with an id value and --manual to see its subcommands"
         )
     };
     let path_suffix = slug_suffix.clone();
