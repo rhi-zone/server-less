@@ -750,6 +750,49 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .map(|m| generate_slug_mount_arm_async(m))
         .collect::<syn::Result<Vec<_>>>()?;
 
+    // ── Manual (--manual) node builders ───────────────────────────────
+    // One per leaf (its own reference entry) + recursion into each mount's
+    // subtree. Hidden methods are excluded from the aggregate, matching how
+    // they are excluded from help. `#[cfg(...)]` is preserved per-method so
+    // conditionally-compiled commands don't appear in the manual when absent.
+    let manual_node_builders: Vec<TokenStream2> = {
+        let mut builders = Vec::new();
+        for m in &partitioned.leaf {
+            if has_cli_hidden(m) {
+                continue;
+            }
+            let node = generate_leaf_manual_node(m)?;
+            let cfg_attrs = &m.cfg_attrs;
+            builders.push(quote! {
+                #(#cfg_attrs)*
+                #node
+            });
+        }
+        for m in &partitioned.static_mounts {
+            if has_cli_hidden(m) {
+                continue;
+            }
+            let node = generate_static_mount_manual_node(m)?;
+            let cfg_attrs = &m.cfg_attrs;
+            builders.push(quote! {
+                #(#cfg_attrs)*
+                #node
+            });
+        }
+        for m in &partitioned.slug_mounts {
+            if has_cli_hidden(m) {
+                continue;
+            }
+            let node = generate_slug_mount_manual_node(m)?;
+            let cfg_attrs = &m.cfg_attrs;
+            builders.push(quote! {
+                #(#cfg_attrs)*
+                #node
+            });
+        }
+        builders
+    };
+
     // Build subcommand documentation
     let subcommand_docs: Vec<String> = partitioned
         .leaf
@@ -826,6 +869,39 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         })
         .collect();
 
+    // Whole-subtree manual aggregation. `cli_manual_nodes` materializes the
+    // reference document for the subtree rooted at this node: each leaf's own
+    // entry, plus (via the `CliSubcommand` trait) every mount child's subtree.
+    // The aggregation is compile-time codegen composed through the same mount
+    // recursion the dispatcher uses — see docs/design/cli-manual-projection.md.
+    let manual_nodes_method = quote! {
+        fn cli_manual_nodes(&self, __prefix: &str) -> Vec<::server_less::CliManualNode> {
+            let mut __nodes: Vec<::server_less::CliManualNode> = Vec::new();
+            #(#manual_node_builders)*
+            __nodes
+        }
+    };
+
+    // Top-of-dispatch `--manual` interception: when set and no further subcommand
+    // is selected, this node is the invoked root of the subtree → emit it. A
+    // selected leaf/mount subcommand falls through: a leaf handles `--manual` in
+    // its own arm, a mount recurses into the child's dispatch. This runs *before*
+    // any `#[cli(default)]` None arm so `tool --manual` means "manual of the tree",
+    // not "run the default action".
+    let manual_dispatch_intercept = {
+        let emit = manual_emit_tokens(&syn::Ident::new(
+            "matches",
+            proc_macro2::Span::call_site(),
+        ));
+        quote! {
+            if matches.get_flag("manual") && matches.subcommand().is_none() {
+                let __nodes = <Self as ::server_less::CliSubcommand>::cli_manual_nodes(self, "");
+                #emit
+                return Ok(());
+            }
+        }
+    };
+
     // Built-in output formatting flags (always present)
     let format_flags = quote! {
         .arg(
@@ -861,6 +937,13 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 .action(::server_less::clap::ArgAction::SetTrue)
                 .global(true)
                 .help("Print JSON Schema of the subcommand's return type and exit")
+        )
+        .arg(
+            ::server_less::clap::Arg::new("manual")
+                .long("manual")
+                .action(::server_less::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Emit the reference manual for the command subtree rooted here and exit")
         )
         .arg(
             ::server_less::clap::Arg::new("params-json")
@@ -976,7 +1059,10 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 __cmd
             }
 
+            #manual_nodes_method
+
             fn cli_dispatch(&self, matches: &::server_less::clap::ArgMatches) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
+                #manual_dispatch_intercept
                 match matches.subcommand() {
                     #(#leaf_match_arms)*
                     #(#static_mount_arms)*
@@ -995,6 +1081,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 matches: &'__a ::server_less::clap::ArgMatches,
             ) -> impl ::std::future::Future<Output = ::std::result::Result<(), Box<dyn ::std::error::Error>>> + '__a {
                 async move {
+                    #manual_dispatch_intercept
                     match matches.subcommand() {
                         #(#async_leaf_match_arms)*
                         #(#async_static_mount_arms)*
@@ -1741,7 +1828,24 @@ fn generate_leaf_match_arm(
         }
     };
 
+    // --manual on a leaf: emit just this command's reference entry (a one-node
+    // manual). The aggregate at a container is handled in `cli_dispatch`; here we
+    // are at the leaf the user navigated to, so its subtree is itself.
+    let leaf_manual_node = generate_leaf_manual_node(method)?;
+    let manual_emit = manual_emit_tokens(&syn::Ident::new(
+        "sub_matches",
+        proc_macro2::Span::call_site(),
+    ));
+
     let arm_body = quote! {
+        // --manual: emit this command's reference entry and exit (before running).
+        if sub_matches.get_flag("manual") {
+            let mut __nodes: Vec<::server_less::CliManualNode> = Vec::new();
+            let __prefix: &str = "";
+            #leaf_manual_node
+            #manual_emit
+            return Ok(());
+        }
         // Schema flags: print and exit without running the method
         if sub_matches.get_flag("input-schema") {
             #input_schema
@@ -1784,6 +1888,187 @@ fn generate_leaf_match_arm(
             Some((#subcommand_name, sub_matches)) => {
                 #arm_body
             }
+        }
+    })
+}
+
+/// Tokens that format a `__nodes: Vec<CliManualNode>` binding according to the
+/// active format flags (`--json` / `--jsonl` / `--jq`), falling back to
+/// human-readable text when no format flag is set. `matches_ident` is the
+/// `ArgMatches` to read the format flags from (the global flags propagate to
+/// every level, so either the leaf's `sub_matches` or the dispatch `matches`
+/// works).
+fn manual_emit_tokens(matches_ident: &syn::Ident) -> TokenStream2 {
+    quote! {
+        let __json = #matches_ident.get_flag("json");
+        let __jsonl = #matches_ident.get_flag("jsonl");
+        let __jq: Option<&String> = #matches_ident.get_one::<String>("jq");
+        if __json || __jsonl || __jq.is_some() {
+            let __doc = ::server_less::cli_manual_to_json(&__nodes);
+            let __formatted = ::server_less::cli_format_output(
+                __doc, __jsonl, __json, __jq.map(|s| s.as_str()),
+            )?;
+            println!("{}", __formatted);
+        } else {
+            print!("{}", ::server_less::cli_manual_to_text(&__nodes));
+        }
+    }
+}
+
+/// Expression that evaluates to the input-parameters JSON Schema (`serde_json::Value`)
+/// for a leaf method. Mirrors the `input-schema` flag's compile-time JSON, but yields
+/// a value instead of printing — used by the `--manual` aggregate.
+fn leaf_input_schema_expr(method: &MethodInfo) -> syn::Result<TokenStream2> {
+    let (_, regular_params) = partition_context_params(&method.params)?;
+    let mut props = Vec::new();
+    let mut required = Vec::new();
+    for p in &regular_params {
+        let name_str = p.name_str();
+        let schema = type_to_json_schema(&Some(p.ty.clone()));
+        props.push(quote! {
+            __props.insert(#name_str.to_string(), #schema);
+        });
+        if !p.is_optional && !p.is_bool {
+            required.push(quote! { #name_str });
+        }
+    }
+    Ok(quote! {
+        {
+            let mut __props = ::server_less::serde_json::Map::new();
+            #(#props)*
+            ::server_less::serde_json::json!({
+                "type": "object",
+                "properties": ::server_less::serde_json::Value::Object(__props),
+                "required": [#(#required),*],
+            })
+        }
+    })
+}
+
+/// Expression that evaluates to the return-type JSON Schema (`serde_json::Value`)
+/// for a leaf method. Mirrors the `output-schema` flag, but yields a value instead
+/// of printing — used by the `--manual` aggregate.
+fn leaf_output_schema_expr(method: &MethodInfo) -> TokenStream2 {
+    let output_ty = if method.return_info.is_result {
+        &method.return_info.ok_type
+    } else if method.return_info.is_option {
+        &method.return_info.some_type
+    } else if method.return_info.is_unit {
+        &None
+    } else {
+        &method.return_info.ty
+    };
+    #[cfg(feature = "jsonschema")]
+    {
+        if let Some(ty) = output_ty {
+            quote! { ::server_less::cli_schema_for::<#ty>() }
+        } else {
+            quote! { ::server_less::serde_json::json!({"type": "null"}) }
+        }
+    }
+    #[cfg(not(feature = "jsonschema"))]
+    {
+        type_to_json_schema(output_ty)
+    }
+}
+
+/// Build the `CliManualNode` for a single leaf method, with its command path
+/// computed as `prefix` + the leaf's CLI name.
+fn generate_leaf_manual_node(method: &MethodInfo) -> syn::Result<TokenStream2> {
+    let name = cli_name(method);
+    let input_schema = leaf_input_schema_expr(method)?;
+    let output_schema = leaf_output_schema_expr(method);
+    let (about, _) = split_docs(&method.docs);
+    let description = if about.is_empty() {
+        quote! { ::std::option::Option::None }
+    } else {
+        quote! { ::std::option::Option::Some(#about.to_string()) }
+    };
+    Ok(quote! {
+        {
+            let __path = if __prefix.is_empty() {
+                #name.to_string()
+            } else {
+                format!("{} {}", __prefix, #name)
+            };
+            __nodes.push(::server_less::CliManualNode {
+                path: __path,
+                description: #description,
+                input_schema: #input_schema,
+                output_schema: #output_schema,
+            });
+        }
+    })
+}
+
+/// Recurse into a **static** mount point (`fn(&self) -> &T`): extend the prefix
+/// with the mount's CLI name and append the child type's subtree of manual nodes.
+fn generate_static_mount_manual_node(method: &MethodInfo) -> syn::Result<TokenStream2> {
+    let name = cli_name(method);
+    let method_name = &method.name;
+    let inner_ty = method.return_info.reference_inner.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(
+            &method.method.sig,
+            "BUG: mount method must have a reference return type (&T)",
+        )
+    })?;
+    Ok(quote! {
+        {
+            let __child_prefix = if __prefix.is_empty() {
+                #name.to_string()
+            } else {
+                format!("{} {}", __prefix, #name)
+            };
+            let __delegate = self.#method_name();
+            __nodes.extend(
+                <#inner_ty as ::server_less::CliSubcommand>::cli_manual_nodes(__delegate, &__child_prefix)
+            );
+        }
+    })
+}
+
+/// Surface a **slug** mount point (`fn(&self, id) -> &T`) in the manual.
+///
+/// A slug mount's child is parameterized by a runtime value the manual cannot
+/// synthesize, so we cannot construct an instance of the child to recurse into.
+/// We therefore emit a single container node naming the mount and its slug
+/// parameters, with the child type recorded in the description. The subtree's
+/// per-leaf detail is reachable by invoking `tool <slug-mount> <id> --manual`.
+fn generate_slug_mount_manual_node(method: &MethodInfo) -> syn::Result<TokenStream2> {
+    let name = cli_name(method);
+    let (_, regular_params) = partition_context_params(&method.params)?;
+    let slug_names: Vec<String> = regular_params
+        .iter()
+        .map(|p| format!("<{}>", p.name_str().to_kebab_case()))
+        .collect();
+    let slug_suffix = if slug_names.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", slug_names.join(" "))
+    };
+    let (about, _) = split_docs(&method.docs);
+    let desc_base = if about.is_empty() {
+        "subcommand group (per-slug); invoke with a slug value and --manual for its subtree"
+            .to_string()
+    } else {
+        format!(
+            "{about} — subcommand group (per-slug); invoke with a slug value and --manual for its subtree"
+        )
+    };
+    let path_suffix = slug_suffix.clone();
+    Ok(quote! {
+        {
+            let __path = if __prefix.is_empty() {
+                format!("{}{}", #name, #path_suffix)
+            } else {
+                format!("{} {}{}", __prefix, #name, #path_suffix)
+            };
+            __nodes.push(::server_less::CliManualNode {
+                path: __path,
+                description: ::std::option::Option::Some(#desc_base.to_string()),
+                input_schema: ::server_less::serde_json::json!({"type": "object"}),
+                output_schema: ::server_less::serde_json::json!({"type": "object"}),
+            });
         }
     })
 }
