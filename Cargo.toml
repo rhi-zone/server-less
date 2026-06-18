@@ -18,7 +18,7 @@ homepage = "https://rhi.zone/server-less/"
 documentation = "https://docs.rs/server-less"
 readme = "README.md"
 keywords = ["macros", "derive", "server", "rpc", "openapi"]
-categories = ["web-programming", "development-tools::procedural-macro-plugins"]
+categories = ["web-programming", "development-tools::procedural-macro-helpers"]
 rust-version = "1.89"
 
 [workspace.dependencies]
