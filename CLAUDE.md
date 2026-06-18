@@ -231,9 +231,9 @@ Bash CWD can silently drift into a worktree — `cd /home/me/git/rhizone/server-
 
 ## jq Filtering
 
-Use `jaq-core 3.0.0-beta` / `jaq-std 3.0.0-beta` / `jaq-json 2.0.0-beta` (with `serde` feature, not `serde_json`) — no external binary. See `cli_format_output` in `crates/server-less-core/src/lib.rs`.
+Use `jaq-core 3.1.0` / `jaq-std 3.0.1` / `jaq-json 2.0.1` (with `serde` feature, not `serde_json`) — no external binary. See `cli_format_output` in `crates/server-less-core/src/lib.rs`.
 
-v3 API: `Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]))`, run via `filter.id.run(...)`, convert `serde_json::Value` → `Val` via `serde_json::from_value()`. No `RcIter`.
+v3.1 API: three-crate defs/funs chain — `jaq_core::defs().chain(jaq_std::defs()).chain(jaq_json::defs())` for the loader, and `jaq_core::funs().chain(jaq_std::funs()).chain(jaq_json::funs())` for the compiler. The `jaq_core::defs()`/`funs()` prefix is required (was omitted in the pre-release beta, silently breaking the identity filter `.`). Execution: `Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]))`, run via `filter.id.run(...)`, convert `serde_json::Value` → `Val` via `serde_json::from_value()`. No `RcIter`.
 
 ## Workflow
 

@@ -166,7 +166,8 @@ pub fn cli_format_output(
         use jaq_core::{Compiler, Ctx, Vars, data, unwrap_valr};
         use jaq_json::Val;
 
-        let loader = Loader::new(jaq_std::defs().chain(jaq_json::defs()));
+        let loader =
+            Loader::new(jaq_core::defs().chain(jaq_std::defs()).chain(jaq_json::defs()));
         let arena = Arena::default();
 
         let program = JaqFile {
@@ -179,7 +180,7 @@ pub fn cli_format_output(
             .map_err(|errs| format!("jq parse error: {:?}", errs))?;
 
         let filter_compiled = Compiler::default()
-            .with_funs(jaq_std::funs().chain(jaq_json::funs()))
+            .with_funs(jaq_core::funs().chain(jaq_std::funs()).chain(jaq_json::funs()))
             .compile(modules)
             .map_err(|errs| format!("jq compile error: {:?}", errs))?;
 
