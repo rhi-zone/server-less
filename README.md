@@ -137,10 +137,10 @@ Generate API documentation and contracts:
 ```toml
 [dependencies]
 # Get everything (recommended for getting started)
-server-less = "0.4"
+server-less = "0.5"
 
 # Or select specific features
-server-less = { version = "0.4", default-features = false, features = ["http", "cli", "mcp"] }
+server-less = { version = "0.5", default-features = false, features = ["http", "cli", "mcp"] }
 ```
 
 ### Available Features
@@ -149,7 +149,8 @@ server-less = { version = "0.4", default-features = false, features = ["http", "
 |----------|----------|
 | **Runtime protocols** | `http`, `cli`, `mcp`, `ws`, `jsonrpc`, `graphql` |
 | **Schema generators** | `grpc`, `capnp`, `thrift`, `smithy`, `connect` |
-| **Spec generators** | `openrpc`, `asyncapi`, `jsonschema`, `markdown` |
+| **Spec generators** | `openapi`, `openrpc`, `asyncapi`, `jsonschema`, `markdown` |
+| **Config & ops** | `config`, `health`, `completions` |
 | **Convenience** | `full` (all features, default) |
 
 **Note:** `ServerlessError` derive is always available (zero deps).
@@ -203,10 +204,10 @@ The generated code automatically wraps your stream in SSE format with proper eve
 
 ## Roadmap
 
-### v0.2 — Shipped ✅
+### Shipped ✅
 - Runtime protocols: HTTP, CLI, MCP, WebSocket, JSON-RPC, GraphQL
 - Schema generators: gRPC, Cap'n Proto, Thrift, Smithy, Connect
-- Spec generators: OpenRPC, AsyncAPI, JSON Schema, Markdown docs
+- Spec generators: OpenAPI, OpenRPC, AsyncAPI, JSON Schema, Markdown docs
 - `#[derive(ServerlessError)]` with per-protocol status mapping
 - Blessed presets: `#[server]`, `#[rpc]`, `#[tool]`, `#[program]`
 - Mount points for nested subcommand/route composition
@@ -214,6 +215,11 @@ The generated code automatically wraps your stream in SSE format with proper eve
 - `#[param(positional)]`, `#[param(short)]`, `#[param(query)]`
 - `#[server(skip)]`, `#[server(hidden)]`, `#[cli(default)]`, `#[cli(hidden)]`, `#[cli(name)]`, `#[cli(display_with)]`
 - CLI output: Display default, `--json`, `--jq`, `--output-schema`
+- `--manual` whole-tree CLI reference surface (content × format orthogonality)
+- `#[derive(Config)]` config sources + generated `config` subcommand
+- `#[derive(HealthCheck)]` standalone health endpoint
+- Shell completions + man page generation for `#[cli]`
+- `#[app]` application metadata across all protocols
 - Iterator / SSE streaming return types
 - Extensive test coverage
 
