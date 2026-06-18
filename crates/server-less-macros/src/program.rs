@@ -154,6 +154,9 @@ pub(crate) fn expand_program(args: ProgramArgs, mut impl_block: ItemImpl) -> syn
         config_ty,
         config_cmd_name: args.config_cmd_name,
         description_prefix: args.description_prefix,
+        manual: None,
+        input_schema: None,
+        output_schema: None,
     };
     let cli_tokens = cli::expand_cli(cli_args, impl_block.clone())?;
 

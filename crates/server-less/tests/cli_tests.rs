@@ -1964,3 +1964,88 @@ fn test_manual_dispatch_runs_ok() {
     // in this build (a pre-existing jaq beta std-defs compile failure, unrelated
     // to --manual); see test_manual_to_json for the structured shape coverage.
 }
+
+// ─── meta-surface toggles ────────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct ToggleApp;
+
+#[cli(name = "toggle-app", manual = false, input_schema = false, output_schema = false)]
+impl ToggleApp {
+    /// A plain leaf
+    pub fn ping(&self) -> String {
+        "pong".to_string()
+    }
+}
+
+#[test]
+fn test_disabled_meta_flags_absent_from_command() {
+    let cmd = ToggleApp::cli_command();
+    let ids: Vec<String> = cmd.get_arguments().map(|a| a.get_id().to_string()).collect();
+    // The disabled meta-surfaces are gone …
+    assert!(!ids.contains(&"manual".to_string()), "ids: {ids:?}");
+    assert!(!ids.contains(&"input-schema".to_string()), "ids: {ids:?}");
+    assert!(!ids.contains(&"output-schema".to_string()), "ids: {ids:?}");
+    // … but the always-on format flags remain.
+    assert!(ids.contains(&"json".to_string()), "ids: {ids:?}");
+    assert!(ids.contains(&"params-json".to_string()), "ids: {ids:?}");
+}
+
+#[test]
+fn test_disabled_manual_does_not_panic_at_dispatch() {
+    // With `--manual` unregistered, dispatch must not call get_flag("manual")
+    // (which would panic). A normal subcommand invocation should just work.
+    let app = ToggleApp;
+    assert!(app.cli_run_with(["toggle-app", "ping"]).is_ok());
+}
+
+// A parameter literally named `manual` is legal once the manual surface is off.
+#[derive(Clone)]
+struct ManualParamApp;
+
+#[cli(name = "manual-param-app", manual = false)]
+impl ManualParamApp {
+    pub fn render(&self, manual: String) -> String {
+        manual
+    }
+}
+
+#[test]
+fn test_manual_param_legal_when_surface_disabled() {
+    let app = ManualParamApp;
+    // `--manual` now binds to the user's parameter, not the reference surface.
+    assert!(
+        app.cli_run_with(["manual-param-app", "render", "--manual", "hi"])
+            .is_ok()
+    );
+}
+
+// Per-command `#[cli(manual = false)]` hides one leaf from the aggregate while
+// keeping the command runnable.
+#[derive(Clone)]
+struct PartialManualApp;
+
+#[cli(name = "partial-manual-app")]
+impl PartialManualApp {
+    /// Public command
+    pub fn visible(&self) -> String {
+        "v".to_string()
+    }
+
+    /// Internal command — kept out of the manual
+    #[cli(manual = false)]
+    pub fn internal(&self) -> String {
+        "i".to_string()
+    }
+}
+
+#[test]
+fn test_per_command_manual_false_excludes_from_aggregate() {
+    let app = PartialManualApp;
+    let nodes = app.cli_manual_nodes("");
+    let paths: Vec<&str> = nodes.iter().map(|n| n.path.as_str()).collect();
+    assert!(paths.contains(&"visible"), "paths: {paths:?}");
+    assert!(!paths.contains(&"internal"), "paths: {paths:?}");
+    // The command itself is still dispatchable.
+    assert!(app.cli_run_with(["partial-manual-app", "internal"]).is_ok());
+}

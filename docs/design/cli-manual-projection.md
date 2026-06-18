@@ -253,10 +253,72 @@ mirrors dispatch, so a mount subtree is aggregated exactly where it is dispatche
   `cli_manual_to_text`; `--json`/`--jsonl`/`--jq` select the structured shape via
   `cli_manual_to_json` + the existing `cli_format_output`.
 
-Still **out of scope** (deliberate follow-up, unchanged): (c) the meta-surface
-disable toggles and (d) the reserved-name collision guard. With no collision guard
-yet, a user parameter literally named `manual` would collide with the injected
-global flag — noted, not fixed here.
+**Resolved in 0.5.0** (this section was previously deferred): (c) the meta-surface
+disable toggles and (d) the reserved-name collision guard. See
+[Meta-surface toggles](#meta-surface-toggles-resolved-05) and
+[Collision guard](#collision-guard-resolved-05) below.
+
+### Meta-surface toggles (resolved 0.5)
+
+**Decision.** The injected meta-surfaces are toggled with the same `x = false`
+shape as `#[server(openapi = false)]`, default-on:
+
+```rust
+// Global (impl-level #[cli]): drop a surface for the whole tree
+#[cli(name = "tool", manual = false)]              // no --manual flag anywhere
+#[cli(name = "tool", input_schema = false, output_schema = false)]  // no schema flags
+
+// Per-command (method-level #[cli]): keep the command, hide it from the manual
+impl MyService {
+    #[cli(manual = false)]
+    pub fn internal_method(&self) -> Report { ... } // excluded from the aggregate
+}
+```
+
+- **Global toggles** (`manual`, `input_schema`, `output_schema`) live on the
+  impl-level `#[cli(...)]`, default `true`. When `false`, the corresponding global
+  flag is **not registered** on the clap `Command`, and the leaf/dispatch arms that
+  consult it are elided — so `get_flag` is never called on an unregistered id (which
+  would panic at runtime). The attribute uses the Rust-idiomatic underscore spelling
+  (`input_schema`), mirroring the field, and maps to the kebab CLI flag
+  (`--input-schema`).
+- **Per-command** `#[cli(manual = false)]` excludes that one leaf (or mount) from
+  the aggregated `cli_manual_nodes` walk — "in the tree, out of the manual." This is
+  distinct from `#[cli(hidden)]`, which removes the command from help *and* the
+  manual. The schema flags stay global-only: there is no compelling per-leaf
+  schema-disable case, and `hidden` / per-leaf `manual = false` already cover the
+  "suppress one entry" need.
+
+*Rejected — a single `meta = false` master switch.* One flag disabling all three
+surfaces at once reads cleanly but couples independent decisions: a tool may want
+schemas without the whole-tree manual, or vice versa. Three independent toggles cost
+nothing extra and compose. *Rejected — per-leaf schema toggles.* Symmetric with
+`manual = false` but unmotivated; deferred until a real request, retire-don't-
+speculate.
+
+### Collision guard (resolved 0.5)
+
+**Decision: compile-error-with-span.** A regular parameter whose kebab flag name
+collides with a *currently-injected* global flag is a hard compile error, spanned to
+the offending parameter, matching the repo's helpful-errors-with-spans value.
+
+- **Reserved names.** Always reserved: `json`, `jsonl`, `jq`, `params-json`.
+  Conditionally reserved (only while their toggle is enabled): `input-schema`,
+  `output-schema`, `manual`. Disabling a meta-surface frees its name — a tool with a
+  legitimate `--manual` parameter sets `#[cli(manual = false)]` and the guard stops
+  reserving `manual`.
+- **What is checked.** Each leaf and slug-mount regular parameter's kebab flag name,
+  at arg-registration time. User-declared `global` flags are out of scope — declaring
+  one is an explicit opt-in to shadowing.
+- **The diagnostic** names the colliding flag and points at the fix: rename via
+  `#[param(rename = "...")]` / `wire_name`, or disable the meta-surface that reserves
+  the name.
+
+*Rejected — warning.* clap panics at runtime on duplicate arg ids; a warning lets a
+broken binary ship. The whole point of compile-time projection is to turn that
+runtime panic into a spanned error. *Rejected — auto-rename.* Silently renaming a
+user's parameter flag (`--manual` → `--manual-1`) violates "no hidden magic"; the
+user must see and resolve the conflict.
 
 ## Alternatives Considered
 
@@ -327,18 +389,14 @@ decided by implementation:
   human-readable / markdown, with structure one flag away (`--manual --json`).
   Recorded as a lean, not a decision.
 
-- **(c) Exact toggle / disable syntax** for the meta-surfaces. The doc fixes the
-  *principle* (default-on, `= false`, global and optionally per-command,
-  matching `#[server(openapi = false)]`); the precise attribute spelling is
-  deferred.
+- **(c) Exact toggle / disable syntax** — **resolved in 0.5.0.** See
+  [Meta-surface toggles](#meta-surface-toggles-resolved-05): `manual = false` /
+  `input_schema = false` / `output_schema = false` (global, default-on) plus
+  per-command `#[cli(manual = false)]`.
 
-- **(d) The pre-existing no-collision-guard gap.** There is currently no
-  reserved-name guard for any injected flag
-  (schema-flag-wiring.md). Each new global flag the projection adds — `--manual`
-  included — makes this more load-bearing: a user method or parameter named
-  `manual` would silently collide. Reconciling the manual flag with a general
-  reserved-name strategy is left open and grows in importance as the global-flag
-  set grows.
+- **(d) The reserved-name collision guard** — **resolved in 0.5.0.** See
+  [Collision guard](#collision-guard-resolved-05): compile-error-with-span on a
+  parameter flag colliding with a currently-injected global flag.
 
 ## See Also
 

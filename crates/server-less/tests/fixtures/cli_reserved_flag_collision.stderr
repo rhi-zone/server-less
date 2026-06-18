@@ -1,0 +1,7 @@
+error: parameter `manual` collides with the injected `--manual` global flag — the --manual reference surface (disable with #[cli(manual = false)])
+
+       Each #[cli] command receives built-in global flags; a parameter whose flag name matches one would make clap panic at runtime. Rename the parameter (e.g. with `#[param(rename = "...")]`), or disable the conflicting meta-surface.
+ --> tests/fixtures/cli_reserved_flag_collision.rs:9:22
+  |
+9 |     fn render(&self, manual: String) {
+  |                      ^^^^^^

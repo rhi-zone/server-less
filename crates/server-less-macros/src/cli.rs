@@ -137,6 +137,26 @@ pub(crate) struct CliArgs {
     /// Default: `true` when both name and description are set. Set to `false` to use
     /// the description verbatim.
     pub description_prefix: Option<bool>,
+    /// Inject the `--manual` whole-subtree reference flag. Default `true`.
+    /// `#[cli(manual = false)]` drops the flag globally; a colliding `manual`
+    /// parameter then becomes legal.
+    pub manual: Option<bool>,
+    /// Inject the per-leaf `--input-schema` flag. Default `true`.
+    pub input_schema: Option<bool>,
+    /// Inject the per-leaf `--output-schema` flag. Default `true`.
+    pub output_schema: Option<bool>,
+}
+
+/// Which injected meta-surface flags are enabled for a `#[cli]` projection.
+///
+/// Threaded into leaf match-arm generation so the arms only consult flags that
+/// were actually registered on the clap `Command` — calling `get_flag` on an
+/// unregistered id panics at runtime.
+#[derive(Clone, Copy)]
+pub(crate) struct MetaFlags {
+    pub manual: bool,
+    pub input_schema: bool,
+    pub output_schema: bool,
 }
 
 impl Parse for CliArgs {
@@ -217,6 +237,18 @@ impl Parse for CliArgs {
                     let lit: syn::LitBool = input.parse()?;
                     args.description_prefix = Some(lit.value());
                 }
+                "manual" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.manual = Some(lit.value());
+                }
+                "input_schema" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.input_schema = Some(lit.value());
+                }
+                "output_schema" => {
+                    let lit: syn::LitBool = input.parse()?;
+                    args.output_schema = Some(lit.value());
+                }
                 other => {
                     if other == "about" {
                         return Err(syn::Error::new(
@@ -237,6 +269,7 @@ impl Parse for CliArgs {
                     const VALID: &[&str] = &[
                         "name", "version", "description", "homepage", "global",
                         "defaults", "no_sync", "no_async", "description_prefix",
+                        "manual", "input_schema", "output_schema",
                     ];
                     let suggestion = crate::did_you_mean(other, VALID)
                         .map(|s| format!(" — did you mean `{s}`?"))
@@ -246,7 +279,7 @@ impl Parse for CliArgs {
                         format!(
                             "unknown argument `{other}`{suggestion}\n\
                              \n\
-                             Valid arguments: name, version, description, homepage, global, defaults, no_sync, no_async, description_prefix\n\
+                             Valid arguments: name, version, description, homepage, global, defaults, no_sync, no_async, description_prefix, manual, input_schema, output_schema\n\
                              \n\
                              Example: #[cli(name = \"my-app\", description = \"My CLI tool\")]\n\
                              Bare flags: #[cli(no_sync)] or #[cli(no_async)]\n\
@@ -316,6 +349,89 @@ fn has_cli_default(method: &MethodInfo) -> bool {
         }
     }
     false
+}
+
+/// Check if a method has `#[cli(manual = false)]` — excludes this leaf/mount from
+/// the aggregated `--manual` reference document while leaving the command itself
+/// intact. Distinct from `#[cli(hidden)]`, which also removes it from help.
+fn has_cli_manual_false(method: &MethodInfo) -> bool {
+    for attr in &method.method.attrs {
+        if attr.path().is_ident("cli") {
+            let mut disabled = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("manual") && meta.input.peek(syn::Token![=]) {
+                    let value = meta.value()?;
+                    let lit: syn::LitBool = value.parse()?;
+                    if !lit.value() {
+                        disabled = true;
+                    }
+                } else if meta.input.peek(syn::Token![=]) {
+                    let _: syn::Expr = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
+            if disabled {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Compile error if any leaf/slug parameter's kebab flag name collides with a
+/// **currently-injected** global meta-surface flag. Disabling a meta-surface frees
+/// its name. See docs/design/cli-manual-projection.md, "Collision guard".
+fn check_reserved_flag_collisions(
+    partitioned: &server_less_parse::PartitionedMethods,
+    meta: MetaFlags,
+) -> syn::Result<()> {
+    // (flag-name, human description of what reserves it)
+    let mut reserved: Vec<(&str, &str)> = vec![
+        ("json", "the --json output format"),
+        ("jsonl", "the --jsonl output format"),
+        ("jq", "the --jq output filter"),
+        ("params-json", "the --params-json bulk input flag"),
+    ];
+    if meta.manual {
+        reserved.push((
+            "manual",
+            "the --manual reference surface (disable with #[cli(manual = false)])",
+        ));
+    }
+    if meta.input_schema {
+        reserved.push((
+            "input-schema",
+            "the --input-schema surface (disable with #[cli(input_schema = false)])",
+        ));
+    }
+    if meta.output_schema {
+        reserved.push((
+            "output-schema",
+            "the --output-schema surface (disable with #[cli(output_schema = false)])",
+        ));
+    }
+
+    for m in partitioned.leaf.iter().chain(partitioned.slug_mounts.iter()) {
+        let (_, regular) = partition_context_params(&m.params)?;
+        for p in &regular {
+            let kebab = p.name_str().to_kebab_case();
+            if let Some((flag, what)) = reserved.iter().find(|(name, _)| *name == kebab) {
+                return Err(syn::Error::new(
+                    p.name.span(),
+                    format!(
+                        "parameter `{param}` collides with the injected `--{flag}` global flag — {what}\n\
+                         \n\
+                         Each #[cli] command receives built-in global flags; a parameter whose \
+                         flag name matches one would make clap panic at runtime. Rename the \
+                         parameter (e.g. with `#[param(rename = \"...\")]`), or disable the \
+                         conflicting meta-surface.",
+                        param = p.name_str(),
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Check if a method has `#[cli(hidden)]` or `#[server(hidden)]`.
@@ -481,10 +597,23 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let no_sync = args.no_sync;
     let no_async = args.no_async;
 
+    // Injected meta-surface flags (default-on). When a toggle is `false` the flag
+    // is not registered and the arms that consult it are elided.
+    let meta = MetaFlags {
+        manual: args.manual.unwrap_or(true),
+        input_schema: args.input_schema.unwrap_or(true),
+        output_schema: args.output_schema.unwrap_or(true),
+    };
+
     for m in &methods {
         validate_server_attrs(m)?;
     }
     let partitioned = partition_methods(&methods, has_cli_skip);
+
+    // Reserved-name collision guard: a regular parameter whose kebab flag name
+    // collides with a *currently-injected* global flag is a compile error spanned
+    // to the parameter. Disabling a meta-surface frees its name.
+    check_reserved_flag_collisions(&partitioned, meta)?;
 
     // Resolve method groups — consider all methods (leaf + mounts) for group discovery
     let group_registry = extract_groups(&impl_block)?;
@@ -684,6 +813,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             &defaults_fn_ident,
             true,
             false,
+            meta,
         )?)
     } else {
         None
@@ -695,6 +825,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             &defaults_fn_ident,
             true,
             true,
+            meta,
         )?)
     } else {
         None
@@ -705,7 +836,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, false)?;
+            let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, false, meta)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -717,7 +848,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .leaf
         .iter()
         .map(|m| {
-            let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, true)?;
+            let arm = generate_leaf_match_arm(m, &global_flags, &defaults_fn_ident, false, true, meta)?;
             let cfg_attrs = &m.cfg_attrs;
             Ok(quote! {
                 #(#cfg_attrs)*
@@ -758,7 +889,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     let manual_node_builders: Vec<TokenStream2> = {
         let mut builders = Vec::new();
         for m in &partitioned.leaf {
-            if has_cli_hidden(m) {
+            if has_cli_hidden(m) || has_cli_manual_false(m) {
                 continue;
             }
             let node = generate_leaf_manual_node(m)?;
@@ -769,7 +900,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             });
         }
         for m in &partitioned.static_mounts {
-            if has_cli_hidden(m) {
+            if has_cli_hidden(m) || has_cli_manual_false(m) {
                 continue;
             }
             let node = generate_static_mount_manual_node(m)?;
@@ -780,7 +911,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             });
         }
         for m in &partitioned.slug_mounts {
-            if has_cli_hidden(m) {
+            if has_cli_hidden(m) || has_cli_manual_false(m) {
                 continue;
             }
             let node = generate_slug_mount_manual_node(m)?;
@@ -888,7 +1019,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     // its own arm, a mount recurses into the child's dispatch. This runs *before*
     // any `#[cli(default)]` None arm so `tool --manual` means "manual of the tree",
     // not "run the default action".
-    let manual_dispatch_intercept = {
+    let manual_dispatch_intercept = if meta.manual {
         let emit = manual_emit_tokens(&syn::Ident::new(
             "matches",
             proc_macro2::Span::call_site(),
@@ -900,9 +1031,40 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 return Ok(());
             }
         }
+    } else {
+        quote! {}
     };
 
-    // Built-in output formatting flags (always present)
+    // Built-in output formatting flags. `--json`/`--jsonl`/`--jq`/`--params-json`
+    // are always present; the meta-surface flags are gated by their toggle so a
+    // disabled surface neither appears in `--help` nor is queried at dispatch.
+    let input_schema_flag = meta.input_schema.then(|| quote! {
+        .arg(
+            ::server_less::clap::Arg::new("input-schema")
+                .long("input-schema")
+                .action(::server_less::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Print JSON Schema of the subcommand's input parameters and exit")
+        )
+    });
+    let output_schema_flag = meta.output_schema.then(|| quote! {
+        .arg(
+            ::server_less::clap::Arg::new("output-schema")
+                .long("output-schema")
+                .action(::server_less::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Print JSON Schema of the subcommand's return type and exit")
+        )
+    });
+    let manual_flag = meta.manual.then(|| quote! {
+        .arg(
+            ::server_less::clap::Arg::new("manual")
+                .long("manual")
+                .action(::server_less::clap::ArgAction::SetTrue)
+                .global(true)
+                .help("Emit the reference manual for the command subtree rooted here and exit")
+        )
+    });
     let format_flags = quote! {
         .arg(
             ::server_less::clap::Arg::new("jsonl")
@@ -924,27 +1086,9 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 .global(true)
                 .help("Filter output through jq expression")
         )
-        .arg(
-            ::server_less::clap::Arg::new("input-schema")
-                .long("input-schema")
-                .action(::server_less::clap::ArgAction::SetTrue)
-                .global(true)
-                .help("Print JSON Schema of the subcommand's input parameters and exit")
-        )
-        .arg(
-            ::server_less::clap::Arg::new("output-schema")
-                .long("output-schema")
-                .action(::server_less::clap::ArgAction::SetTrue)
-                .global(true)
-                .help("Print JSON Schema of the subcommand's return type and exit")
-        )
-        .arg(
-            ::server_less::clap::Arg::new("manual")
-                .long("manual")
-                .action(::server_less::clap::ArgAction::SetTrue)
-                .global(true)
-                .help("Emit the reference manual for the command subtree rooted here and exit")
-        )
+        #input_schema_flag
+        #output_schema_flag
+        #manual_flag
         .arg(
             ::server_less::clap::Arg::new("params-json")
                 .long("params-json")
@@ -1433,6 +1577,9 @@ fn generate_leaf_match_arm(
     none_arm: bool,
     // When true: generates async dispatch (`.await` instead of `block_on`).
     for_async: bool,
+    // Which injected meta-surface flags are enabled — gates the schema/manual arms
+    // so `get_flag` is never called on an unregistered id.
+    meta: MetaFlags,
 ) -> syn::Result<TokenStream2> {
     let subcommand_name = cli_name(method);
     let method_name = &method.name;
@@ -1836,8 +1983,9 @@ fn generate_leaf_match_arm(
         "sub_matches",
         proc_macro2::Span::call_site(),
     ));
-
-    let arm_body = quote! {
+    // Each meta-surface arm is gated on its toggle: a disabled flag is never
+    // registered, and `get_flag` on an unregistered id panics at runtime.
+    let manual_arm = meta.manual.then(|| quote! {
         // --manual: emit this command's reference entry and exit (before running).
         if sub_matches.get_flag("manual") {
             let mut __nodes: Vec<::server_less::CliManualNode> = Vec::new();
@@ -1846,13 +1994,23 @@ fn generate_leaf_match_arm(
             #manual_emit
             return Ok(());
         }
-        // Schema flags: print and exit without running the method
+    });
+    let input_schema_arm = meta.input_schema.then(|| quote! {
         if sub_matches.get_flag("input-schema") {
             #input_schema
         }
+    });
+    let output_schema_arm = meta.output_schema.then(|| quote! {
         if sub_matches.get_flag("output-schema") {
             #output_schema
         }
+    });
+
+    let arm_body = quote! {
+        #manual_arm
+        // Schema flags: print and exit without running the method
+        #input_schema_arm
+        #output_schema_arm
 
         // --params-json: extract all params from JSON blob
         if let Some(__params_json_str) = sub_matches.get_one::<String>("params-json") {
