@@ -106,6 +106,54 @@ than JSON ([CLI Output Formatting](cli-output-formatting.md)). Structure is then
 one flag away (`--manual --json`). This keeps the zero-argument case friendly
 while leaving the machine path trivially reachable.
 
+### --manual works at every node, not just the root
+
+`--manual` is valid at **every position in the command tree** — root, internal
+mount point, and leaf alike:
+
+```bash
+normalize --manual                   # whole tree
+normalize edit --manual              # the `edit` subtree only
+normalize edit history list --manual # that single leaf's entry
+```
+
+This is not an overload. `--manual` has **one consistent meaning** at every
+position: "render the reference document for the subtree rooted here." The root
+is simply the largest subtree; a leaf is a subtree of one. What changes by
+position is only the **extent** — it is a scope parameter, not a
+position-dependent meaning.
+
+This must not be read as reversing the rejection of position-overloading
+`--output-schema` (see Alternatives Considered). That rejection was about a flag
+with *two different operations* by position: "this command's return-type schema"
+at a leaf versus "aggregate of everything" at the root, which collapsed to
+ambiguous at a `#[cli(default)]` root where both readings were simultaneously
+valid. `--manual` has *one* operation ("manual of the subtree here") everywhere;
+no node has two valid readings. The distinction is:
+
+- **Scope parameter:** same operation, varying extent — valid everywhere, no
+  ambiguity. This is `--manual`.
+- **Meaning overload:** different operations by position — ambiguous at nodes
+  where both readings apply. This is what was rejected for `--output-schema`.
+
+The natural mental model: clap's `--help` already works at every node. `--manual`
+is the whole-subtree version of the same idea, emitted as one document rather
+than one leaf's usage. "Works on subcommands" is therefore the expected behavior,
+not a special case.
+
+Per-subtree scoping is also **genuinely useful** for large trees. normalize
+exposes ~150 commands: `normalize edit --manual` narrows the document to the
+`edit` group without any additional filtering — built-in grep-narrowing at the
+CLI level, before `--jq` is even involved.
+
+**The mechanism gives it for free.** `--manual` is a global flag (like
+`--output-schema` / `--input-schema`), so clap already propagates it to every
+subcommand parser in the tree. Making `--manual` work at every node is the
+*default* of that propagation; restricting it to root-only would require
+explicit extra suppression and would be inconsistent with how the other global
+meta-surface flags behave. There is no extra implementation cost to the
+everywhere behavior — the cost flows the other way.
+
 ### Toggling the meta-surfaces
 
 The manual flag and the existing `--input-schema` / `--output-schema` flags are
@@ -199,10 +247,15 @@ is nothing positional to special-case in the disable path.
 These are deliberately left unresolved — recorded so they are not silently
 decided by implementation:
 
-- **(a) Flag name: `--manual` vs `--manpage`.** `--manual` is broader and makes
-  no promise about format or length. `--manpage` evokes `man(1)` — familiar and
-  evocative — but connotes a *single page*, which sits awkwardly against a
-  ~150-command tree and against the `--json` aggregate shape. No pick made.
+- **(a) Flag name: `--manual` vs `--manpage` vs `--help-manual`.** `--manual`
+  is broader and makes no promise about format or length. `--manpage` evokes
+  `man(1)` — familiar and evocative — but connotes a *single page*, which sits
+  awkwardly against a ~150-command tree and against the `--json` aggregate shape.
+  A third candidate, `--help-manual`, sorts adjacent to `--help` in `--help`
+  output (discoverability) and signals the connection to the help system; but
+  `--manual` reads more naturally at depth (`normalize edit --manual` vs
+  `normalize edit --help-manual`). The discoverability vs. call-site readability
+  tradeoff is unresolved. No pick made.
 
 - **(b) Default output format** of a bare `--manual` (no format flag). Lean:
   human-readable / markdown, with structure one flag away (`--manual --json`).
