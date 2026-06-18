@@ -57,7 +57,14 @@ use std::path::PathBuf;
 ///
 /// With this ordering, the local config file *supplements* the global one
 /// (missing local fields fall back to global values) while env vars always win.
+///
+/// # Stability
+///
+/// This enum is `#[non_exhaustive]`: new source kinds may be added in minor
+/// releases.  Match on it with a trailing wildcard arm (`_ => ...`) in
+/// downstream code so that adding a variant is not a breaking change.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ConfigSource {
     /// Apply compile-time defaults declared with `#[param(default = ...)]`.
     ///
@@ -108,9 +115,12 @@ pub enum ConfigSource {
     /// This variant is for internal use by `#[derive(Config)]`-generated code
     /// when loading `#[param(nested)]` sub-structs.  It is **not** part of the
     /// public API and should not be constructed directly by callers.
+    ///
+    /// The payload is the opaque [`NestedTomlTable`] newtype so that `toml`'s
+    /// types do not leak into server-less's public API surface.
     #[doc(hidden)]
     #[cfg(feature = "config")]
-    TomlTable(toml::Value),
+    TomlTable(NestedTomlTable),
 
     /// Like [`TomlTable`](ConfigSource::TomlTable) but with merge semantics
     /// (only fills in fields still unset by prior sources).
@@ -119,11 +129,71 @@ pub enum ConfigSource {
     /// sources applied to `#[param(nested)]` fields.
     #[doc(hidden)]
     #[cfg(feature = "config")]
-    MergeTomlTable(toml::Value),
+    MergeTomlTable(NestedTomlTable),
+}
+
+/// Opaque wrapper around an already-parsed TOML sub-table.
+///
+/// This newtype exists purely to keep `toml`'s types out of server-less's
+/// public API: the [`ConfigSource::TomlTable`] / [`ConfigSource::MergeTomlTable`]
+/// variants carry a `NestedTomlTable` rather than a `toml::Value`, so bumping
+/// `toml`'s major version is not a breaking change for downstream crates.
+///
+/// It is constructed and consumed only by `#[derive(Config)]`-generated code
+/// via the inherent methods below; the inner `toml::Value` is private.
+#[doc(hidden)]
+#[cfg(feature = "config")]
+#[derive(Debug, Clone)]
+pub struct NestedTomlTable(toml::Value);
+
+#[cfg(feature = "config")]
+impl NestedTomlTable {
+    /// Wrap an already-parsed [`toml::Value`].
+    ///
+    /// Used by `load_toml_file_raw` and by generated code that extracts a
+    /// sub-table from a parent table.
+    pub fn from_value(value: toml::Value) -> Self {
+        NestedTomlTable(value)
+    }
+
+    /// Look up a sub-table by key, returning a new `NestedTomlTable`.
+    ///
+    /// Returns `None` if `self` is not a table or has no entry for `key`.
+    pub fn get(&self, key: &str) -> Option<NestedTomlTable> {
+        self.0.get(key).cloned().map(NestedTomlTable)
+    }
+
+    /// Deserialize the wrapped table into a concrete type `T`.
+    ///
+    /// The error type is `toml`'s deserialization error; generated code maps it
+    /// into [`ConfigError::ParseError`].
+    pub fn deserialize<T: serde::de::DeserializeOwned>(
+        &self,
+    ) -> Result<T, toml::de::Error> {
+        self.0.clone().try_into()
+    }
+
+    /// Flatten the wrapped table into a dot-separated `HashMap<String, String>`.
+    ///
+    /// Mirrors the flattening logic of [`load_toml_file`] while keeping the
+    /// inner `toml::Value` encapsulated.
+    pub fn flatten_into(
+        &self,
+        out: &mut std::collections::HashMap<String, String>,
+    ) {
+        flatten_toml("", &self.0, out);
+    }
 }
 
 /// Error returned by [`ConfigLoad::load`].
+///
+/// # Stability
+///
+/// This enum is `#[non_exhaustive]`: new error variants may be added in minor
+/// releases.  Match on it with a trailing wildcard arm (`_ => ...`) in
+/// downstream code so that adding a variant is not a breaking change.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ConfigError {
     /// A required field has no value from any source.
     MissingField { field: &'static str },
@@ -242,16 +312,18 @@ pub trait ConfigLoad: Sized {
     fn field_meta() -> &'static [ConfigFieldMeta];
 }
 
-/// Read a TOML file and return the parsed [`toml::Value`] (without flattening).
+/// Read a TOML file and return the parsed table wrapped in [`NestedTomlTable`]
+/// (without flattening).
 ///
 /// Used internally by `#[derive(Config)]`-generated code to extract sub-tables
-/// for `#[param(nested)]` fields.
+/// for `#[param(nested)]` fields.  The result is opaque so `toml`'s types do
+/// not leak into the public API.
 ///
 /// Returns `Ok(None)` if the file does not exist (not an error).
 #[cfg(feature = "config")]
 pub fn load_toml_file_raw(
     path: &std::path::Path,
-) -> Result<Option<toml::Value>, ConfigError> {
+) -> Result<Option<NestedTomlTable>, ConfigError> {
     use std::io::ErrorKind;
 
     let contents = match std::fs::read_to_string(path) {
@@ -267,7 +339,7 @@ pub fn load_toml_file_raw(
         }
     })?;
 
-    Ok(Some(value))
+    Ok(Some(NestedTomlTable::from_value(value)))
 }
 
 /// Read a TOML file and return its top-level keys as a flat string map.
@@ -298,25 +370,6 @@ pub fn load_toml_file(
     let mut map = std::collections::HashMap::new();
     flatten_toml("", &value, &mut map);
     Ok(Some(map))
-}
-
-/// Flatten a [`toml::Value`] into a `HashMap<String, String>` using dot-separated keys.
-///
-/// This is the same flattening logic as [`load_toml_file`], exposed so that
-/// `#[derive(Config)]`-generated code can flatten pre-extracted sub-tables
-/// (from [`ConfigSource::TomlTable`] / [`ConfigSource::MergeTomlTable`]) for
-/// leaf-field loading.
-///
-/// This function is part of the macro contract and is not intended for direct
-/// use by callers.
-#[cfg(feature = "config")]
-#[doc(hidden)]
-pub fn flatten_toml_value(
-    prefix: &str,
-    value: &toml::Value,
-    out: &mut std::collections::HashMap<String, String>,
-) {
-    flatten_toml(prefix, value, out);
 }
 
 #[cfg(feature = "config")]

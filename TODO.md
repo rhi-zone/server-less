@@ -302,20 +302,6 @@ These need more design work before implementation:
 
 > Removed as out-of-scope: Code-first→schema-first tooling, auto migration gen, contract testing (separate products), WASM/no_std (different target universe), performance benchmarks (pre-mature at this stage).
 
-### Deferred 0.5.0 API-gate items (pre-existing surface; defer with care)
-
-From the 0.5.0 public-API audit — real but carry config-subsystem blast radius, so
-not rushed into the release:
-
-- [ ] **`ConfigSource::TomlTable` / `MergeTomlTable` leak `toml::Value`.** `#[doc(hidden)]`
-  but `pub`, so the crate is semver-pinned to `toml`'s public `Value`. Fix: wrap the
-  nested-table payload in an opaque core-owned newtype. Needs generated config-loader
-  changes (`config_derive.rs`).
-- [ ] **`#[non_exhaustive]` on `ConfigSource` / `ConfigError`.** Both are matched
-  exhaustively by generated config code (`config_derive.rs`), so fencing them requires
-  adding wildcard arms to the generated matches first. (`ErrorCode` and `OpenApiError`
-  were fenced in 0.5.0 — they have no cross-crate exhaustive match.)
-
 ### Deferred polish diagnostics (need a design pass)
 
 Pulled out of the 0.5.0 polish set: both are ambiguous to implement soundly in a

@@ -274,7 +274,7 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                                 if let ::std::option::Option::Some(root_val) =
                                     ::server_less::config::load_toml_file_raw(path)?
                                 {
-                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
                                         __nested_sources.push(::server_less::config::ConfigSource::TomlTable(sub));
                                     }
                                 }
@@ -283,7 +283,7 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                                 if let ::std::option::Option::Some(root_val) =
                                     ::server_less::config::load_toml_file_raw(path)?
                                 {
-                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
                                         __nested_sources.push(::server_less::config::ConfigSource::MergeTomlTable(sub));
                                     }
                                 }
@@ -293,15 +293,18 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                                 __nested_sources.push(::server_less::config::ConfigSource::Env { prefix: child_prefix });
                             }
                             ::server_less::config::ConfigSource::TomlTable(root_val) => {
-                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
                                     __nested_sources.push(::server_less::config::ConfigSource::TomlTable(sub));
                                 }
                             }
                             ::server_less::config::ConfigSource::MergeTomlTable(root_val) => {
-                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
+                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
                                     __nested_sources.push(::server_less::config::ConfigSource::MergeTomlTable(sub));
                                 }
                             }
+                            // New ConfigSource variants (ConfigSource is #[non_exhaustive]):
+                            // ignore — unknown sources contribute nothing to a nested sub-struct.
+                            _ => {}
                         }
                     }
                     <#ty as ::server_less::config::ConfigLoad>::load(&__nested_sources)
@@ -419,8 +422,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                                 if let ::std::option::Option::Some(root_val) =
                                     ::server_less::config::load_toml_file_raw(path)?
                                 {
-                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
-                                        let deserialized: #ty = sub.try_into().map_err(|e: ::server_less::__toml::de::Error| {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
+                                        let deserialized: #ty = sub.deserialize().map_err(|e: ::server_less::__toml::de::Error| {
                                             ::server_less::config::ConfigError::ParseError {
                                                 field: #name_str,
                                                 source: "TOML file".to_string(),
@@ -436,8 +439,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                                     if let ::std::option::Option::Some(root_val) =
                                         ::server_less::config::load_toml_file_raw(path)?
                                     {
-                                        if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
-                                            let deserialized: #ty = sub.try_into().map_err(|e: ::server_less::__toml::de::Error| {
+                                        if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
+                                            let deserialized: #ty = sub.deserialize().map_err(|e: ::server_less::__toml::de::Error| {
                                                 ::server_less::config::ConfigError::ParseError {
                                                     field: #name_str,
                                                     source: "TOML file".to_string(),
@@ -450,8 +453,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                                 }
                             }
                             ::server_less::config::ConfigSource::TomlTable(root_val) => {
-                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
-                                    let deserialized: #ty = sub.try_into().map_err(|e: ::server_less::__toml::de::Error| {
+                                if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
+                                    let deserialized: #ty = sub.deserialize().map_err(|e: ::server_less::__toml::de::Error| {
                                         ::server_less::config::ConfigError::ParseError {
                                             field: #name_str,
                                             source: "TOML table".to_string(),
@@ -463,8 +466,8 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                             }
                             ::server_less::config::ConfigSource::MergeTomlTable(root_val) => {
                                 if __serde_val.is_none() {
-                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key).cloned() {
-                                        let deserialized: #ty = sub.try_into().map_err(|e: ::server_less::__toml::de::Error| {
+                                    if let ::std::option::Option::Some(sub) = root_val.get(#toml_key) {
+                                        let deserialized: #ty = sub.deserialize().map_err(|e: ::server_less::__toml::de::Error| {
                                             ::server_less::config::ConfigError::ParseError {
                                                 field: #name_str,
                                                 source: "TOML table".to_string(),
@@ -475,6 +478,9 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                                     }
                                 }
                             }
+                            // New ConfigSource variants (ConfigSource is #[non_exhaustive]):
+                            // ignore — unknown sources cannot populate a serde-nested subtree.
+                            _ => {}
                         }
                     }
 
@@ -534,14 +540,17 @@ fn generate_load(fields: &[FieldMeta], struct_name: &syn::Ident) -> syn::Result<
                 // leaf fields (used when this struct is itself a nested child).
                 ::server_less::config::ConfigSource::TomlTable(table_val) => {
                     let mut toml_map = ::std::collections::HashMap::<String, String>::new();
-                    ::server_less::config::flatten_toml_value("", table_val, &mut toml_map);
+                    table_val.flatten_into(&mut toml_map);
                     #(#file_branches)*
                 }
                 ::server_less::config::ConfigSource::MergeTomlTable(table_val) => {
                     let mut toml_map = ::std::collections::HashMap::<String, String>::new();
-                    ::server_less::config::flatten_toml_value("", table_val, &mut toml_map);
+                    table_val.flatten_into(&mut toml_map);
                     #(#merge_file_branches)*
                 }
+                // New ConfigSource variants (ConfigSource is #[non_exhaustive]):
+                // ignore — leaf fields take no values from unknown sources.
+                _ => {}
             }
         }
 
