@@ -42,6 +42,14 @@ optional = true
 version = "7"
 optional = true
 
+[dependencies.clap_complete]
+version = "4"
+optional = true
+
+[dependencies.clap_mangen]
+version = "0.2"
+optional = true
+
 [features]
 default = ["full"]
 
@@ -72,12 +80,18 @@ markdown = ["server-less-macros/markdown"]
 # Config management (toml file loading, env vars, #[derive(Config)])
 config = ["server-less-macros/config", "server-less-core/config"]
 
+# Standalone health-check endpoint (#[derive(HealthCheck)]); implies http (axum)
+health = ["server-less-macros/health", "http"]
+
+# Shell completions + man page for #[cli] (clap_complete / clap_mangen); implies cli
+completions = ["server-less-macros/completions", "cli", "dep:clap_complete", "dep:clap_mangen"]
+
 # All features
 full = [
     "mcp", "http", "openapi", "cli", "ws", "graphql", "jsonrpc",
     "grpc", "capnp", "thrift", "connect", "smithy",
     "openrpc", "asyncapi", "jsonschema",
-    "markdown", "config"
+    "markdown", "config", "health", "completions"
 ]
 
 [dev-dependencies]

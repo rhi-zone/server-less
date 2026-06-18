@@ -350,6 +350,10 @@ pub use server_less_macros::app;
 #[doc(hidden)]
 pub use server_less_macros::__app_meta;
 
+// Standalone health-check derive
+#[cfg(feature = "health")]
+pub use server_less_macros::HealthCheck;
+
 // Config derive macro
 #[cfg(feature = "config")]
 pub use server_less_macros::Config;
@@ -360,6 +364,14 @@ pub use server_less_core::config::{ConfigLoad, ConfigError, ConfigFieldMeta, Con
 #[cfg(feature = "cli")]
 #[doc(hidden)]
 pub use clap;
+
+// Shell completions / man page generators for the #[cli] projection
+#[cfg(feature = "completions")]
+#[doc(hidden)]
+pub use clap_complete;
+#[cfg(feature = "completions")]
+#[doc(hidden)]
+pub use clap_mangen;
 
 #[cfg(any(feature = "cli", feature = "http"))]
 #[doc(hidden)]

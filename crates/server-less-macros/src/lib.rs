@@ -182,6 +182,8 @@ mod graphql_enum;
 mod graphql_input;
 #[cfg(feature = "grpc")]
 mod grpc;
+#[cfg(feature = "health")]
+mod health;
 #[cfg(feature = "http")]
 mod http;
 #[cfg(feature = "jsonrpc")]
@@ -1841,6 +1843,42 @@ pub fn serverless_error(input: TokenStream) -> TokenStream {
     match error::expand_serverless_error(input) {
         Ok(tokens) => {
             debug_emit("ServerlessError", &name, &tokens);
+            tokens.into()
+        }
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Derive a standalone health-check endpoint.
+///
+/// Generates a `health_router()` method returning an `axum::Router` with a single
+/// `GET` route (default `/health`) that responds with a fixed status string
+/// (default `"ok"`). The `#[server]` preset already mounts a `/health` route; use
+/// this derive to add one to a hand-rolled router.
+///
+/// # Attributes
+///
+/// - `#[health(path = "/healthz")]` — override the route path (default `/health`)
+/// - `#[health(status = "alive")]` — override the response body (default `"ok"`)
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(HealthCheck)]
+/// #[health(path = "/healthz", status = "alive")]
+/// struct Probe;
+///
+/// let app = Probe.health_router();
+/// ```
+#[cfg(feature = "health")]
+#[proc_macro_derive(HealthCheck, attributes(health))]
+pub fn health_check(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident.to_string();
+
+    match health::expand_health_check(input) {
+        Ok(tokens) => {
+            debug_emit("HealthCheck", &name, &tokens);
             tokens.into()
         }
         Err(err) => err.to_compile_error().into(),

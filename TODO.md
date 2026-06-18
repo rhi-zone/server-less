@@ -302,6 +302,20 @@ These need more design work before implementation:
 
 > Removed as out-of-scope: Code-first→schema-first tooling, auto migration gen, contract testing (separate products), WASM/no_std (different target universe), performance benchmarks (pre-mature at this stage).
 
+### Deferred polish diagnostics (need a design pass)
+
+Pulled out of the 0.5.0 polish set: both are ambiguous to implement soundly in a
+proc-macro context (they can't reliably inspect a method body's runtime behavior),
+so they need a design decision before implementation.
+
+- [ ] **"add async to use `.await`" hint diagnostic.** rustc already errors on
+  `.await` in a non-`async` fn; the open question is what *additional* value a
+  server-less diagnostic adds and where it could hook without duplicating rustc.
+- [ ] **Unused-parameter warning.** Detecting an unused parameter from token
+  inspection is heuristic and false-positive-prone (a param used only inside a
+  macro invocation, `cfg`-gated branch, etc. reads as unused). Needs a precise,
+  low-false-positive definition before it's worth shipping.
+
 ---
 
 ## Completed
@@ -315,3 +329,10 @@ Moved to [CHANGELOG.md](./CHANGELOG.md):
 - ✅ SSE streaming for HTTP
 - ✅ Compile-time path validation
 - ✅ Duplicate route detection
+
+- [ ] Re-run ecosystem CLAUDE.md propagation (relay/blackboard discipline added upstream)
+
+- [ ] install committed orchestrator hooks (was global, now per-repo)
+
+- [ ] run unified harness sync (CLAUDE.md region + portable hooks)
+- [ ] sync ecosystem harness/CLAUDE.md region: run github-io/tooling/propagate-harness-all.sh once clean

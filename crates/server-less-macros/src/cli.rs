@@ -1097,6 +1097,33 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         )
     };
 
+    // Shell completions + man page (clap_complete / clap_mangen). Gated behind the
+    // `completions` feature so the clap_complete/clap_mangen deps stay opt-in.
+    #[cfg(feature = "completions")]
+    let completions_methods = quote! {
+        /// Write a shell completion script for `shell` to `out`.
+        ///
+        /// ```ignore
+        /// MyApp::cli_completions(::server_less::clap_complete::Shell::Bash, &mut ::std::io::stdout());
+        /// ```
+        pub fn cli_completions<__W: ::std::io::Write>(
+            shell: ::server_less::clap_complete::Shell,
+            out: &mut __W,
+        ) {
+            let mut __cmd = <Self as ::server_less::CliSubcommand>::cli_command();
+            let __bin = __cmd.get_name().to_string();
+            ::server_less::clap_complete::generate(shell, &mut __cmd, __bin, out);
+        }
+
+        /// Render a roff man page for this CLI to `out`.
+        pub fn cli_manpage<__W: ::std::io::Write>(out: &mut __W) -> ::std::io::Result<()> {
+            let __cmd = <Self as ::server_less::CliSubcommand>::cli_command();
+            ::server_less::clap_mangen::Man::new(__cmd).render(out)
+        }
+    };
+    #[cfg(not(feature = "completions"))]
+    let completions_methods = quote! {};
+
     let sync_entrypoints = if !no_sync {
         quote! {
             /// Run the CLI application.
@@ -1249,6 +1276,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
 
             #sync_entrypoints
             #async_entrypoint
+            #completions_methods
         }
 
         #config_methods
