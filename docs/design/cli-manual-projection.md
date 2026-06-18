@@ -192,6 +192,72 @@ The principle, not the spelling, is what this doc fixes: meta-surfaces are
 **configurable**, default-on, and follow the `= false` toggle convention. The
 spelling is deferred to implementation.
 
+### Implementation: aggregation mechanism (decided)
+
+The load-bearing new piece is **whole-subtree aggregation** — walking the command
+tree and collecting each node's schema + description. Two viable mechanisms were
+weighed:
+
+1. **Compile-time codegen that materializes the tree** (chosen). The `#[cli]`
+   macro adds a `cli_manual_nodes(&self, prefix) -> Vec<CliManualNode>` method to
+   the `CliSubcommand` trait. Each impl emits one node per leaf (reusing the exact
+   input/output-schema codegen the `--input-schema`/`--output-schema` flags
+   already use) and, for each mount point, recurses by calling the child type's
+   `cli_manual_nodes` with an extended path prefix. Aggregation composes through
+   the **same mount recursion the dispatcher already uses**, so nesting and `&T`
+   composition come for free.
+
+2. **Runtime walk of clap's `Command` tree + per-leaf schema builders.** Rejected:
+   clap's `Command` carries no return-type information, so the output schema would
+   have to be re-threaded by command name anyway — duplicating the schema logic and
+   re-deriving by string lookup what the macro already knows by type at the leaf.
+   It also scrapes runtime state rather than emitting a faithful data structure.
+
+**Why (1):** it keeps the manual a *serializable data structure*
+(`Vec<CliManualNode>`, rendered to path-keyed JSON or text by
+`cli_manual_to_json` / `cli_manual_to_text` in `server-less-core`), not scraped
+runtime state — consistent with the ecosystem's "prefer data over code at a seam"
+principle. It reuses the existing leaf schema codegen verbatim, and the recursion
+mirrors dispatch, so a mount subtree is aggregated exactly where it is dispatched.
+
+**Resolved sub-cases:**
+
+- **Mount points (`&T`):** static mounts (`fn(&self) -> &T`) recurse into the
+  child's `cli_manual_nodes` with the mount name appended to the prefix — the full
+  subtree appears inline, depth-unbounded.
+- **Slug mounts (`fn(&self, id) -> &T`):** the child is parameterized by a runtime
+  slug value the manual cannot synthesize, so an instance cannot be constructed at
+  manual time. These contribute a **single container node** (path includes the
+  `<slug>` placeholder, description notes "invoke with a slug value and `--manual`
+  for its subtree"). The per-leaf detail remains reachable via
+  `tool <slug-mount> <id> --manual`, which scopes to that subtree at runtime.
+- **`#[cli(default)]`:** the default leaf is an ordinary leaf and so appears as one
+  node in the aggregate. The `--manual` interception runs at the **top of
+  `cli_dispatch`, before** the default-action `None` arm, so `tool --manual` means
+  "the manual of the whole tree", not "run the default action" — the default leaf's
+  own entry is simply one node within that manual. This is the ambiguity
+  schema-flag-wiring.md flagged, dissolved exactly as the alternative analysis
+  predicted.
+- **Subtree scoping:** `--manual` is intercepted at every node. When set with no
+  further subcommand selected (`matches.subcommand().is_none()`), the current node
+  emits `cli_manual_nodes("")` for its subtree. A leaf the user navigated to emits
+  its own single-node entry in its match arm. Mount arms fall through and recurse,
+  so the child node performs the emission — giving `tool foo --manual` the `foo`
+  subtree for free from clap's global-flag propagation.
+
+**Resolved from Open Questions by this implementation:**
+
+- **(a) Flag name:** `--manual` (matches the prompt's fixed decision and reads
+  naturally at depth).
+- **(b) Default format:** human-readable text (markdown-ish), via
+  `cli_manual_to_text`; `--json`/`--jsonl`/`--jq` select the structured shape via
+  `cli_manual_to_json` + the existing `cli_format_output`.
+
+Still **out of scope** (deliberate follow-up, unchanged): (c) the meta-surface
+disable toggles and (d) the reserved-name collision guard. With no collision guard
+yet, a user parameter literally named `manual` would collide with the injected
+global flag — noted, not fixed here.
+
 ## Alternatives Considered
 
 ### A blessed `docs` / `man` subcommand auto-injected into every CLI

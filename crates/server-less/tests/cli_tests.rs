@@ -1840,3 +1840,127 @@ async fn test_async_params_json_flag() {
         result
     );
 }
+
+// ─── --manual (whole-subtree reference) ──────────────────────────────────────
+
+// App with a leaf, a static mount, and a nested static mount (depth 3) to
+// exercise whole-subtree aggregation and prefixing.
+#[derive(Clone)]
+struct ManualApp {
+    nested: NestedPostService,
+}
+
+#[cli(name = "manual-app", version = "1.0.0", description = "Manual demo")]
+impl ManualApp {
+    /// Health check
+    pub fn health(&self) -> String {
+        "ok".to_string()
+    }
+
+    /// Mount post commands (which themselves mount comments)
+    pub fn posts(&self) -> &NestedPostService {
+        &self.nested
+    }
+}
+
+#[test]
+fn test_manual_flag_present_on_command() {
+    let cmd = ManualApp::cli_command();
+    let has_manual = cmd.get_arguments().any(|a| a.get_id() == "manual");
+    assert!(has_manual, "expected a --manual global flag on the root command");
+}
+
+#[test]
+fn test_manual_nodes_aggregate_whole_tree() {
+    let app = ManualApp {
+        nested: NestedPostService,
+    };
+    let nodes = app.cli_manual_nodes("");
+    let paths: Vec<&str> = nodes.iter().map(|n| n.path.as_str()).collect();
+
+    // Root leaf
+    assert!(paths.contains(&"health"), "paths: {:?}", paths);
+    // Mount child leaf — prefixed with mount name
+    assert!(paths.contains(&"posts list"), "paths: {:?}", paths);
+    // Nested mount grandchild leaf — depth-3 prefix
+    assert!(
+        paths.contains(&"posts comments list"),
+        "paths: {:?}",
+        paths
+    );
+}
+
+#[test]
+fn test_manual_nodes_carry_description_and_schemas() {
+    let app = ManualApp {
+        nested: NestedPostService,
+    };
+    let nodes = app.cli_manual_nodes("");
+    let health = nodes.iter().find(|n| n.path == "health").unwrap();
+    assert_eq!(health.description.as_deref(), Some("Health check"));
+    // health() -> String, no params
+    assert_eq!(health.input_schema["type"], "object");
+    assert!(
+        health
+            .input_schema
+            .get("properties")
+            .and_then(|p| p.as_object())
+            .map(|o| o.is_empty())
+            .unwrap_or(false),
+        "health has no params: {:?}",
+        health.input_schema
+    );
+}
+
+#[test]
+fn test_manual_subtree_scoping_via_prefix() {
+    // The mount child's own cli_manual_nodes, as invoked when descending into it,
+    // yields the subtree rooted at that node (relative to the supplied prefix).
+    let nested = NestedPostService;
+    let nodes = nested.cli_manual_nodes("posts");
+    let paths: Vec<&str> = nodes.iter().map(|n| n.path.as_str()).collect();
+    assert!(paths.contains(&"posts list"), "paths: {:?}", paths);
+    assert!(
+        paths.contains(&"posts comments list"),
+        "paths: {:?}",
+        paths
+    );
+    // The root-level `health` is NOT part of this subtree.
+    assert!(!paths.contains(&"health"), "paths: {:?}", paths);
+}
+
+#[test]
+fn test_manual_to_json_keyed_by_path() {
+    let app = ManualApp {
+        nested: NestedPostService,
+    };
+    let nodes = app.cli_manual_nodes("");
+    let doc = server_less::cli_manual_to_json(&nodes);
+    let obj = doc.as_object().expect("manual json is an object");
+    assert!(obj.contains_key("health"));
+    assert!(obj.contains_key("posts list"));
+    assert!(obj.contains_key("posts comments list"));
+    assert_eq!(obj["health"]["description"], "Health check");
+    assert!(obj["health"]["input_schema"].is_object());
+    assert!(obj["health"]["output_schema"].is_object());
+}
+
+#[test]
+fn test_manual_dispatch_runs_ok() {
+    let app = ManualApp {
+        nested: NestedPostService,
+    };
+    // Whole-tree manual (text default).
+    assert!(app.cli_run_with(["manual-app", "--manual"]).is_ok());
+    // Whole-tree manual (json).
+    assert!(app.cli_run_with(["manual-app", "--manual", "--json"]).is_ok());
+    // Subtree scoping: `posts --manual`.
+    assert!(app.cli_run_with(["manual-app", "posts", "--manual"]).is_ok());
+    // Single leaf entry: `health --manual`.
+    assert!(app.cli_run_with(["manual-app", "health", "--manual"]).is_ok());
+    // NOTE: `--manual --jq '...'` composes with the existing `--jq` machinery
+    // (cli_format_output), so it is exercised by the format flag wiring rather
+    // than re-tested here. The `--jq` loader is currently broken for ALL surfaces
+    // in this build (a pre-existing jaq beta std-defs compile failure, unrelated
+    // to --manual); see test_manual_to_json for the structured shape coverage.
+}
