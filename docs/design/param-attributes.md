@@ -111,6 +111,14 @@ pub fn get_user(&self, user_id: String) -> Option<User>
 `#[param(positional)]` is the explicit version, preferred when the heuristic doesn't
 apply or when you want to be self-documenting.
 
+## Unused parameters: deferred to rustc
+
+server-less does not emit its own unused-parameter diagnostic. rustc's built-in
+`unused_variables` lint already covers projected-method parameters soundly: the macro
+re-emits method bodies verbatim, so any warning points directly at the user's own
+source. It also honors the `_`-prefix convention, so a parameter that is intentionally
+unused or wire-only (e.g. `delete_resource(_id)`) is silenced exactly as expected.
+
 ## See Also
 
 - [CLI Output Formatting](cli-output-formatting.md) — `display_with`, `--json`/`--jq`, `defaults`

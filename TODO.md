@@ -323,19 +323,22 @@ These need more design work before implementation:
 
 > Removed as out-of-scope: Code-first→schema-first tooling, auto migration gen, contract testing (separate products), WASM/no_std (different target universe), performance benchmarks (pre-mature at this stage).
 
-### Deferred polish diagnostics (need a design pass)
+### Deferred polish diagnostics (RESOLVED in 0.5.0)
 
-Pulled out of the 0.5.0 polish set: both are ambiguous to implement soundly in a
-proc-macro context (they can't reliably inspect a method body's runtime behavior),
-so they need a design decision before implementation.
+Both items from the 0.5.0 polish set are now resolved — nothing here is open or
+blocking.
 
-- [ ] **"add async to use `.await`" hint diagnostic.** rustc already errors on
-  `.await` in a non-`async` fn; the open question is what *additional* value a
-  server-less diagnostic adds and where it could hook without duplicating rustc.
-- [ ] **Unused-parameter warning.** Detecting an unused parameter from token
-  inspection is heuristic and false-positive-prone (a param used only inside a
-  macro invocation, `cfg`-gated branch, etc. reads as unused). Needs a precise,
-  low-false-positive definition before it's worth shipping.
+- [x] **"add async to use `.await`" hint diagnostic.** IMPLEMENTED in 0.5.0 as a
+  syn-visitor compile error in `server-less-parse`: a non-`async` method whose body
+  contains `.await` is rejected with a clear, spanned diagnostic.
+- [x] **Unused-parameter warning.** RESOLVED by deferring to rustc. rustc's
+  `unused_variables` lint already warns on unused parameters of server-less-projected
+  methods — the macro re-emits method bodies verbatim, so the warning fires with a
+  span on the user's own source — and it honors the `_`-prefix convention the repo
+  relies on (e.g. `delete_resource(_id)`). A pre-expansion macro reimplementation
+  would be unsound (format-string captures, macro tokens, and `cfg`-gated uses are
+  undecidable before expansion) and on stable could only be a hard error (wrong
+  severity), so server-less intentionally defers to rustc.
 
 ---
 
