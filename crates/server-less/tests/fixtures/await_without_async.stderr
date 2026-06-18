@@ -1,0 +1,9 @@
+error: this method uses `.await` but is not declared `async`
+
+       server-less projects each method onto a protocol surface; an awaiting method must be `async` so the projection can drive it.
+
+       Hint: add `async` to the signature, e.g. `async fn NAME(&self, ...) -> ...`
+  --> tests/fixtures/await_without_async.rs:13:29
+   |
+13 |         let _ = something().await;
+   |                             ^^^^^

@@ -34,6 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `clap_mangen`.
 - **`docs/design/cli-attributes.md`**: Reference for all `#[cli]` method-level
   attributes: `default`, `hidden`, `skip`, `helper`, `name`, `display_with`.
+- **`.await`-without-`async` diagnostic.** A method projected by any server-less macro
+  that uses `.await` in its body without being declared `async` now produces a clear,
+  projection-framed compile error pointing at the fix, instead of leaning on rustc's
+  generic E0728. Sound by construction — a `syn` visitor that ignores macro token
+  streams and nested `async` blocks/closures, so there are no false positives.
 
 ### Changed
 

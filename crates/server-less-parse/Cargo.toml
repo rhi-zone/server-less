@@ -10,6 +10,6 @@ description = "Shared parsing utilities for server-less proc macros"
 proc-macro = false
 
 [dependencies]
-syn = { version = "2", features = ["full", "parsing", "extra-traits"] }
+syn = { version = "2", features = ["full", "parsing", "extra-traits", "visit"] }
 quote = "1"
 proc-macro2 = "1"

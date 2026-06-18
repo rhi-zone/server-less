@@ -216,6 +216,44 @@ pub struct ReturnInfo {
     pub reference_inner: Option<Type>,
 }
 
+/// Walks a method body looking for a real `.await` in a sync context.
+///
+/// Soundness rules (avoid false positives):
+/// - Macro token streams are not parsed (the default `visit_macro` does not
+///   descend into `Macro.tokens`), so `.await` text inside `println!`/`format!`
+///   or any macro is invisible.
+/// - Nested `async { ... }` blocks are skipped: a `.await` inside one is legal
+///   in a sync fn.
+/// - `async` closures are skipped; sync closures are walked normally.
+struct AwaitFinder {
+    /// Span of the first offending `.await`, if any.
+    found: Option<proc_macro2::Span>,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for AwaitFinder {
+    fn visit_expr_await(&mut self, node: &'ast syn::ExprAwait) {
+        if self.found.is_none() {
+            self.found = Some(node.await_token.span);
+        }
+        // Continue walking the awaited base in case it contains another await,
+        // though the first found span is what we report.
+        syn::visit::visit_expr(self, &node.base);
+    }
+
+    fn visit_expr_async(&mut self, _node: &'ast syn::ExprAsync) {
+        // `.await` inside a nested `async { ... }` block is legal in a sync fn.
+        // Do not recurse.
+    }
+
+    fn visit_expr_closure(&mut self, node: &'ast syn::ExprClosure) {
+        // An `async` closure introduces its own async context; do not recurse.
+        // A sync closure is walked normally.
+        if node.asyncness.is_none() {
+            syn::visit::visit_expr_closure(self, node);
+        }
+    }
+}
+
 impl MethodInfo {
     /// Parse a method from an ImplItemFn
     ///
@@ -232,6 +270,23 @@ impl MethodInfo {
             .any(|arg| matches!(arg, FnArg::Receiver(_)));
         if !has_receiver {
             return Ok(None);
+        }
+
+        // Await-without-async: a sync method whose body really awaits cannot be
+        // projected onto a protocol surface. Pre-empt rustc's generic E0728 with
+        // projection framing. Only the OUTER method's asyncness matters.
+        if method.sig.asyncness.is_none() {
+            let mut finder = AwaitFinder { found: None };
+            syn::visit::Visit::visit_block(&mut finder, &method.block);
+            if let Some(span) = finder.found {
+                return Err(syn::Error::new(
+                    span,
+                    "this method uses `.await` but is not declared `async`\n\n\
+                     server-less projects each method onto a protocol surface; an \
+                     awaiting method must be `async` so the projection can drive it.\n\n\
+                     Hint: add `async` to the signature, e.g. `async fn NAME(&self, ...) -> ...`",
+                ));
+            }
         }
 
         // Extract doc comments
@@ -1568,5 +1623,27 @@ mod tests {
         assert_eq!(info.params[0].name_str(), "type");
         // The Ident itself still has the raw prefix for code generation
         assert_eq!(info.params[0].name.to_string(), "r#type");
+    }
+
+    // ── await-without-async diagnostic ──────────────────────────────
+
+    #[test]
+    fn sync_fn_with_top_level_await_is_err() {
+        let method: ImplItemFn = syn::parse_quote! {
+            fn f(&self) {
+                something().await;
+            }
+        };
+        assert!(MethodInfo::parse(&method).is_err());
+    }
+
+    #[test]
+    fn sync_fn_with_nested_async_block_await_is_ok() {
+        let method: ImplItemFn = syn::parse_quote! {
+            fn f(&self, x: Thing) {
+                let _fut = async { x.await };
+            }
+        };
+        assert!(MethodInfo::parse(&method).is_ok());
     }
 }
