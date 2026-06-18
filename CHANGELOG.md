@@ -6,22 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changed
-
-- **Reverted overly-aggressive `#[cli(default)]` suppression.** The previous commit
-  removed ALL `#[cli(default)]` methods from the named subcommand list, which broke
-  cases like `normalize analyze health` where the default method should still be
-  accessible by name. `#[cli(default)]` now registers the method as both the default
-  action AND a named subcommand — the same behavior as before the suppression commit.
-  To hide the default action from `--help` while keeping it accessible, combine with
-  `#[cli(hidden)]`: `#[cli(default, hidden)]`.
+## [0.5.0] - 2026-06-19
 
 ### Added
 
+- **`--manual` whole-tree reference surface for `#[cli]`.** One invocation emits the
+  entire command tree as a single reference document — the tool's "manual" — keyed by
+  command path, each node carrying its description, input schema, and output schema.
+  Works at every node (`tool --manual`; `tool sub --manual` scopes to that subtree),
+  and composes with the existing `--json` / `--jsonl` / `--jq` format flags. Text by
+  default, structured under `--json`. New core primitives: `CliManualNode`,
+  `cli_manual_to_json`, `cli_manual_to_text`, and the `CliSubcommand::cli_manual_nodes`
+  trait method (default impl, so hand-written impls keep compiling).
+- **Meta-surface toggles for `#[cli]`.** `manual` / `input_schema` / `output_schema`
+  (default-on) disable the injected `--manual` / `--input-schema` / `--output-schema`
+  flags globally (`#[cli(manual = false)]`); per-command `#[cli(manual = false)]`
+  hides one leaf from the aggregated manual while keeping the command runnable.
+- **Reserved-name collision guard for `#[cli]`.** A parameter whose flag name collides
+  with a currently-injected global flag (`json`, `jsonl`, `jq`, `params-json`, and the
+  enabled meta-surfaces) is now a compile error spanned to the parameter, instead of a
+  clap panic at runtime. Disabling a meta-surface frees its name.
+- **`#[derive(HealthCheck)]`** (feature `health`): generates a `health_router()`
+  returning an axum `Router` with a `GET /health` route (`#[health(path, status)]`
+  overrides). Complements the `/health` route `#[server]` already mounts.
+- **Shell completions + man page for `#[cli]`** (feature `completions`):
+  `cli_completions(shell, out)` and `cli_manpage(out)` via `clap_complete` /
+  `clap_mangen`.
 - **`docs/design/cli-attributes.md`**: Reference for all `#[cli]` method-level
-  attributes: `default`, `hidden`, `skip`, `helper`, `name`, `display_with` — with
-  patterns for default actions, hiding duplicate subcommand names, and combining
-  attributes.
+  attributes: `default`, `hidden`, `skip`, `helper`, `name`, `display_with`.
+
+### Changed
+
+- **Reverted overly-aggressive `#[cli(default)]` suppression.** `#[cli(default)]` again
+  registers the method as both the default action AND a named subcommand. To hide the
+  default from `--help` while keeping it accessible, combine with `#[cli(hidden)]`.
+- **`ErrorCode` and `OpenApiError` are now `#[non_exhaustive]`** — future variants
+  will not be breaking changes. Downstream `match`es need a wildcard arm.
+
+### Fixed
+
+- **`--jq` output filtering** repaired by bumping to `jaq-core 3.1.0` / `jaq-std 3.0.1`
+  / `jaq-json 2.0.1` and restoring the `jaq_core::defs()/funs()` prefix in the
+  three-crate chain (a pre-release beta had silently broken the identity filter `.`).
+- **Inferred HTTP path params strip a leading underscore.** `delete_resource(_id)` and
+  `get_resource(id)` no longer register conflicting `/{_id}` vs `/{id}` matchit
+  patterns (router build panic); an explicit `wire_name` is still taken verbatim.
 
 ## [0.4.0] - 2026-03-09
 
