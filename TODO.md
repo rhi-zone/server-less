@@ -55,10 +55,9 @@ Prioritized backlog of pending features and improvements.
 
 - [x] Nested type resolution for complex relationships ✅
 - [x] Custom scalar support (DateTime, UUID, Url, JSON) ✅
-- [ ] Subscription support for real-time updates (requires WebSocket integration)
 - [x] Input types for mutations (`#[graphql_input]` + `#[graphql(inputs(...))]`) ✅
 - [x] Enum type support (`#[graphql_enum]` + `#[graphql(enums(...))]`) ✅
-- [ ] Interface/union type support
+- (Subscription support + interface/union type support moved to Low Priority / Wishlist)
 
 ### Error Handling
 
@@ -70,19 +69,10 @@ Prioritized backlog of pending features and improvements.
 
 ### Streaming
 
-- [ ] MCP streaming responses (progressive tool output)
 - [x] gRPC server streaming (proto3 `stream` keyword generation) ✅
 - [ ] gRPC client streaming
 - [ ] gRPC bidirectional streaming
-
-### Schema Sharing
-
-- [ ] Define common `SchemaType` enum (String, Int, Bool, Array, Object, etc.)
-- [ ] Add `fn schema() -> SchemaType` to method return types
-- [ ] Render `SchemaType` to OpenAPI JSON Schema
-- [ ] Render `SchemaType` to MCP tool input schema
-- [ ] Render `SchemaType` to GraphQL type
-- [ ] Validate schema consistency across protocols
+- (MCP streaming responses moved to Low Priority / Wishlist)
 
 ### Mount Points — Per-Protocol Projections
 
@@ -93,43 +83,9 @@ Prioritized backlog of pending features and improvements.
 - [x] `WsMount` trait — WebSocket JSON-RPC namespace delegation ✅
 - [x] `JsonRpcMount` trait — JSON-RPC method namespace delegation ✅
 
-### Middleware System
-
-- [ ] Design middleware trait/interface
-- [ ] `#[middleware(name)]` attribute on impl blocks
-- [ ] Before-request hook
-- [ ] After-request hook
-- [ ] Error transformation hook
-- [ ] Tower layer integration
-- [ ] Async middleware support
-
-### Context Extensions
-
-- [ ] Design extensible Context API
-- [ ] `Context::get::<T>()` for typed access
-- [ ] `Context::insert()` for middleware to add data
-- [ ] Extract user ID from JWT in middleware, access via `ctx.user_id()`
-- [ ] Document patterns for auth, multi-tenancy, tracing
-
-### API Versioning
-
-- [ ] `#[http(version = "v1")]` for URL prefix versioning
-- [ ] `#[http(version_header = "X-API-Version")]` for header versioning
-- [ ] `#[deprecated(since = "v2", note = "Use X instead")]` warnings
-- [ ] Version-aware OpenAPI spec generation
-
 ### Client Generation
 
 > **Not planned here** — spun out to `rhizone/normalize`. Client generation (TS/Python/Rust stubs from OpenAPI) lives there.
-
-### gRPC Runtime
-
-> **Server side is in scope** — `#[grpc]` projects an impl block onto a tonic gRPC server, same model as `#[http]` → axum. Client stub generation from proto files lives in `rhizone/normalize`.
-
-- [ ] tonic integration for `#[grpc]`
-- [ ] Generate server trait implementation
-- [ ] Error code mapping (Rust errors → gRPC status codes)
-- [ ] Metadata/header support
 
 ### Implementor DX — Capability Discovery
 
@@ -172,7 +128,6 @@ How do implementors know what server-less can do, at the moment they need it?
 - [x] `#[server]` attribute macro ✅ — `expand_server` in `server.rs`; composes `#[http]` + `#[serve]` + optional OpenAPI; 8 tests in `server_tests.rs`.
 - [x] `#[server(openapi = false)]` toggle ✅
 - [x] `#[server(health = "/healthz")]` custom health endpoint ✅
-- [ ] `ServerCore` trait for base functionality — future; requires design
 - [ ] `OpenApi` derive for spec generation — future; `#[openapi]` attr already covers most cases
 - [ ] `Metrics` derive for prometheus metrics — future
 - [ ] `HealthCheck` derive for `/health` endpoint — future; `/health` already included in `#[server]`
@@ -198,6 +153,73 @@ How do implementors know what server-less can do, at the moment they need it?
 - [x] Create missing `examples/param_service.rs` (stable Rust version demonstrating inference)
 - [x] Feature-gate `server-less-openapi` (optional dep, pulled in by http/ws/jsonrpc/graphql/openapi features)
 - [x] Document relationship between `MethodInfo`/`ParamInfo` in core vs parse crates
+
+---
+
+## Low Priority / Wishlist (non-blocking)
+
+> Future / design-blocked feature epics. Per the 0.5.0 release plan these are explicitly **out of scope** and do **not** gate any release. Listed here for visibility; pick up only after near-term queue work and a design pass.
+
+### gRPC Runtime
+
+> **Server side is in scope** — `#[grpc]` projects an impl block onto a tonic gRPC server, same model as `#[http]` → axum. Client stub generation from proto files lives in `rhizone/normalize`.
+
+- [ ] tonic integration for `#[grpc]`
+- [ ] Generate server trait implementation
+- [ ] Error code mapping (Rust errors → gRPC status codes)
+- [ ] Metadata/header support
+
+### Middleware System
+
+- [ ] Design middleware trait/interface
+- [ ] `#[middleware(name)]` attribute on impl blocks
+- [ ] Before-request hook
+- [ ] After-request hook
+- [ ] Error transformation hook
+- [ ] Tower layer integration
+- [ ] Async middleware support
+
+### Context Extensions
+
+- [ ] Design extensible Context API
+- [ ] `Context::get::<T>()` for typed access
+- [ ] `Context::insert()` for middleware to add data
+- [ ] Extract user ID from JWT in middleware, access via `ctx.user_id()`
+- [ ] Document patterns for auth, multi-tenancy, tracing
+
+### API Versioning
+
+- [ ] `#[http(version = "v1")]` for URL prefix versioning
+- [ ] `#[http(version_header = "X-API-Version")]` for header versioning
+- [ ] `#[deprecated(since = "v2", note = "Use X instead")]` warnings
+- [ ] Version-aware OpenAPI spec generation
+
+### Schema Sharing
+
+- [ ] Define common `SchemaType` enum (String, Int, Bool, Array, Object, etc.)
+- [ ] Add `fn schema() -> SchemaType` to method return types
+- [ ] Render `SchemaType` to OpenAPI JSON Schema
+- [ ] Render `SchemaType` to MCP tool input schema
+- [ ] Render `SchemaType` to GraphQL type
+- [ ] Validate schema consistency across protocols
+
+### GraphQL (advanced type system)
+
+- [ ] Subscription support for real-time updates (requires WebSocket integration)
+- [ ] Interface/union type support
+- [ ] GraphQL Federation support — far future; requires significant schema stitching work
+
+### MCP Streaming
+
+- [ ] MCP streaming responses (progressive tool output)
+
+### "Server" Blessed Preset — ServerCore
+
+- [ ] `ServerCore` trait for base functionality — future; requires design
+
+### Distributed Tracing
+
+- [ ] Distributed tracing (OpenTelemetry integration) — inject trace context via middleware layer
 
 ---
 
@@ -297,8 +319,7 @@ Six-agent audit of the codebase. Items are new discoveries — not duplicates of
 
 These need more design work before implementation:
 
-- [ ] Distributed tracing (OpenTelemetry integration) — inject trace context via middleware layer
-- [ ] GraphQL Federation support — far future; requires significant schema stitching work
+- (Distributed tracing + GraphQL Federation support moved to Low Priority / Wishlist)
 
 > Removed as out-of-scope: Code-first→schema-first tooling, auto migration gen, contract testing (separate products), WASM/no_std (different target universe), performance benchmarks (pre-mature at this stage).
 
