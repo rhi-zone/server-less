@@ -24,6 +24,105 @@ pub use extract::Context;
 #[cfg(feature = "ws")]
 pub use extract::WsSender;
 
+/// One node in a CLI "manual": the reference entry for a single command path.
+///
+/// The manual is the whole-subtree aggregate emitted by the `--manual` flag.
+/// Each leaf command in the tree contributes one `CliManualNode`; mount points
+/// contribute the nodes of their subtree (recursively), with the path prefixed.
+///
+/// This is a serializable data structure (not a closure or scraped runtime
+/// state), so the manual caches, transports, and diffs cleanly. The `--manual`
+/// rendering layer turns a `Vec<CliManualNode>` into either human-readable text
+/// or a path-keyed JSON object.
+#[cfg(feature = "cli")]
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct CliManualNode {
+    /// Space-separated command path from the root of the *invoked* subtree,
+    /// e.g. `"edit history list"`. The root subtree's own node (if it has a
+    /// default action) uses the empty string.
+    pub path: String,
+    /// The command's description (first paragraph of its doc comment), if any.
+    pub description: Option<String>,
+    /// JSON Schema of the command's input parameters.
+    pub input_schema: serde_json::Value,
+    /// JSON Schema of the command's return type.
+    pub output_schema: serde_json::Value,
+}
+
+/// Render a flat list of manual nodes as a path-keyed JSON object.
+///
+/// This is the structured (`--manual --json` / `--jq`) shape: one key per
+/// command path, each value carrying `description`, `input_schema`, and
+/// `output_schema`. Used by `#[cli]`-generated `--manual` handling.
+#[cfg(feature = "cli")]
+pub fn cli_manual_to_json(nodes: &[CliManualNode]) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for node in nodes {
+        map.insert(
+            node.path.clone(),
+            serde_json::json!({
+                "description": node.description,
+                "input_schema": node.input_schema,
+                "output_schema": node.output_schema,
+            }),
+        );
+    }
+    serde_json::Value::Object(map)
+}
+
+/// Render a flat list of manual nodes as human-readable reference text.
+///
+/// This is the default (`--manual` with no format flag) shape: a markdown-ish
+/// reference page, one section per command path. Used by `#[cli]`-generated
+/// `--manual` handling.
+#[cfg(feature = "cli")]
+pub fn cli_manual_to_text(nodes: &[CliManualNode]) -> String {
+    let mut out = String::new();
+    for (i, node) in nodes.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let heading = if node.path.is_empty() {
+            "(default)"
+        } else {
+            node.path.as_str()
+        };
+        out.push_str(&format!("# {heading}\n"));
+        if let Some(desc) = &node.description
+            && !desc.is_empty()
+        {
+            out.push_str(&format!("\n{desc}\n"));
+        }
+        if let Some(props) = node
+            .input_schema
+            .get("properties")
+            .and_then(|p| p.as_object())
+            && !props.is_empty()
+        {
+            out.push_str("\nParameters:\n");
+            let required: std::collections::HashSet<&str> = node
+                .input_schema
+                .get("required")
+                .and_then(|r| r.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                .unwrap_or_default();
+            for (name, schema) in props {
+                let ty = schema
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("value");
+                let req = if required.contains(name.as_str()) {
+                    " (required)"
+                } else {
+                    ""
+                };
+                out.push_str(&format!("  {name}: {ty}{req}\n"));
+            }
+        }
+    }
+    out
+}
+
 /// Trait for types that can be mounted as CLI subcommand groups.
 ///
 /// Implemented automatically by `#[cli]` on an impl block. Allows nested
@@ -32,6 +131,18 @@ pub use extract::WsSender;
 pub trait CliSubcommand {
     /// Build the clap Command tree for this type's subcommands.
     fn cli_command() -> ::clap::Command;
+
+    /// Collect the manual (whole-subtree reference) nodes for this type.
+    ///
+    /// `prefix` is the command path of *this* node from the root of the invoked
+    /// subtree (empty at the invocation root). Each leaf appends one node; each
+    /// mount point recurses into its child type with an extended prefix.
+    ///
+    /// The default returns an empty vec so hand-written `CliSubcommand` impls
+    /// keep compiling; `#[cli]` always overrides it.
+    fn cli_manual_nodes(&self, _prefix: &str) -> Vec<CliManualNode> {
+        Vec::new()
+    }
 
     /// Dispatch a matched subcommand to the appropriate method.
     fn cli_dispatch(&self, matches: &::clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>>;

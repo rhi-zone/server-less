@@ -274,6 +274,9 @@ pub use server_less_core::CliSubcommand;
 #[cfg(feature = "cli")]
 pub use server_less_core::cli_format_output;
 
+#[cfg(feature = "cli")]
+pub use server_less_core::{CliManualNode, cli_manual_to_json, cli_manual_to_text};
+
 #[cfg(feature = "mcp")]
 pub use server_less_core::McpNamespace;
 
