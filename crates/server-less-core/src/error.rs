@@ -3,7 +3,11 @@
 use std::fmt;
 
 /// Protocol-agnostic error code that maps to HTTP status, gRPC code, CLI exit code, etc.
+///
+/// `#[non_exhaustive]`: new protocol-status mappings may be added in minor releases,
+/// so downstream `match`es must include a wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ErrorCode {
     /// 400 Bad Request / INVALID_ARGUMENT / exit 1
     InvalidInput,

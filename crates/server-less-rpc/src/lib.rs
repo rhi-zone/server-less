@@ -5,6 +5,11 @@
 //! - Extract params from JSON
 //! - Call the method
 //! - Serialize result back to JSON
+//!
+//! **Internal API.** This crate supports the `server-less` proc macros and is
+//! published only because path dependencies are disallowed. Its surface is typed in
+//! terms of `proc-macro2` token streams and carries **no stability guarantees**;
+//! depend on the `server-less` facade instead.
 
 use proc_macro2::TokenStream;
 use quote::quote;

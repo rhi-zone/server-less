@@ -2,6 +2,11 @@
 //!
 //! This crate provides common types and functions for extracting
 //! method information from impl blocks.
+//!
+//! **Internal API.** This crate exists to support the `server-less` proc macros
+//! and is published only because path dependencies are disallowed. Its surface is
+//! typed in terms of `syn` / `proc-macro2` and carries **no stability guarantees**;
+//! depend on the `server-less` facade instead.
 
 use syn::{
     FnArg, GenericArgument, Ident, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Pat, PathArguments,
