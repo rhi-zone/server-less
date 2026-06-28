@@ -1,0 +1,12 @@
+error[E0277]: the trait bound `MyApp: CliGlobals` is not satisfied
+  --> tests/fixtures/cli_global_without_sink.rs:10:1
+   |
+10 | #[cli(name = "my-app", global = [verbose])]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `CliGlobals` is not implemented for `MyApp`
+  --> tests/fixtures/cli_global_without_sink.rs:8:1
+   |
+ 8 | struct MyApp;
+   | ^^^^^^^^^^^^
+   = note: this error originates in the attribute macro `cli` (in Nightly builds, run with -Z macro-backtrace for more info)

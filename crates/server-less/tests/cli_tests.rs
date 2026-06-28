@@ -668,6 +668,13 @@ fn test_vec_dispatch_empty() {
 #[derive(Clone)]
 struct GlobalApp;
 
+// Declaring `global = [...]` requires a `CliGlobals` sink (no blanket default impl).
+// This service receives its globals through method params (legacy convenience path),
+// so the sink itself is a no-op — the bound just proves the wiring is present.
+impl server_less::CliGlobals for GlobalApp {
+    fn set_global_flag(&self, _name: &str, _value: bool) {}
+}
+
 #[cli(name = "global-app", global = [verbose, dry_run])]
 impl GlobalApp {
     /// List things
@@ -1047,6 +1054,136 @@ fn test_help_text_without_short_flag() {
     );
     // No short flag set
     assert_eq!(query_arg.get_short(), None);
+}
+
+// ── #[param(name = "...")] flag rename ────────────────────────────────
+// The CLI projection must honor the wire-name override on a parameter: the clap
+// arg id, the `--long` flag, and extraction all use the declared name, not the
+// kebab-cased Rust identifier. (Previously `wire_name` was silently dropped here.)
+
+#[derive(Clone)]
+struct ParamNameService;
+
+#[cli(name = "param-name-app")]
+impl ParamNameService {
+    /// Search
+    pub fn search(&self, #[param(name = "q")] query: String) -> String {
+        format!("Searching for: {query}")
+    }
+}
+
+#[test]
+fn test_param_name_renames_flag() {
+    let cmd = ParamNameService::cli_command();
+    let search_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "search")
+        .unwrap();
+
+    // The renamed flag exists...
+    assert!(
+        search_cmd
+            .get_arguments()
+            .any(|a| a.get_id().as_str() == "q"),
+        "expected the renamed `q` arg to exist"
+    );
+    // ...and the original kebab name does NOT.
+    assert!(
+        !search_cmd
+            .get_arguments()
+            .any(|a| a.get_id().as_str() == "query"),
+        "the un-renamed `query` arg must not exist"
+    );
+}
+
+#[test]
+fn test_param_name_dispatch_uses_renamed_flag() {
+    let svc = ParamNameService;
+    // The renamed flag is accepted and dispatches through extraction (which also
+    // reads the renamed key — advertisement and extraction stay in lockstep).
+    assert!(svc.cli_run_with(["param-name-app", "search", "--q", "hi"]).is_ok());
+}
+
+// ── #[param(default = ...)] applied in CLI ────────────────────────────
+// A required (non-Option) param carrying `#[param(default = ...)]` must become
+// satisfiable from the default — clap supplies it, so omitting the flag no longer
+// errors "missing argument". (Previously `default_value` was discarded entirely.)
+
+#[derive(Clone)]
+struct ParamDefaultService;
+
+#[cli(name = "param-default-app")]
+impl ParamDefaultService {
+    /// Connect on a port (defaults to 8080)
+    pub fn connect(&self, #[param(default = 8080)] port: u16) -> String {
+        format!("port={port}")
+    }
+}
+
+#[test]
+fn test_param_default_sets_clap_default() {
+    let cmd = ParamDefaultService::cli_command();
+    let connect_cmd = cmd
+        .get_subcommands()
+        .find(|c| c.get_name() == "connect")
+        .unwrap();
+    let port_arg = connect_cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "port")
+        .unwrap();
+
+    let defaults: Vec<String> = port_arg
+        .get_default_values()
+        .iter()
+        .map(|v| v.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(defaults, vec!["8080".to_string()]);
+}
+
+#[test]
+fn test_param_default_dispatch_without_arg() {
+    let svc = ParamDefaultService;
+    // Omitting the required-with-default param succeeds (no "missing argument").
+    assert!(svc.cli_run_with(["param-default-app", "connect"]).is_ok());
+    // Supplying it still works.
+    assert!(svc.cli_run_with(["param-default-app", "connect", "--port", "9090"]).is_ok());
+}
+
+// ── CliGlobals delivery (the capability-wiring invariant) ─────────────
+// A service that declares `global = [...]` must impl `CliGlobals`; the macro
+// delivers each global flag's value to the sink before the method runs. The
+// compile-fail counterpart (declaring `global` without the impl) lives in
+// tests/fixtures/cli_global_without_sink.rs.
+
+#[derive(Clone, Default)]
+struct GlobalSinkApp {
+    seen: std::rc::Rc<std::cell::RefCell<Vec<(String, bool)>>>,
+}
+
+impl server_less::CliGlobals for GlobalSinkApp {
+    fn set_global_flag(&self, name: &str, value: bool) {
+        self.seen.borrow_mut().push((name.to_string(), value));
+    }
+}
+
+#[cli(name = "global-sink-app", global = [verbose, dry_run])]
+impl GlobalSinkApp {
+    /// Run
+    pub fn run(&self) -> String {
+        "ok".to_string()
+    }
+}
+
+#[test]
+fn test_cli_globals_delivers_flag_values() {
+    let app = GlobalSinkApp::default();
+    let result = app.cli_run_with(["global-sink-app", "--verbose", "run"]);
+    assert!(result.is_ok());
+
+    let seen = app.seen.borrow();
+    // Both declared globals are delivered (kebab-cased), once each, with parsed values.
+    assert!(seen.contains(&("verbose".to_string(), true)), "got: {seen:?}");
+    assert!(seen.contains(&("dry-run".to_string(), false)), "got: {seen:?}");
 }
 
 // ============================================================================

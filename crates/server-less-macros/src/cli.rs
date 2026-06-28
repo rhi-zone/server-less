@@ -433,7 +433,7 @@ fn check_reserved_flag_collisions(
         for m in methods.iter() {
             let (_, regular) = partition_context_params(&m.params)?;
             for p in &regular {
-                let kebab = p.name_str().to_kebab_case();
+                let kebab = cli_param_name(p);
                 if let Some((flag, what)) = reserved.iter().find(|(name, _)| *name == kebab) {
                     return Err(syn::Error::new(
                         p.name.span(),
@@ -512,6 +512,31 @@ fn get_display_with(method: &MethodInfo) -> Option<syn::Path> {
 /// CLI-facing name for a method: `wire_name` if set, otherwise kebab-case of method name.
 fn cli_name(method: &MethodInfo) -> String {
     method.wire_name_or(|n| n.to_kebab_case())
+}
+
+/// CLI-facing flag/arg name for a parameter: `#[param(name = "...")]` (`wire_name`) verbatim
+/// if set, otherwise kebab-case of the Rust identifier. Used as the clap `Arg` id, the
+/// `--long` flag, and the `get_flag`/`get_one` key, so the rename is honored end-to-end
+/// (advertisement and extraction stay in lockstep). Honoring `wire_name` here is what
+/// converts `#[param(name)]` from *ignored* to *macro-terminated*.
+fn cli_param_name(param: &ParamInfo) -> String {
+    match &param.wire_name {
+        Some(w) => w.clone(),
+        None => param.name_str().to_kebab_case(),
+    }
+}
+
+/// Convert a `#[param(default = ...)]` value (stored by the parser as a Rust-literal
+/// repr — `"\"foo\""` for strings, `"10"` for ints, `"true"` for bools) into the string
+/// clap's `.default_value(...)` expects. String literals are unwrapped to their content;
+/// numeric/bool literals pass through. clap re-parses the string through the arg's value
+/// parser, so this round-trips back to the param's type.
+fn clap_default_value(raw: &str) -> String {
+    if raw.len() >= 2 && raw.starts_with('"') && raw.ends_with('"') {
+        raw[1..raw.len() - 1].to_string()
+    } else {
+        raw.to_string()
+    }
 }
 
 /// Build an ordered list of group display names.
@@ -609,6 +634,19 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .iter()
         .map(|(name, _)| name.clone())
         .collect();
+    // When `global = [...]` is declared, force the `Self: CliGlobals` bound even if the
+    // impl has no leaf methods to deliver from (mount-only services). The per-leaf
+    // delivery already requires the bound; this covers the leaf-less edge so the
+    // "declared global ⇒ named sink" invariant holds unconditionally. No blanket
+    // default impl of `CliGlobals` exists, so this is a hard compile error on omission.
+    let globals_bound_assert = if global_flags.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            let _ = <Self as ::server_less::CliGlobals>::set_global_flag;
+        }
+    };
+
     let has_defaults = args.defaults.is_some();
     let defaults_fn_ident = args
         .defaults
@@ -803,7 +841,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         let filtered: Vec<_> = regular_params
             .iter()
             .filter(|p| {
-                let kebab = p.name_str().to_kebab_case();
+                let kebab = cli_param_name(p);
                 !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
             })
             .collect();
@@ -1253,6 +1291,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
             #manual_nodes_method
 
             fn cli_dispatch(&self, matches: &::server_less::clap::ArgMatches) -> ::std::result::Result<(), Box<dyn ::std::error::Error>> {
+                #globals_bound_assert
                 #manual_dispatch_intercept
                 match matches.subcommand() {
                     #(#leaf_match_arms)*
@@ -1272,6 +1311,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 matches: &'__a ::server_less::clap::ArgMatches,
             ) -> impl ::std::future::Future<Output = ::std::result::Result<(), Box<dyn ::std::error::Error>>> + '__a {
                 async move {
+                    #globals_bound_assert
                     #manual_dispatch_intercept
                     match matches.subcommand() {
                         #(#async_leaf_match_arms)*
@@ -1343,7 +1383,7 @@ fn generate_leaf_subcommand(
     let filtered: Vec<_> = regular_params
         .iter()
         .filter(|p| {
-            let kebab = p.name_str().to_kebab_case();
+            let kebab = cli_param_name(p);
             !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
         })
         .collect();
@@ -1421,7 +1461,7 @@ fn generate_slug_mount_subcommand(
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            let param_name = p.name_str().to_kebab_case();
+            let param_name = cli_param_name(p);
             let idx = i + 1; // clap indices are 1-based
             quote! {
                 ::server_less::clap::Arg::new(#param_name)
@@ -1523,9 +1563,20 @@ fn generate_arg(
     _has_defaults: bool,
     positional_index: Option<usize>,
 ) -> TokenStream2 {
-    let name = param.name_str().to_kebab_case();
+    let name = cli_param_name(param);
 
     let short = param.short_flag.map(|c| quote! { .short(#c) });
+
+    // Honor `#[param(default = ...)]` for value-bearing args. Bool flags are SetTrue
+    // (their default is implicitly absent=false) and vecs accumulate, so a scalar
+    // default applies only to positional / optional / required value args.
+    let default_clause = match &param.default_value {
+        Some(raw) if !param.is_bool && !param.is_vec => {
+            let dv = clap_default_value(raw);
+            quote! { .default_value(#dv) }
+        }
+        _ => quote! {},
+    };
 
     // Compute the leaf type for the value parser (strip Vec<> / Option<> wrappers).
     // SchemaValueParser<T> requires T: JsonSchema + FromStr; for non-enum types it
@@ -1584,6 +1635,7 @@ fn generate_arg(
                 .required(false)
                 .index(#idx)
                 #value_parser
+                #default_clause
                 #help
         }
     } else if param.is_optional {
@@ -1597,6 +1649,7 @@ fn generate_arg(
                 #short
                 .required(false)
                 #value_parser
+                #default_clause
                 #help
         }
     } else {
@@ -1610,6 +1663,7 @@ fn generate_arg(
                 #short
                 .required(false)
                 #value_parser
+                #default_clause
                 #help
         }
     }
@@ -1714,7 +1768,7 @@ fn generate_leaf_match_arm(
     // Generate regular parameter extractions
     for p in &regular_params {
         let name = &p.name;
-        let name_str = p.name_str().to_kebab_case();
+        let name_str = cli_param_name(p);
 
         // Check if this param is a global flag (extract from root matches)
         let is_global = global_flags.iter().any(|g| g.replace('_', "-") == name_str);
@@ -2054,11 +2108,34 @@ fn generate_leaf_match_arm(
         }
     });
 
+    // ── Global flag delivery (the capability-wiring invariant) ─────────
+    // Every declared `global = [...]` flag is delivered to the `CliGlobals` sink
+    // before the method runs. The call names the sink by trait, so omitting the
+    // `impl CliGlobals` is a compile error — a declared global can never be
+    // advertised-but-inert. Globals are `.global(true)`, so `sub_matches` (the
+    // leaf's matches, or the root for the default `None` arm) sees their values.
+    // Delivery happens after the schema/manual short-circuits (which exit without
+    // running the method) and before either extraction path, so both the normal
+    // and `--params-json` invocations receive the globals.
+    let global_delivery: Vec<TokenStream2> = global_flags
+        .iter()
+        .map(|flag| {
+            let kebab = flag.replace('_', "-");
+            quote! {
+                <Self as ::server_less::CliGlobals>::set_global_flag(
+                    self, #kebab, sub_matches.get_flag(#kebab),
+                );
+            }
+        })
+        .collect();
+
     let arm_body = quote! {
         #manual_arm
         // Schema flags: print and exit without running the method
         #input_schema_arm
         #output_schema_arm
+
+        #(#global_delivery)*
 
         // --params-json: extract all params from JSON blob
         if let Some(__params_json_str) = sub_matches.get_one::<String>("params-json") {
@@ -2245,7 +2322,7 @@ fn generate_slug_mount_manual_node(method: &MethodInfo) -> syn::Result<TokenStre
     let (_, regular_params) = partition_context_params(&method.params)?;
     let slug_names: Vec<String> = regular_params
         .iter()
-        .map(|p| format!("<{}>", p.name_str().to_kebab_case()))
+        .map(|p| format!("<{}>", cli_param_name(p)))
         .collect();
     let slug_suffix = if slug_names.is_empty() {
         String::new()
@@ -2332,7 +2409,7 @@ fn generate_slug_mount_arm(method: &MethodInfo) -> syn::Result<TokenStream2> {
 
     for p in regular_params {
         let name = &p.name;
-        let name_str = p.name_str().to_kebab_case();
+        let name_str = cli_param_name(p);
         let ty = &p.ty;
 
         slug_extractions.push(quote! {
@@ -2373,7 +2450,7 @@ fn generate_slug_mount_arm_async(
 
     for p in regular_params {
         let name = &p.name;
-        let name_str = p.name_str().to_kebab_case();
+        let name_str = cli_param_name(p);
         let ty = &p.ty;
 
         slug_extractions.push(quote! {

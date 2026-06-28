@@ -28,8 +28,10 @@
 //! cargo run --example cli_advanced -- connect --params-json '{"host":"db.example.com","port":"3306"}'
 //! ```
 
+use std::cell::Cell;
+
 use serde::{Deserialize, Serialize};
-use server_less::cli;
+use server_less::{CliGlobals, cli};
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Item {
@@ -43,8 +45,28 @@ impl std::fmt::Display for Item {
     }
 }
 
-#[derive(Clone)]
-pub struct AdvancedApp;
+#[derive(Clone, Default)]
+pub struct AdvancedApp {
+    /// Set by the `--verbose` global flag, delivered through the `CliGlobals` sink.
+    verbose: Cell<bool>,
+    /// Set by the `--debug` global flag.
+    debug: Cell<bool>,
+}
+
+// Declaring `global = [...]` requires a `CliGlobals` impl — the macro delivers each
+// global flag's value here before the matched method runs. There is no blanket default
+// impl, so omitting this would be a compile error (the flag could never be silently
+// inert). Resolution policy (here just "stash it") lives in this one method, not in
+// every command body.
+impl CliGlobals for AdvancedApp {
+    fn set_global_flag(&self, name: &str, value: bool) {
+        match name {
+            "verbose" => self.verbose.set(value),
+            "debug" => self.debug.set(value),
+            _ => {}
+        }
+    }
+}
 
 impl AdvancedApp {
     /// Runtime defaults for required parameters not provided on the command line.
@@ -99,17 +121,17 @@ impl AdvancedApp {
 impl AdvancedApp {
     /// List all items with custom formatting
     #[cli(display_with = "format_items")]
-    pub fn list_items(&self, verbose: bool) -> Vec<Item> {
+    pub fn list_items(&self) -> Vec<Item> {
         let items = self.seed_data();
-        if verbose {
+        if self.verbose.get() {
             eprintln!("[verbose] returning {} items", items.len());
         }
         items
     }
 
     /// Connect to a database (host and port have runtime defaults)
-    pub fn connect(&self, host: String, port: u16, verbose: bool) -> String {
-        if verbose {
+    pub fn connect(&self, host: String, port: u16) -> String {
+        if self.verbose.get() {
             eprintln!("[verbose] connecting to {}:{}", host, port);
         }
         format!("Connected to {}:{}", host, port)
@@ -123,6 +145,6 @@ impl AdvancedApp {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let app = AdvancedApp;
+    let app = AdvancedApp::default();
     app.cli_run()
 }

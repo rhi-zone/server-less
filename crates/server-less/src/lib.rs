@@ -272,6 +272,9 @@ pub use server_less_macros::cli;
 pub use server_less_core::CliSubcommand;
 
 #[cfg(feature = "cli")]
+pub use server_less_core::CliGlobals;
+
+#[cfg(feature = "cli")]
 pub use server_less_core::cli_format_output;
 
 #[cfg(feature = "cli")]
@@ -412,6 +415,8 @@ pub mod prelude {
     // Runtime protocols
     #[cfg(feature = "cli")]
     pub use super::CliSubcommand;
+    #[cfg(feature = "cli")]
+    pub use super::CliGlobals;
     #[cfg(feature = "http")]
     pub use super::HttpMount;
     #[cfg(feature = "jsonrpc")]

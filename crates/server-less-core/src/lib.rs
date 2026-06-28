@@ -159,6 +159,60 @@ pub trait CliSubcommand {
     }
 }
 
+/// Sink for `#[cli(global = [...])]` flag values.
+///
+/// When an impl declares `#[cli(global = [...])]`, the generated dispatch delivers
+/// each declared global flag's value to this trait — once per flag, before the matched
+/// method runs. The macro emits a `Self: CliGlobals` bound (by actually *calling*
+/// [`CliGlobals::set_global_flag`] in the dispatch code), so declaring `global` without
+/// implementing `CliGlobals` is a **compile error**. The flag can never be
+/// advertised-but-silently-inert: delivery is generated, and the sink it delivers to is
+/// named, so its absence is loud.
+///
+/// There is deliberately **no blanket default impl** (`impl<T> CliGlobals for T`). A
+/// default no-op would itself be a silent sink — it would satisfy the generated bound
+/// while doing nothing, re-creating the exact footgun the bound exists to prevent. Every
+/// service that declares `global` must implement this trait explicitly. See
+/// `docs/design/cli-capability-wiring-invariant.md`.
+///
+/// # Receiving values
+///
+/// `set_global_flag` takes `&self`, so a service that needs to stash the value uses
+/// interior mutability (e.g. `Cell<bool>`). TTY/config/root-aware resolution policy
+/// lives in this one method, written once per service — not duplicated into every
+/// command body.
+///
+/// ```ignore
+/// use std::cell::Cell;
+/// use server_less::{cli, CliGlobals};
+///
+/// #[derive(Default)]
+/// struct App { verbose: Cell<bool> }
+///
+/// impl CliGlobals for App {
+///     fn set_global_flag(&self, name: &str, value: bool) {
+///         if name == "verbose" { self.verbose.set(value); }
+///     }
+/// }
+///
+/// #[cli(name = "app", global = [verbose])]
+/// impl App {
+///     /// Do the thing
+///     fn run(&self) {
+///         if self.verbose.get() { eprintln!("[verbose]"); }
+///     }
+/// }
+/// ```
+#[cfg(feature = "cli")]
+pub trait CliGlobals {
+    /// Receive one declared global flag's parsed value.
+    ///
+    /// `name` is the flag as it appears on the command line — kebab-case, matching the
+    /// `--long` form (e.g. a `dry_run` global is delivered as `"dry-run"`). Called once
+    /// per declared global flag, before the matched method runs.
+    fn set_global_flag(&self, name: &str, value: bool);
+}
+
 /// Trait for types that can be mounted as MCP tool namespaces.
 ///
 /// Implemented automatically by `#[mcp]` on an impl block. Allows nested

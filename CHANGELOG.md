@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`CliGlobals` trait — the CLI capability-wiring invariant for `global = [...]`.**
+  Declaring `#[cli(global = [...])]` now requires implementing `CliGlobals`; the macro
+  delivers each declared global flag's parsed value to `set_global_flag(&self, name, value)`
+  before the matched method runs. The delivery call names the sink by trait, so omitting
+  the impl is a **compile error** (`E0277`) instead of a silently-inert flag. There is
+  deliberately **no blanket default impl** — a default no-op would itself be a silent sink,
+  re-creating the footgun. Flag names are delivered kebab-cased (`dry_run` → `"dry-run"`).
+  Resolution policy (TTY/config) lives in the one sink method, not duplicated per command.
+  See `docs/design/cli-capability-wiring-invariant.md`.
+- **`#[param(default = ...)]` honored by the CLI projection.** A value-bearing parameter
+  carrying a default is now wired to clap's `.default_value(...)`, so omitting it no longer
+  errors "missing required argument" — clap supplies the default. Previously the field was
+  parsed and discarded. (Additive.)
+
+### Changed
+
+- **BREAKING: `#[cli(global = [...])]` now requires `impl CliGlobals`.** Any service
+  declaring global flags must implement the new `CliGlobals` trait or it will fail to
+  compile. This is the intended forcing function that converts silently-inert global flags
+  into loud build errors. Migration: add
+  `impl CliGlobals for YourService { fn set_global_flag(&self, name: &str, value: bool) { /* stash/resolve */ } }`.
+- **`#[param(name = "...")]` now honored by the CLI projection.** The wire-name override
+  renames the clap arg id, the `--long` flag, and the extraction key (previously the
+  kebab-cased Rust identifier was used and the override silently dropped). This can rename
+  a flag for any consumer that carried a `#[param(name)]` it expected to be ignored.
+
 ## [0.5.0] - 2026-06-19
 
 ### Added

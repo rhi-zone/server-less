@@ -1,8 +1,45 @@
 # CLI capability-wiring invariant — closing the "declared-but-silently-inert" class
 
 **Date:** 2026-06-28
-**Status:** design / architecture investigation (no implementation yet)
-**Scope:** `crates/server-less-macros/src/cli.rs`, `crates/server-less-parse/src/lib.rs`
+**Status:** IMPLEMENTED (v0.6.0) for 3a (`global`/`CliGlobals`), 3c (`#[param(name)]`,
+`#[param(default)]`). 3b (`display_with` opaque body) and 3d (`defaults` on all-optional
+impl) remain open — see §8 and TODO. The `compile_error!` interim guard of §3a was
+**subsumed** by the `CliGlobals` bound (see "Reconciliation" below).
+**Scope:** `crates/server-less-macros/src/cli.rs`, `crates/server-less-parse/src/lib.rs`,
+`crates/server-less-core/src/lib.rs` (the `CliGlobals` trait)
+
+> **Implementation note (2026-06-29).** Landed the structural centerpiece (3a) and both
+> cheap codegen fixes (3c). Key code: `CliGlobals` trait in
+> `crates/server-less-core/src/lib.rs`; per-leaf delivery `<Self as CliGlobals>::set_global_flag(...)`
+> + leaf-less-edge bound assertion in `crates/server-less-macros/src/cli.rs`
+> (`generate_leaf_match_arm` / `generate_cli`); `cli_param_name` honors `wire_name` at every
+> flag-name + extraction site; `clap_default_value` + `default_clause` in `generate_arg`.
+> Compile-fail proof: `crates/server-less/tests/fixtures/cli_global_without_sink.rs`
+> (`.stderr` = `E0277: the trait bound MyApp: CliGlobals is not satisfied`). Compile-pass:
+> `test_param_name_renames_flag`, `test_param_default_sets_clap_default`,
+> `test_cli_globals_delivers_flag_values` in `tests/cli_tests.rs`.
+>
+> **Reconciliation of the §3a interim `compile_error!` (design-D param-presence variant):**
+> it is now **subsumed and dropped**, not implemented. Its purpose was to require a method
+> to re-declare a matching param so a global flag's value would reach the body. With
+> `CliGlobals`, the global is delivered to the *sink*, not to method params — so requiring a
+> matching param would be backwards. The `Self: CliGlobals` bound is strictly stronger
+> (it enforces the existence of the *termination*, which the param-presence check never did)
+> and is enforced unconditionally (per-leaf delivery + a leaf-less-edge assertion). The
+> legacy "receive a global via a matching param" path is *kept* as backward-compatible
+> convenience (it's no longer load-bearing for the invariant), so adding `CliGlobals` is the
+> only migration existing `global` consumers need.
+>
+> **Param-name scope decision:** `wire_name` is honored only on the CLI *flag* surface
+> (clap arg id / `--long` / extraction key / slug positional). The `--params-json` and
+> input/output-schema surfaces continue to key on the raw `name_str()` — they already used
+> snake-case while flags used kebab, so this preserves the existing surface split rather
+> than widening scope. Recorded as a deliberate, reviewable choice.
+>
+> **Decision kept, not subtracted:** per §8, we adopted `CliGlobals` (the minimal,
+> name-referenced delivery hook) and did **not** pursue design-A (`render(mode)` subtraction
+> of `display_with`). 3b therefore remains a partial footgun (CI-guardable only); the
+> normalize-side `display_with`→`render` subtraction is the separable follow-on.
 **Triggering case:** the `--pretty` footgun documented in
 `normalize/docs/artifacts/sessions-stats-output-2026-06-20/` (`pretty-wiring-audit.md`,
 `design-A-subtract.md`, `design-D-build-guard.md`, `judge-feasibility.md`). This doc

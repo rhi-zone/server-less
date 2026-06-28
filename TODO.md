@@ -142,24 +142,24 @@ Design: [`docs/design/cli-capability-wiring-invariant.md`](./docs/design/cli-cap
 Invariant: every `#[cli]` capability must be **macro-terminated** or **name-referenced**;
 never **convention-referenced** or **ignored**. Audit found these violations:
 
-- [ ] **`#[param(name = "...")]` ignored by CLI projection** — `wire_name` is read only for
-  method/subcommand naming (`cli.rs:512`), never for param flags; arg-gen + extraction use
-  `name_str().to_kebab_case()` (`cli.rs:1526,1717`). Fix: honor `param.wire_name` in
-  `generate_arg` and every extraction site. (Behavior change — renames a flag that was
-  silently using the Rust name; gate in a minor bump.)
-- [ ] **`#[param(default = ...)]` ignored by CLI projection** — `default_value` has zero
-  references in `cli.rs`; a required param with `default` still errors "Missing required
-  argument". Fix: honor it (`.default_value(...)` / make optional) **or** `compile_error!`
-  directing to `#[cli(defaults = "fn")]`. (Additive.)
-- [ ] **`global = [...]` is convention-referenced (THE class exemplar)** — flag advertised
-  (`cli.rs:1003`) but delivered to the body only if the method re-declares a matching param
-  (`cli.rs:1715-1732`), and the effect is fully hand-written. Fix: register↔consume ledger +
-  a named `CliGlobals` sink the macro delivers to, with a generated `Self: CliGlobals` bound
-  (verified `E0277` on omission). **No blanket default impl** — a default no-op is itself a
-  silent sink. (Breaking for `global` declarers — intended forcing function.)
-  - Interim: the design-D `compile_error!` for the param-presence variant (macro sees
-    `global_flags` + every method's params at one expansion; precedent
-    `check_reserved_flag_collisions` `cli.rs:384`).
+- [x] **`#[param(name = "...")]` ignored by CLI projection** ✅ (v0.6.0) Honored via
+  `cli_param_name()` at every flag-name + extraction site (`generate_arg`, leaf extraction,
+  slug positional, collision/filter checks). Scope: CLI flag surface only — `--params-json`
+  and schema surfaces keep raw `name_str()` (preserves the pre-existing snake/kebab split).
+  Tests: `test_param_name_renames_flag`, `test_param_name_dispatch_uses_renamed_flag`.
+- [x] **`#[param(default = ...)]` ignored by CLI projection** ✅ (v0.6.0) Honored via
+  `clap_default_value()` → `.default_value(...)` in `generate_arg` for positional/optional/
+  required value args (bool/vec excluded). Omitting a required-with-default param no longer
+  errors. Tests: `test_param_default_sets_clap_default`, `test_param_default_dispatch_without_arg`.
+- [x] **`global = [...]` is convention-referenced (THE class exemplar)** ✅ (v0.6.0)
+  New `CliGlobals` trait in `server-less-core` (no blanket default impl). The macro delivers
+  every declared global to `set_global_flag(&self, name, value)` per leaf (+ a leaf-less-edge
+  bound assertion in `cli_dispatch`), so omitting `impl CliGlobals` is `E0277`. Compile-fail
+  proof: `tests/fixtures/cli_global_without_sink.rs`. Legacy "receive via matching param" path
+  kept as backward-compat convenience (no longer load-bearing).
+  - The design-D `compile_error!` param-presence interim was **subsumed and dropped** — the
+    `Self: CliGlobals` bound is strictly stronger and unconditional. See design doc
+    "Reconciliation". Migration for `global` consumers = add the `impl CliGlobals`.
 - [ ] **`display_with = "fn"` opaque body** — name-referenced (missing fn is a compile error)
   but the macro can't see the body, so it can silently ignore the flags it should honor.
   Not guard-closable. Decide (human call, design doc §8): adopt `CliGlobals` (keeps
@@ -168,6 +168,16 @@ never **convention-referenced** or **ignored**. Audit found these violations:
   (`design-A-subtract.md`, `design-D-build-guard.md`, `judge-feasibility.md`).
 - [ ] **`defaults = "fn"` on an all-`Option` impl** — resolver only consulted for required
   params (`cli.rs:1771`); declared-but-never-called otherwise. Low priority `compile_error!`.
+
+**Follow-on (after v0.6.0 lands):**
+- [ ] **normalize adoption of v0.6.0** — normalize pins a server-less version and will hit
+  the breaking `CliGlobals` bound on its 8 `global`-using commands. It adopts separately:
+  bump the pin, add `impl CliGlobals` (the natural home for its root-aware/TTY `--pretty`
+  resolution), and convert the 8 silent bugs into wired delivery. (Cross-repo; tracked in
+  normalize's TODO, not here.)
+- [ ] **`display_with`→`render` subtraction (design-A)** — the deeper 3b fix that makes the
+  "dead dispatch" footgun unrepresentable. Breaking rendering-contract change; sequence after
+  normalize is on 0.6.0. Separable from this landing.
 
 ### Polish & Hardening
 
