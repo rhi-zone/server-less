@@ -136,6 +136,39 @@ How do implementors know what server-less can do, at the moment they need it?
 
 > **Not planned here** — requires rust-analyzer plugin / LSP work outside this repo. Server-less improves span quality (which helps IDEs) but can't drive IDE integration itself.
 
+### CLI capability-wiring invariant — close the "declared-but-silently-inert" class
+
+Design: [`docs/design/cli-capability-wiring-invariant.md`](./docs/design/cli-capability-wiring-invariant.md).
+Invariant: every `#[cli]` capability must be **macro-terminated** or **name-referenced**;
+never **convention-referenced** or **ignored**. Audit found these violations:
+
+- [ ] **`#[param(name = "...")]` ignored by CLI projection** — `wire_name` is read only for
+  method/subcommand naming (`cli.rs:512`), never for param flags; arg-gen + extraction use
+  `name_str().to_kebab_case()` (`cli.rs:1526,1717`). Fix: honor `param.wire_name` in
+  `generate_arg` and every extraction site. (Behavior change — renames a flag that was
+  silently using the Rust name; gate in a minor bump.)
+- [ ] **`#[param(default = ...)]` ignored by CLI projection** — `default_value` has zero
+  references in `cli.rs`; a required param with `default` still errors "Missing required
+  argument". Fix: honor it (`.default_value(...)` / make optional) **or** `compile_error!`
+  directing to `#[cli(defaults = "fn")]`. (Additive.)
+- [ ] **`global = [...]` is convention-referenced (THE class exemplar)** — flag advertised
+  (`cli.rs:1003`) but delivered to the body only if the method re-declares a matching param
+  (`cli.rs:1715-1732`), and the effect is fully hand-written. Fix: register↔consume ledger +
+  a named `CliGlobals` sink the macro delivers to, with a generated `Self: CliGlobals` bound
+  (verified `E0277` on omission). **No blanket default impl** — a default no-op is itself a
+  silent sink. (Breaking for `global` declarers — intended forcing function.)
+  - Interim: the design-D `compile_error!` for the param-presence variant (macro sees
+    `global_flags` + every method's params at one expansion; precedent
+    `check_reserved_flag_collisions` `cli.rs:384`).
+- [ ] **`display_with = "fn"` opaque body** — name-referenced (missing fn is a compile error)
+  but the macro can't see the body, so it can silently ignore the flags it should honor.
+  Not guard-closable. Decide (human call, design doc §8): adopt `CliGlobals` (keeps
+  `display_with`, 3b stays CI-guarded) **or** subtract the bridge via design-A `render(mode)`
+  (makes 3b unrepresentable; breaking, cross-repo). See the four normalize design docs
+  (`design-A-subtract.md`, `design-D-build-guard.md`, `judge-feasibility.md`).
+- [ ] **`defaults = "fn"` on an all-`Option` impl** — resolver only consulted for required
+  params (`cli.rs:1771`); declared-but-never-called otherwise. Low priority `compile_error!`.
+
 ### Polish & Hardening
 
 - [x] Add `trybuild` compile-fail tests (3 fixtures: missing_self, invalid_http_arg, duplicate_route)

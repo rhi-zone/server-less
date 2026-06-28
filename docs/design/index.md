@@ -20,6 +20,7 @@ Architecture decisions and design philosophy for server-less.
 
 - [CLI Attributes](./cli-attributes.md) — Method-level `#[cli(...)]` attributes: `default`, `hidden`, `skip`, `helper`, `name`, `display_with`
 - [CLI Output Formatting](./cli-output-formatting.md) — Display default, `--json`/`--jq`/`--output-schema`
+- [CLI Capability-Wiring Invariant](./cli-capability-wiring-invariant.md) — the "declared-but-silently-inert" footgun class, the macro-terminated/name-referenced/convention-referenced taxonomy, and the register↔consume ledger that closes it
 - [Route & Response Attributes](./route-response-attrs.md) — `#[route]` and `#[response]` HTTP overrides
 - [Mount Points](./mount-points.md) — Nested subcommand composition via `&T` return types
 - [OpenAPI Composition](./openapi-composition.md) — Multi-protocol OpenAPI spec composition
