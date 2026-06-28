@@ -1,10 +1,11 @@
 # CLI capability-wiring invariant — closing the "declared-but-silently-inert" class
 
 **Date:** 2026-06-28
-**Status:** IMPLEMENTED (v0.6.0) for 3a (`global`/`CliGlobals`), 3c (`#[param(name)]`,
-`#[param(default)]`). 3b (`display_with` opaque body) and 3d (`defaults` on all-optional
-impl) remain open — see §8 and TODO. The `compile_error!` interim guard of §3a was
-**subsumed** by the `CliGlobals` bound (see "Reconciliation" below).
+**Status:** IMPLEMENTED (v0.6.0) for 3a (`global`/`CliGlobals`, now a *single mechanism* —
+the legacy receive-via-matching-param path is removed; see the 2026-06-29 note below), 3c
+(`#[param(name)]`, `#[param(default)]`). 3b (`display_with` opaque body) and 3d (`defaults`
+on all-optional impl) remain open — see §8 and TODO. The `compile_error!` interim guard of
+§3a was **subsumed** by the `CliGlobals` bound (see "Reconciliation" below).
 **Scope:** `crates/server-less-macros/src/cli.rs`, `crates/server-less-parse/src/lib.rs`,
 `crates/server-less-core/src/lib.rs` (the `CliGlobals` trait)
 
@@ -25,10 +26,25 @@ impl) remain open — see §8 and TODO. The `compile_error!` interim guard of §
 > `CliGlobals`, the global is delivered to the *sink*, not to method params — so requiring a
 > matching param would be backwards. The `Self: CliGlobals` bound is strictly stronger
 > (it enforces the existence of the *termination*, which the param-presence check never did)
-> and is enforced unconditionally (per-leaf delivery + a leaf-less-edge assertion). The
-> legacy "receive a global via a matching param" path is *kept* as backward-compatible
-> convenience (it's no longer load-bearing for the invariant), so adding `CliGlobals` is the
-> only migration existing `global` consumers need.
+> and is enforced unconditionally (per-leaf delivery + a leaf-less-edge assertion).
+>
+> **Single-mechanism break (2026-06-29).** The legacy "receive a global via a matching
+> param" path — kept on the first landing as backward-compat convenience — is now
+> **removed**. `CliGlobals` is the *one and only* way a declared global flag is received.
+> The macro no longer special-cases a method param whose name matches a declared global:
+> there is no implicit "this param receives the global" wiring, and globals are no longer
+> filtered out of a leaf's clap args (the filter was the legacy path's other half). A method
+> param that shares a declared global's flag name is now a **compile error**, handled by the
+> same `check_reserved_flag_collisions` guard that already rejects params colliding with the
+> built-in global flags (`--json`, `--manual`, …). Rationale: a declared global is registered
+> on the root with `.global(true)`, so a same-named subcommand arg would (a) collide at
+> clap-build time and (b) *look* like it receives the global while never being auto-filled —
+> exactly the silent footgun the invariant forbids. Treating it as an ordinary arg was
+> rejected because the clap collision makes it a runtime panic, not a clean arg; a loud
+> compile error is the only behavior consistent with "no convention-referenced or ignored
+> capability." Compile-fail proof: `tests/fixtures/cli_param_matches_global.rs`
+> (`.stderr` spans the offending parameter). This is part of the same unreleased 0.6.0
+> breaking change — no separate version bump.
 >
 > **Param-name scope decision:** `wire_name` is honored only on the CLI *flag* surface
 > (clap arg id / `--long` / extraction key / slug positional). The `--params-json` and
@@ -150,7 +166,8 @@ params, (ii) the body mutates some `self.pretty` state, and (iii) a `display_wit
 that state, the flag does nothing. Omit any link → silent text fallback. The audit found
 **8 live BROKEN commands** in normalize this way.
 
-**Evidence — advertisement without termination:**
+**Evidence — advertisement without termination (pre-fix; line refs are historical, the
+`is_global` path described here has since been removed — see the 2026-06-29 note above):**
 - Advertisement: every `global` entry becomes a clap arg on the root, `.global(true)`,
   with no consumption code (`cli.rs:1003-1021`).
 - Delivery is *convention only*: in `generate_leaf_match_arm`, a global flag's value is
@@ -264,7 +281,7 @@ re-emerging.
 
 | footgun | remedy | becomes |
 |---|---|---|
-| **3a `global` delivery** | the ledger mechanism: macro generates delivery to a named `CliGlobals` sink; **no blanket default impl** (a default no-op *is* a silent sink — it would re-create the footgun). Declaring `global` ⇒ `Self: CliGlobals` enforced by a generated bound. | **name-referenced** (compile error if unwired) |
+| **3a `global` delivery** | the ledger mechanism: macro generates delivery to a named `CliGlobals` sink; **no blanket default impl** (a default no-op *is* a silent sink — it would re-create the footgun). Declaring `global` ⇒ `Self: CliGlobals` enforced by a generated bound. **The sink is the sole delivery mechanism** — the legacy receive-via-matching-param path is removed; a param sharing a global's flag name is a compile error (`check_reserved_flag_collisions`). | **name-referenced** (compile error if unwired) |
 | **3a effect (config/TTY resolution)** | resolution moves into the *one* sink method, written once per service, not per leaf body. Server-less stays ignorant of `NormalizeConfig`; it owns *dispatch*, the consumer owns *policy*. | macro-terminated dispatch + name-referenced policy |
 | **3b `display_with` opaque body** | cannot be guarded (body opaque). Two routes: **(A, preferred long-term)** subtract it — replace `display_with` + `Cell` with one macro-driven `render(mode)` call (design-A); the bridge ceases to exist, so "dead dispatch" is unrepresentable. **(fallback)** a behavioral CI snapshot test (design-D Layer 3). | (A) macro-terminated; (fallback) CI-detected |
 | **3c `#[param(name)]`** | **honor it**: read `param.wire_name` in `generate_arg` and in all extraction sites instead of `name_str()`. Purely additive codegen fix. | macro-terminated |

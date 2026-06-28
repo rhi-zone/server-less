@@ -384,6 +384,7 @@ fn has_cli_manual_false(method: &MethodInfo) -> bool {
 fn check_reserved_flag_collisions(
     partitioned: &server_less_parse::PartitionedMethods,
     meta: MetaFlags,
+    global_flags: &[String],
 ) -> syn::Result<()> {
     // Build the reserved set for a command whose meta-surfaces are governed by
     // `surfaces`. (flag-name, "what reserves it"). The four always-on format flags
@@ -425,6 +426,25 @@ fn check_reserved_flag_collisions(
     let leaf_reserved = reserved_for(meta);
     let slug_reserved = reserved_for(all_on);
 
+    // Declared `global = [...]` flags are registered on the root with `.global(true)`,
+    // so they propagate into every subcommand's matches. A regular parameter whose flag
+    // name matches one would make clap panic at runtime (duplicate arg id) — and, since
+    // globals are delivered solely through the `CliGlobals` sink, such a param would
+    // *look* like it receives the global but never does. Reserve every declared global's
+    // kebab name on both leaf and slug commands so the collision is a loud compile error,
+    // never a silent footgun. (This is what replaces the legacy receive-via-matching-param
+    // path: a matching param is now rejected, not silently auto-filled.)
+    let global_reserved: Vec<(String, &'static str)> = global_flags
+        .iter()
+        .map(|g| {
+            (
+                g.replace('_', "-"),
+                "a declared `global = [...]` flag — delivered via the CliGlobals sink, \
+                 not method params",
+            )
+        })
+        .collect();
+
     let groups = [
         (&partitioned.leaf, &leaf_reserved),
         (&partitioned.slug_mounts, &slug_reserved),
@@ -444,6 +464,24 @@ fn check_reserved_flag_collisions(
                              flag name matches one would make clap panic at runtime. Rename the Rust \
                              parameter, or disable the conflicting meta-surface (e.g. \
                              #[cli(manual = false)]).",
+                            param = p.name_str(),
+                        ),
+                    ));
+                }
+                if let Some((flag, what)) =
+                    global_reserved.iter().find(|(name, _)| name == &kebab)
+                {
+                    return Err(syn::Error::new(
+                        p.name.span(),
+                        format!(
+                            "parameter `{param}` collides with `--{flag}` — {what}\n\
+                             \n\
+                             A declared `global = [...]` flag is registered on the root with \
+                             `.global(true)` and is delivered only through the `CliGlobals` sink \
+                             (`set_global_flag`). A method parameter that shares its flag name would \
+                             collide with the root flag at clap-build time and would never be \
+                             auto-filled from the global. Rename the parameter, and read the global's \
+                             value from your `CliGlobals` impl instead.",
                             param = p.name_str(),
                         ),
                     ));
@@ -671,7 +709,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     // Reserved-name collision guard: a regular parameter whose kebab flag name
     // collides with a *currently-injected* global flag is a compile error spanned
     // to the parameter. Disabling a meta-surface frees its name.
-    check_reserved_flag_collisions(&partitioned, meta)?;
+    check_reserved_flag_collisions(&partitioned, meta, &global_flags)?;
 
     // Resolve method groups — consider all methods (leaf + mounts) for group discovery
     let group_registry = extract_groups(&impl_block)?;
@@ -697,7 +735,6 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
         .map(|m| {
             let sub = generate_leaf_subcommand(
                 m,
-                &global_flags,
                 has_defaults,
                 has_cli_hidden(m) || has_groups,
             )?;
@@ -838,15 +875,8 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
     // `app --flag` are parsed (and shown in `app --help`) when no subcommand is specified.
     let default_parent_args: Vec<TokenStream2> = if let Some(dm) = default_method {
         let (_, regular_params) = partition_context_params(&dm.params)?;
-        let filtered: Vec<_> = regular_params
-            .iter()
-            .filter(|p| {
-                let kebab = cli_param_name(p);
-                !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
-            })
-            .collect();
         let mut pos_idx = 0usize;
-        filtered
+        regular_params
             .iter()
             .map(|p| {
                 let idx = if p.is_positional {
@@ -855,7 +885,7 @@ pub(crate) fn expand_cli(args: CliArgs, mut impl_block: ItemImpl) -> syn::Result
                 } else {
                     None
                 };
-                generate_arg(p, &global_flags, has_defaults, idx)
+                generate_arg(p, has_defaults, idx)
             })
             .collect()
     } else {
@@ -1367,7 +1397,6 @@ fn split_docs(docs: &Option<String>) -> (String, Option<String>) {
 
 fn generate_leaf_subcommand(
     method: &MethodInfo,
-    global_flags: &[String],
     has_defaults: bool,
     hidden: bool,
 ) -> syn::Result<TokenStream2> {
@@ -1379,16 +1408,12 @@ fn generate_leaf_subcommand(
     // Filter out Context parameters - they're injected, not CLI args
     let (_, regular_params) = partition_context_params(&method.params)?;
 
-    // Generate args, skipping params that are global flags
-    let filtered: Vec<_> = regular_params
-        .iter()
-        .filter(|p| {
-            let kebab = cli_param_name(p);
-            !global_flags.iter().any(|g| g.replace('_', "-") == kebab)
-        })
-        .collect();
+    // Every regular param becomes a clap arg. Params can never name a declared global
+    // flag (that is a compile error in `check_reserved_flag_collisions`), so there is
+    // nothing to filter — globals live solely on the root and reach the body via the
+    // `CliGlobals` sink, not method params.
     let mut pos_idx = 0usize;
-    let args: Vec<_> = filtered
+    let args: Vec<_> = regular_params
         .iter()
         .map(|p| {
             let idx = if p.is_positional {
@@ -1397,7 +1422,7 @@ fn generate_leaf_subcommand(
             } else {
                 None
             };
-            generate_arg(p, global_flags, has_defaults, idx)
+            generate_arg(p, has_defaults, idx)
         })
         .collect();
 
@@ -1559,7 +1584,6 @@ fn type_to_json_schema_ty(ty: &syn::Type) -> TokenStream2 {
 
 fn generate_arg(
     param: &ParamInfo,
-    _global_flags: &[String],
     _has_defaults: bool,
     positional_index: Option<usize>,
 ) -> TokenStream2 {
@@ -1770,20 +1794,10 @@ fn generate_leaf_match_arm(
         let name = &p.name;
         let name_str = cli_param_name(p);
 
-        // Check if this param is a global flag (extract from root matches)
-        let is_global = global_flags.iter().any(|g| g.replace('_', "-") == name_str);
-
         if p.is_bool {
-            if is_global {
-                // Global flags: clap propagates them into sub_matches
-                arg_extractions.push(quote! {
-                    let #name: bool = sub_matches.get_flag(#name_str);
-                });
-            } else {
-                arg_extractions.push(quote! {
-                    let #name: bool = sub_matches.get_flag(#name_str);
-                });
-            }
+            arg_extractions.push(quote! {
+                let #name: bool = sub_matches.get_flag(#name_str);
+            });
         } else if p.is_vec {
             // When jsonschema is active, the value_parser stores inner type T directly.
             // Otherwise, values are stored as String and parsed here.

@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   compile. This is the intended forcing function that converts silently-inert global flags
   into loud build errors. Migration: add
   `impl CliGlobals for YourService { fn set_global_flag(&self, name: &str, value: bool) { /* stash/resolve */ } }`.
+- **BREAKING: `CliGlobals` is the *sole* way a declared global flag is received — the
+  legacy receive-via-matching-param path is removed.** Previously a global's value could
+  *also* reach a method body through a method parameter whose name matched the flag (an
+  implicit, convention-referenced wiring). That path is gone: globals are delivered only to
+  `set_global_flag`. A method parameter that shares a declared global's flag name is now a
+  **compile error** (it would collide with the root `.global(true)` flag at clap-build time
+  and would silently never be auto-filled), consistent with the existing collision guard for
+  built-in global flags. Migration: drop the matching parameter and read the value from your
+  `CliGlobals` impl (e.g. stash it in a `Cell`).
 - **`#[param(name = "...")]` now honored by the CLI projection.** The wire-name override
   renames the clap arg id, the `--long` flag, and the extraction key (previously the
   kebab-cased Rust identifier was used and the override silently dropped). This can rename

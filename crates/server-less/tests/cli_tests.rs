@@ -665,21 +665,28 @@ fn test_vec_dispatch_empty() {
 
 // ── Global flag tests ─────────────────────────────────────────────────
 
-#[derive(Clone)]
-struct GlobalApp;
+#[derive(Clone, Default)]
+struct GlobalApp {
+    verbose: std::cell::Cell<bool>,
+}
 
 // Declaring `global = [...]` requires a `CliGlobals` sink (no blanket default impl).
-// This service receives its globals through method params (legacy convenience path),
-// so the sink itself is a no-op — the bound just proves the wiring is present.
+// Globals are delivered *solely* through the sink — the macro no longer auto-fills a
+// matching method param (declaring one is now a compile error). This service stashes
+// `--verbose` here for `list` to read.
 impl server_less::CliGlobals for GlobalApp {
-    fn set_global_flag(&self, _name: &str, _value: bool) {}
+    fn set_global_flag(&self, name: &str, value: bool) {
+        if name == "verbose" {
+            self.verbose.set(value);
+        }
+    }
 }
 
 #[cli(name = "global-app", global = [verbose, dry_run])]
 impl GlobalApp {
     /// List things
-    pub fn list(&self, verbose: bool, dry_run: bool) -> Vec<String> {
-        if verbose {
+    pub fn list(&self) -> Vec<String> {
+        if self.verbose.get() {
             vec!["verbose-item".to_string()]
         } else {
             vec!["item".to_string()]
@@ -704,14 +711,14 @@ fn test_global_flags_on_root_command() {
 
 #[test]
 fn test_global_flag_before_subcommand() {
-    let app = GlobalApp;
+    let app = GlobalApp::default();
     let result = app.cli_run_with(["global-app", "--verbose", "list"]);
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_global_flag_after_subcommand() {
-    let app = GlobalApp;
+    let app = GlobalApp::default();
     let result = app.cli_run_with(["global-app", "list", "--verbose"]);
     assert!(result.is_ok());
 }

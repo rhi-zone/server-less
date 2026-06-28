@@ -155,11 +155,19 @@ never **convention-referenced** or **ignored**. Audit found these violations:
   New `CliGlobals` trait in `server-less-core` (no blanket default impl). The macro delivers
   every declared global to `set_global_flag(&self, name, value)` per leaf (+ a leaf-less-edge
   bound assertion in `cli_dispatch`), so omitting `impl CliGlobals` is `E0277`. Compile-fail
-  proof: `tests/fixtures/cli_global_without_sink.rs`. Legacy "receive via matching param" path
-  kept as backward-compat convenience (no longer load-bearing).
+  proof: `tests/fixtures/cli_global_without_sink.rs`.
   - The design-D `compile_error!` param-presence interim was **subsumed and dropped** — the
     `Self: CliGlobals` bound is strictly stronger and unconditional. See design doc
     "Reconciliation". Migration for `global` consumers = add the `impl CliGlobals`.
+  - **Single-mechanism break (folded into 0.6.0, 2026-06-29):** the legacy "receive via
+    matching param" path is **removed** — `CliGlobals` is the sole delivery mechanism. The
+    macro no longer special-cases a param whose name matches a declared global (no implicit
+    wiring, no leaf-arg filtering). A param sharing a global's flag name is now a compile
+    error via `check_reserved_flag_collisions` (same guard as built-in global flags), because
+    a same-named arg would collide with the root `.global(true)` flag and never be auto-filled
+    — a silent footgun. Compile-fail proof: `tests/fixtures/cli_param_matches_global.rs`.
+    Internal consumer migrated: `cli_tests.rs` `GlobalApp` now reads `--verbose` via its
+    `CliGlobals` impl (a `Cell`) instead of a method param.
 - [ ] **`display_with = "fn"` opaque body** — name-referenced (missing fn is a compile error)
   but the macro can't see the body, so it can silently ignore the flags it should honor.
   Not guard-closable. Decide (human call, design doc §8): adopt `CliGlobals` (keeps
