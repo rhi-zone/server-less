@@ -43,6 +43,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   kebab-cased Rust identifier was used and the override silently dropped). This can rename
   a flag for any consumer that carried a `#[param(name)]` it expected to be ignored.
 
+### Fixed
+
+- **CLI errors are now structured under `--json`/`--jsonl`/`--jq`.** When a `Result`-returning
+  command returns `Err`, the generated CLI dispatch previously always printed the error as plain
+  text on stderr regardless of the active output format. It now emits `{"error": "<message>"}`
+  on stdout (still exiting non-zero) when a structured-output flag is active, so programmatic
+  consumers get a parseable error object instead of plain text on the wrong stream. Plain-text
+  stderr is unchanged for the default (human) format.
+
 ## [0.5.0] - 2026-06-19
 
 ### Added

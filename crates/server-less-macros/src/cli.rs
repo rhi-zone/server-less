@@ -2039,7 +2039,22 @@ fn generate_leaf_match_arm(
                     #display_code
                 }
                 Err(err) => {
-                    eprintln!("{}", err);
+                    // Structured errors for programmatic consumers: under
+                    // `--json`/`--jsonl`/`--jq`, emit `{"error": "<msg>"}` on
+                    // stdout so callers get a parseable object instead of plain
+                    // text on stderr. Exit non-zero in every format.
+                    let __err_msg = ::std::format!("{}", err);
+                    if __json || __jsonl || __jq.is_some() {
+                        let __err_val = ::server_less::serde_json::json!({ "error": __err_msg });
+                        match ::server_less::cli_format_output(
+                            __err_val, __jsonl, __json, __jq.map(|s| s.as_str()),
+                        ) {
+                            Ok(__formatted) => println!("{}", __formatted),
+                            Err(_) => eprintln!("{}", __err_msg),
+                        }
+                    } else {
+                        eprintln!("{}", __err_msg);
+                    }
                     ::std::process::exit(1);
                 }
             }
