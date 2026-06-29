@@ -1,0 +1,7 @@
+error: parameter `verbose` collides with `--verbose` — a declared `global = [...]` flag — delivered via the CliGlobals sink, not method params
+
+       A declared `global = [...]` flag is registered on the root with `.global(true)` and is delivered only through the `CliGlobals` sink (`set_global_flag`). A method parameter that shares its flag name would collide with the root flag at clap-build time and would never be auto-filled from the global. Rename the parameter, and read the global's value from your `CliGlobals` impl instead.
+  --> tests/fixtures/cli_param_matches_global.rs:18:20
+   |
+18 |     fn list(&self, verbose: bool) {
+   |                    ^^^^^^^

@@ -136,6 +136,57 @@ How do implementors know what server-less can do, at the moment they need it?
 
 > **Not planned here** — requires rust-analyzer plugin / LSP work outside this repo. Server-less improves span quality (which helps IDEs) but can't drive IDE integration itself.
 
+### CLI capability-wiring invariant — close the "declared-but-silently-inert" class
+
+Design: [`docs/design/cli-capability-wiring-invariant.md`](./docs/design/cli-capability-wiring-invariant.md).
+Invariant: every `#[cli]` capability must be **macro-terminated** or **name-referenced**;
+never **convention-referenced** or **ignored**. Audit found these violations:
+
+- [x] **`#[param(name = "...")]` ignored by CLI projection** ✅ (v0.6.0) Honored via
+  `cli_param_name()` at every flag-name + extraction site (`generate_arg`, leaf extraction,
+  slug positional, collision/filter checks). Scope: CLI flag surface only — `--params-json`
+  and schema surfaces keep raw `name_str()` (preserves the pre-existing snake/kebab split).
+  Tests: `test_param_name_renames_flag`, `test_param_name_dispatch_uses_renamed_flag`.
+- [x] **`#[param(default = ...)]` ignored by CLI projection** ✅ (v0.6.0) Honored via
+  `clap_default_value()` → `.default_value(...)` in `generate_arg` for positional/optional/
+  required value args (bool/vec excluded). Omitting a required-with-default param no longer
+  errors. Tests: `test_param_default_sets_clap_default`, `test_param_default_dispatch_without_arg`.
+- [x] **`global = [...]` is convention-referenced (THE class exemplar)** ✅ (v0.6.0)
+  New `CliGlobals` trait in `server-less-core` (no blanket default impl). The macro delivers
+  every declared global to `set_global_flag(&self, name, value)` per leaf (+ a leaf-less-edge
+  bound assertion in `cli_dispatch`), so omitting `impl CliGlobals` is `E0277`. Compile-fail
+  proof: `tests/fixtures/cli_global_without_sink.rs`.
+  - The design-D `compile_error!` param-presence interim was **subsumed and dropped** — the
+    `Self: CliGlobals` bound is strictly stronger and unconditional. See design doc
+    "Reconciliation". Migration for `global` consumers = add the `impl CliGlobals`.
+  - **Single-mechanism break (folded into 0.6.0, 2026-06-29):** the legacy "receive via
+    matching param" path is **removed** — `CliGlobals` is the sole delivery mechanism. The
+    macro no longer special-cases a param whose name matches a declared global (no implicit
+    wiring, no leaf-arg filtering). A param sharing a global's flag name is now a compile
+    error via `check_reserved_flag_collisions` (same guard as built-in global flags), because
+    a same-named arg would collide with the root `.global(true)` flag and never be auto-filled
+    — a silent footgun. Compile-fail proof: `tests/fixtures/cli_param_matches_global.rs`.
+    Internal consumer migrated: `cli_tests.rs` `GlobalApp` now reads `--verbose` via its
+    `CliGlobals` impl (a `Cell`) instead of a method param.
+- [ ] **`display_with = "fn"` opaque body** — name-referenced (missing fn is a compile error)
+  but the macro can't see the body, so it can silently ignore the flags it should honor.
+  Not guard-closable. Decide (human call, design doc §8): adopt `CliGlobals` (keeps
+  `display_with`, 3b stays CI-guarded) **or** subtract the bridge via design-A `render(mode)`
+  (makes 3b unrepresentable; breaking, cross-repo). See the four normalize design docs
+  (`design-A-subtract.md`, `design-D-build-guard.md`, `judge-feasibility.md`).
+- [ ] **`defaults = "fn"` on an all-`Option` impl** — resolver only consulted for required
+  params (`cli.rs:1771`); declared-but-never-called otherwise. Low priority `compile_error!`.
+
+**Follow-on (after v0.6.0 lands):**
+- [ ] **normalize adoption of v0.6.0** — normalize pins a server-less version and will hit
+  the breaking `CliGlobals` bound on its 8 `global`-using commands. It adopts separately:
+  bump the pin, add `impl CliGlobals` (the natural home for its root-aware/TTY `--pretty`
+  resolution), and convert the 8 silent bugs into wired delivery. (Cross-repo; tracked in
+  normalize's TODO, not here.)
+- [ ] **`display_with`→`render` subtraction (design-A)** — the deeper 3b fix that makes the
+  "dead dispatch" footgun unrepresentable. Breaking rendering-contract change; sequence after
+  normalize is on 0.6.0. Separable from this landing.
+
 ### Polish & Hardening
 
 - [x] Add `trybuild` compile-fail tests (3 fixtures: missing_self, invalid_http_arg, duplicate_route)

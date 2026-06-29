@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-29
+
+### Added
+
+- **`CliGlobals` trait — the CLI capability-wiring invariant for `global = [...]`.**
+  Declaring `#[cli(global = [...])]` now requires implementing `CliGlobals`; the macro
+  delivers each declared global flag's parsed value to `set_global_flag(&self, name, value)`
+  before the matched method runs. The delivery call names the sink by trait, so omitting
+  the impl is a **compile error** (`E0277`) instead of a silently-inert flag. There is
+  deliberately **no blanket default impl** — a default no-op would itself be a silent sink,
+  re-creating the footgun. Flag names are delivered kebab-cased (`dry_run` → `"dry-run"`).
+  Resolution policy (TTY/config) lives in the one sink method, not duplicated per command.
+  See `docs/design/cli-capability-wiring-invariant.md`.
+- **`#[param(default = ...)]` honored by the CLI projection.** A value-bearing parameter
+  carrying a default is now wired to clap's `.default_value(...)`, so omitting it no longer
+  errors "missing required argument" — clap supplies the default. Previously the field was
+  parsed and discarded. (Additive.)
+
+### Changed
+
+- **BREAKING: `#[cli(global = [...])]` now requires `impl CliGlobals`.** Any service
+  declaring global flags must implement the new `CliGlobals` trait or it will fail to
+  compile. This is the intended forcing function that converts silently-inert global flags
+  into loud build errors. Migration: add
+  `impl CliGlobals for YourService { fn set_global_flag(&self, name: &str, value: bool) { /* stash/resolve */ } }`.
+- **BREAKING: `CliGlobals` is the *sole* way a declared global flag is received — the
+  legacy receive-via-matching-param path is removed.** Previously a global's value could
+  *also* reach a method body through a method parameter whose name matched the flag (an
+  implicit, convention-referenced wiring). That path is gone: globals are delivered only to
+  `set_global_flag`. A method parameter that shares a declared global's flag name is now a
+  **compile error** (it would collide with the root `.global(true)` flag at clap-build time
+  and would silently never be auto-filled), consistent with the existing collision guard for
+  built-in global flags. Migration: drop the matching parameter and read the value from your
+  `CliGlobals` impl (e.g. stash it in a `Cell`).
+- **`#[param(name = "...")]` now honored by the CLI projection.** The wire-name override
+  renames the clap arg id, the `--long` flag, and the extraction key (previously the
+  kebab-cased Rust identifier was used and the override silently dropped). This can rename
+  a flag for any consumer that carried a `#[param(name)]` it expected to be ignored.
+
+### Fixed
+
+- **CLI errors are now structured under `--json`/`--jsonl`/`--jq`.** When a `Result`-returning
+  command returns `Err`, the generated CLI dispatch previously always printed the error as plain
+  text on stderr regardless of the active output format. It now emits `{"error": "<message>"}`
+  on stdout (still exiting non-zero) when a structured-output flag is active, so programmatic
+  consumers get a parseable error object instead of plain text on the wrong stream. Plain-text
+  stderr is unchanged for the default (human) format.
+
 ## [0.5.0] - 2026-06-19
 
 ### Added
