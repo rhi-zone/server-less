@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/rhi-zone/server-less"
@@ -22,11 +22,11 @@ categories = ["web-programming", "development-tools::procedural-macro-helpers"]
 rust-version = "1.89"
 
 [workspace.dependencies]
-server-less-core = { path = "crates/server-less-core", version = "0.6.0", default-features = false }
-server-less-macros = { path = "crates/server-less-macros", version = "0.6.0", default-features = false }
-server-less-openapi = { path = "crates/server-less-openapi", version = "0.6.0" }
-server-less-parse = { path = "crates/server-less-parse", version = "0.6.0" }
-server-less-rpc = { path = "crates/server-less-rpc", version = "0.6.0" }
+server-less-core = { path = "crates/server-less-core", version = "0.7.0", default-features = false }
+server-less-macros = { path = "crates/server-less-macros", version = "0.7.0", default-features = false }
+server-less-openapi = { path = "crates/server-less-openapi", version = "0.7.0" }
+server-less-parse = { path = "crates/server-less-parse", version = "0.7.0" }
+server-less-rpc = { path = "crates/server-less-rpc", version = "0.7.0" }
 
 [profile.dev]
 debug = 0
