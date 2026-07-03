@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`#[cli(alias = "...")]` — hidden command aliases.** A leaf or mount method may now
+  carry one or more hidden clap aliases: `#[cli(alias = "old-name")]` (repeatable) or
+  `#[cli(aliases = ["a", "b"])]`. The command is invocable under each alias, but the
+  alias is **not** shown in `--help` (clap's `.alias(...)` is hidden by default, unlike
+  `.visible_alias(...)`). Intended as migration scaffolding: when a verb is renamed or
+  moved, its old command path can be kept as a hidden alias for one release so existing
+  invocations keep working without advertising the deprecated spelling. Additive.
+
 ## [0.6.0] - 2026-06-29
 
 ### Added

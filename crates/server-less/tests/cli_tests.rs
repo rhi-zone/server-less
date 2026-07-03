@@ -333,6 +333,53 @@ fn test_leaf_name_override_dispatch() {
     assert!(app.cli_run_with(["leaf-app", "status"]).is_ok());
 }
 
+// Leaf method with hidden `#[cli(alias = "...")]` aliases (migration scaffolding).
+#[derive(Clone)]
+struct AliasedLeafApp;
+
+#[cli(name = "aliased-app")]
+impl AliasedLeafApp {
+    /// Analyze architecture
+    #[cli(name = "architecture", alias = "arch", alias = "analyze-architecture")]
+    pub fn architecture(&self) -> String {
+        "ok".to_string()
+    }
+}
+
+#[test]
+fn test_leaf_alias_not_shown_in_help() {
+    let cmd = AliasedLeafApp::cli_command();
+    // The canonical name is a real subcommand...
+    let names: Vec<_> = cmd
+        .get_subcommands()
+        .map(|c| c.get_name().to_string())
+        .collect();
+    assert!(names.contains(&"architecture".to_string()), "names: {names:?}");
+    // ...and the aliases are NOT separate subcommands.
+    assert!(!names.contains(&"arch".to_string()), "names: {names:?}");
+    assert!(!names.contains(&"analyze-architecture".to_string()), "names: {names:?}");
+
+    let sub = cmd.find_subcommand("architecture").expect("architecture subcommand");
+    // Aliases are registered but HIDDEN: present in all-aliases, absent from visible.
+    let all: Vec<_> = sub.get_all_aliases().collect();
+    assert!(all.contains(&"arch"), "all aliases: {all:?}");
+    assert!(all.contains(&"analyze-architecture"), "all aliases: {all:?}");
+    let visible: Vec<_> = sub.get_visible_aliases().collect();
+    assert!(visible.is_empty(), "aliases must be hidden, got visible: {visible:?}");
+
+    // clap resolves the alias to the canonical subcommand.
+    assert!(cmd.clone().find_subcommand("arch").is_some());
+}
+
+#[test]
+fn test_leaf_alias_dispatch_both_names() {
+    let app = AliasedLeafApp;
+    // Invocable under the real name and under each hidden alias.
+    assert!(app.cli_run_with(["aliased-app", "architecture"]).is_ok());
+    assert!(app.cli_run_with(["aliased-app", "arch"]).is_ok());
+    assert!(app.cli_run_with(["aliased-app", "analyze-architecture"]).is_ok());
+}
+
 // Static mount with #[cli(name = "...")] override
 #[derive(Clone)]
 struct RenamedMountApp {

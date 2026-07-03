@@ -138,6 +138,34 @@ pub fn remove(&self, id: String) -> Result<(), Error> { ... }
 
 ---
 
+### `#[cli(alias = "...")]`
+
+Add one or more **hidden** aliases for the subcommand. The command is invocable under
+each alias, but the alias does **not** appear in `--help` (it uses clap's `.alias(...)`,
+which is hidden by default — unlike `.visible_alias(...)`).
+
+Repeatable, or use the list form:
+
+```rust
+#[cli(name = "architecture", alias = "arch", alias = "analyze-architecture")]
+pub fn architecture(&self) -> Report { ... }
+
+// equivalently:
+#[cli(name = "architecture", aliases = ["arch", "analyze-architecture"])]
+pub fn architecture(&self) -> Report { ... }
+
+// myapp architecture           (shown in --help)
+// myapp arch                    (works, hidden)
+// myapp analyze-architecture    (works, hidden)
+```
+
+Works on both leaf methods and mount points. The primary use case is **migration
+scaffolding**: when a verb is renamed or moved, keep its old command path as a hidden
+alias for one release so existing invocations keep working without advertising the
+deprecated spelling.
+
+---
+
 ### `#[cli(display_with = "fn_name")]`
 
 Use a custom method for text output. Without this attribute, output uses the

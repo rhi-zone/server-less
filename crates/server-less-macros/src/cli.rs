@@ -12,6 +12,9 @@
 //! # Method Attributes
 //!
 //! - `#[cli(name = "...")]` — Override the subcommand name (works on leaf methods and mount points)
+//! - `#[cli(alias = "...")]` — Add a HIDDEN clap alias (repeatable, or `aliases = ["a", "b"]`).
+//!   The command is invocable under the alias but it is not shown in `--help`. Intended as
+//!   migration scaffolding for renamed/moved verbs (keep the old path for one release).
 //! - `#[cli(skip)]` — Exclude a method from becoming a subcommand
 //! - `#[cli(helper)]` — Self-documenting alias for `skip` (for display formatters, internal logic)
 //! - `#[cli(hidden)]` — Include the subcommand but hide it from `--help`
@@ -515,6 +518,49 @@ fn has_cli_hidden(method: &MethodInfo) -> bool {
         }
     }
     false
+}
+
+/// Collect all `#[cli(alias = "...")]` values on a method (repeatable).
+///
+/// Each alias becomes a **hidden** clap alias for the generated subcommand: the
+/// command is invocable under the alias but the alias does not appear in `--help`
+/// (clap's `.alias(...)` is hidden by default; `.visible_alias(...)` would show it).
+///
+/// This is migration scaffolding — when a verb is renamed or moved, its old command
+/// path can be carried as a hidden alias for one release so existing invocations keep
+/// working without advertising the deprecated spelling.
+///
+/// Both repeated (`#[cli(alias = "a", alias = "b")]`) and list
+/// (`#[cli(aliases = ["a", "b"])]`) forms are accepted.
+fn get_cli_aliases(method: &MethodInfo) -> Vec<String> {
+    let mut aliases = Vec::new();
+    for attr in &method.method.attrs {
+        if attr.path().is_ident("cli") {
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("alias") {
+                    let value = meta.value()?;
+                    let lit: syn::LitStr = value.parse()?;
+                    aliases.push(lit.value());
+                } else if meta.path.is_ident("aliases") {
+                    let content;
+                    syn::bracketed!(content in meta.input);
+                    while !content.is_empty() {
+                        let lit: syn::LitStr = content.parse()?;
+                        aliases.push(lit.value());
+                        if content.peek(Token![,]) {
+                            content.parse::<Token![,]>()?;
+                        }
+                    }
+                } else if meta.input.peek(Token![=]) {
+                    // Consume unrelated `key = value` without greedily eating
+                    // subsequent comma-separated keys.
+                    let _: syn::Expr = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
+        }
+    }
+    aliases
 }
 
 /// Extract `#[cli(display_with = "fn_name")]` from a method, if present.
@@ -1404,6 +1450,10 @@ fn generate_leaf_subcommand(
     let (about, after_help) = split_docs(&method.docs);
     let after_help_token = after_help.map(|h| quote! { .after_help(#h) });
     let hide = hidden.then(|| quote! { .hide(true) });
+    // Hidden clap aliases from `#[cli(alias = "...")]`. `.alias(...)` is hidden by
+    // default, so the command is invocable under the old name without advertising it.
+    let aliases = get_cli_aliases(method);
+    let alias_tokens = aliases.iter().map(|a| quote! { .alias(#a) });
 
     // Filter out Context parameters - they're injected, not CLI args
     let (_, regular_params) = partition_context_params(&method.params)?;
@@ -1431,6 +1481,7 @@ fn generate_leaf_subcommand(
             .about(#about)
             #after_help_token
             #hide
+            #(#alias_tokens)*
             #(.arg(#args))*
     })
 }
@@ -1449,6 +1500,8 @@ fn generate_static_mount_subcommand(
     })?;
     let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
     let after_help_set = after_help.map(|h| quote! { __cmd = __cmd.after_help(#h); });
+    let aliases = get_cli_aliases(method);
+    let alias_tokens = aliases.iter().map(|a| quote! { __cmd = __cmd.alias(#a); });
 
     Ok(quote! {
         {
@@ -1459,6 +1512,7 @@ fn generate_static_mount_subcommand(
             }
             #after_help_set
             #hide
+            #(#alias_tokens)*
             __cmd
         }
     })
@@ -1478,6 +1532,8 @@ fn generate_slug_mount_subcommand(
     })?;
     let hide = hidden.then(|| quote! { __cmd = __cmd.hide(true); });
     let after_help_set = after_help.map(|h| quote! { __cmd = __cmd.after_help(#h); });
+    let aliases = get_cli_aliases(method);
+    let alias_tokens = aliases.iter().map(|a| quote! { __cmd = __cmd.alias(#a); });
 
     let (_, regular_params) = partition_context_params(&method.params)?;
 
@@ -1506,6 +1562,7 @@ fn generate_slug_mount_subcommand(
             }
             #after_help_set
             #hide
+            #(#alias_tokens)*
             #(__cmd = __cmd.arg(#slug_args);)*
             __cmd
         }
