@@ -45,7 +45,7 @@ This ensures the next session sees the trust boundary explicitly, even if it doe
    - Update existing items if context has changed
    - Keep items the session didn't touch
    - Ensure the trust-boundary line is present at the top of the open-threads section
-4. Invoke the `EnterPlanMode` tool with a **short** plan that communicates direction. **Critical:** the plan must mark itself as pre-research — a starting hypothesis, NOT a verified directive. The next session hasn't done the investigation; the previous session's intent should inform, not command.
+4. Enter plan mode only now, when presenting this plan is the ONLY remaining step — every write and commit must already be done. Subagents spawned from inside plan mode can only write their own plan files, so nothing further can be delegated after this point. Invoke the `EnterPlanMode` tool with a **short** plan that communicates direction. **Critical:** the plan must mark itself as pre-research — a starting hypothesis, NOT a verified directive. The next session hasn't done the investigation; the previous session's intent should inform, not command.
 
    Use suggestive, deferential language:
    - "suggests continuing with..." not "do..."
@@ -64,7 +64,7 @@ This ensures the next session sees the trust boundary explicitly, even if it doe
    - Do NOT include commands, build steps, or context summaries
    - Frame everything as "what the previous session was thinking," not "what needs to be done"
    - If you find yourself writing more than a few lines, you're leaking task content — move it to TODO.md instead
-   - Optionally note that the next session may want to re-enter plan mode once it's verified the direction — the handoff plan is context, not a substitute for planning the actual work
+   - The next session enters plan mode only for its own eventual handoff — the handoff plan is context, not a substitute for verifying the direction
 
 5. When the user accepts or rejects the plan, the `ExitPlanMode` tool fires — that's what lets them approve, redirect, or start a fresh session.
 
