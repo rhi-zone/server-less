@@ -59,6 +59,10 @@ Prioritized backlog of pending features and improvements.
 - [x] Enum type support (`#[graphql_enum]` + `#[graphql(enums(...))]`) ✅
 - (Subscription support + interface/union type support moved to Low Priority / Wishlist)
 
+### Protocol-Neutral Behavioral Op Metadata
+
+- [ ] **Add protocol-neutral behavioral op annotations (safe/idempotent/destructive/openWorld); wire each projection to read them (gRPC idempotency_level, MCP hints, HTTP verb/cache, GraphQL query/mutation, CLI confirm/dry-run).** See docs/notes/agnostic-behavioral-metadata.md.
+
 ### Error Handling
 
 - [x] Schema validation returns `Result<(), SchemaValidationError>` ✅
